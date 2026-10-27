@@ -32,6 +32,7 @@ product scope; no additional data-residency requirement is imposed.
 | [Hosting Plan](Hosting_Plan.md) | Product-level local/demo/hosted-MVP choices and later commercial gaps |
 | [Hosted demo design](design/HOSTED_DEMO_DESIGN.md) | Accepted scope, architecture, security, resource/cost/latency requirements and delivery boundaries |
 | [Additional operators and Admin console proposal](design/HOSTED_DEMO_ADMIN_DESIGN.md) | Proposed expansion beyond A/B: capacity qualification, private Admin workflow/UI, provisioning, access lifecycle and backend/tooling changes; not deployed |
+| [Registered instance tooling](operations/HOSTED_INSTANCE_TOOLING.md) | Slice 1 private installation/adoption, checked discovery, shared maintenance admission, recovery backup, resume/reconciliation and focused validation; live installation/qualification is separate |
 | [Deployment guide](deployment/GOOGLE_CLOUD_DEMO_DEPLOYMENT.md) | Google VM/IAP, reproducible release, volumes, Cloudflare and enrollment setup; new-resource commands |
 | [Configuration contract](deployment/HOSTED_DEMO_CONFIGURATION.md) | JSON fields, route/capability inventory, owner CLI, session and edit-lease rules |
 | [Administrator runbook](operations/HOSTED_DEMO_OPERATIONS.md) | Daily inspection/backups, credentials, disable/renew/reset, host-loss recovery and rollback |

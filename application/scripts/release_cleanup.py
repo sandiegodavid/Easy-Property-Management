@@ -1,6 +1,7 @@
 """Conservative installed-release cleanup; never removes data or checkpoints."""
 
 import argparse
+import json
 import os
 from pathlib import Path
 import re
@@ -21,8 +22,6 @@ REFERENCES = (
     Path("/etc/cron.monthly"),
     Path("/var/spool/cron"),
     Path("/etc/epm"),
-    Path("/var/lib/epm-a/hosted-local.json"),
-    Path("/var/lib/epm-b/hosted-local.json"),
 )
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 
@@ -91,7 +90,7 @@ def inventory(root, sources, effective, processes, keep):
         require((root / name).is_dir(), f"Retained release does not exist: {name}")
         protect(name, "explicit rollback retention")
     for name in references_in(effective, root):
-        protect(name, "effective A/B service command")
+        protect(name, "effective registered service command")
     for path, data in processes:
         for name in references_in(data, root):
             protect(name, f"running process: {path}")
@@ -120,9 +119,33 @@ def process_references():
                 continue  # Process exited during inspection.
 
 
+def registered_inventory():
+    result = subprocess.run(
+        ["/usr/bin/python3", "-I", "/opt/epm/admin/host_admin.py", "cleanup-inventory"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    value = json.loads(result.stdout)
+    require(
+        isinstance(value, dict) and set(value) == {"instances", "protected_releases"},
+        "Invalid registered inventory.",
+    )
+    require(
+        isinstance(value["instances"], list) and value["instances"],
+        "Registered inventory is empty.",
+    )
+    return value
+
+
 def host_inventory(keep):
+    registered = registered_inventory()
     commands = []
-    for instance in ("a", "b"):
+    sources = list(REFERENCES)
+    for allocation in registered["instances"]:
+        instance = allocation["key"]
+        require(re.fullmatch(r"[a-z0-9][a-z0-9-]{0,31}", instance), "Invalid registered key.")
+        sources.append(Path(allocation["local_config"]))
         result = subprocess.run(
             ["systemctl", "show", f"epm-hosted@{instance}.service", "-p", "ExecStart", "--value"],
             check=True,
@@ -133,7 +156,8 @@ def host_inventory(keep):
             f"Cannot identify instance {instance}'s release.",
         )
         commands.append(result.stdout)
-    return inventory(RELEASES, REFERENCES, b"\n".join(commands), process_references(), keep)
+    retained = [*keep, *registered["protected_releases"]]
+    return inventory(RELEASES, sources, b"\n".join(commands), process_references(), retained)
 
 
 def remove_release(name, keep):
@@ -165,6 +189,19 @@ def main():
     args = parser.parse_args()
     require(os.geteuid() == 0, "Run this helper through the VM cleanup wizard with sudo.")
     if args.action == "remove":
+        identifier = os.environ.get("EPM_HOST_MAINTENANCE_ID", "")
+        require(identifier, "Release removal requires a shared maintenance operation.")
+        subprocess.run(
+            [
+                "/usr/bin/python3",
+                "-I",
+                "/opt/epm/admin/host_admin.py",
+                "assert-maintenance",
+                "--maintenance-id",
+                identifier,
+            ],
+            check=True,
+        )
         require(args.release is not None, "Select one exact release.")
         remove_release(args.release, args.keep)
         return

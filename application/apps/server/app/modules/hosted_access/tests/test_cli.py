@@ -41,3 +41,27 @@ def test_hosted_launch_does_not_silently_fall_back_to_local_on_invalid_configura
     with pytest.raises(SystemExit):
         cli._serve(args, parser, None)
     uvicorn.run.assert_not_called()
+
+
+def test_recovery_archive_revalidation_can_use_external_staging(tmp_path, monkeypatch):
+    parser = cli._build_parser()
+    args = parser.parse_args(
+        [
+            "validate-archive",
+            "/var/backups/epm-c/recovery.epm-backup",
+            "--staging-directory",
+            str(tmp_path),
+        ]
+    )
+    workspace, backups = Mock(), Mock()
+    monkeypatch.setattr(cli.WorkspaceService, "from_local_config", lambda _: workspace)
+    factory = Mock(return_value=backups)
+    monkeypatch.setattr(cli, "_backup_service", factory)
+    monkeypatch.setattr(cli, "_run_hosted_bundle", lambda *_: False)
+    monkeypatch.setattr(cli, "_run_hosted_configuration", lambda *_: False)
+    monkeypatch.setattr(cli, "_run_workspace_command", lambda *_: False)
+    monkeypatch.setattr(cli, "_run_hosted_archive", lambda *_: False)
+    monkeypatch.setattr(cli, "_run_backup_command", lambda *_: True)
+    monkeypatch.setattr(cli, "_build_parser", lambda: Mock(parse_args=lambda: args))
+    cli.main()
+    factory.assert_called_once_with(workspace, tmp_path)

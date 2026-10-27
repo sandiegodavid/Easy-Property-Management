@@ -193,8 +193,12 @@ valid_release() { [[ "$1" =~ ^release-[0-9]{8}-[0-9]{2,}$ ]]; }
 need() { command -v "$1" >/dev/null 2>&1 || die "Required command missing: $1"; }
 
 prepare_demo_archives() {
-  local role staging locator output metadata
-  for role in a b; do
+  local role staging locator output metadata registered
+  registered="$(gcloud compute ssh "$EPM_VM" --project="$EPM_PROJECT" --zone="$EPM_ZONE" \
+    --tunnel-through-iap --command='sudo -n /usr/bin/python3 -I /opt/epm/admin/host_admin.py keys')" || die "Registered inventory could not be retrieved. Resolve private VM inventory/access before preparing archives."
+  [[ -n "$registered" ]] || die "Registered inventory is empty."
+  while IFS= read -r role; do
+    [[ "$role" =~ ^[a-z0-9][a-z0-9-]{0,31}$ ]] || die "Invalid registered instance key."
     staging="$(mktemp -d "/private/tmp/epm-reset-$release-$role.XXXXXXXX")"
     locator="$staging/demo-config.json"
     output="$staging/$release-demo-$role.epm-backup"
@@ -214,7 +218,7 @@ prepare_demo_archives() {
     )
     demo_files+=("$output" "$metadata")
     say "Retained synthetic preparation files: $staging (no live workspace was changed)."
-  done
+  done <<< "$registered"
 }
 
 main() {
@@ -289,6 +293,10 @@ main() {
   cp -X "$application/scripts/stage_schema_resources.py" "$application/scripts/verify_installation.py" "$bundle/"
   cp -X "$application/scripts/epm-release-vm.sh" "$bundle/release-vm.sh"
   cp -X "$application/scripts/release_demo.py" "$bundle/release_demo.py"
+  mkdir "$bundle/admin-tools"
+  cp -X "$application/scripts/host_admin.py" "$application/scripts/host_inventory.py" \
+    "$application/scripts/release_cleanup.py" "$application/scripts/epm-release-vm.sh" \
+    "$application/scripts/epm-release-cleanup-vm.sh" "$bundle/admin-tools/"
   printf '%s\n' "$source_commit" > "$bundle/SOURCE_COMMIT.txt"
   printf '%s\n' "$EPM_TEST_EVIDENCE" > "$bundle/TEST_EVIDENCE.txt"
   (
@@ -308,7 +316,7 @@ main() {
 
   stage "Optional fresh-demo reset archives"
   say "Ordinary Deploy preserves compatible data. Reset-demo activates a NEW synthetic dataset."
-  if confirm "Prepare separate encrypted fresh-demo archives for A and B?"; then
+  if confirm "Prepare separate encrypted fresh-demo archives for the registered instances?"; then
     prepare_demo_archives
     [[ "$(git rev-parse HEAD)" == "$source_commit" && -z "$(git status --porcelain)" ]] ||
       die "Source changed during demo preparation. Use a new recorded release."
@@ -335,9 +343,10 @@ main() {
   printf '  gcloud compute ssh %s --project=%s --zone=%s --tunnel-through-iap\n' "$EPM_VM" "$EPM_PROJECT" "$EPM_ZONE"
   say "Then run on the VM:"
   printf '  bash "$HOME/%s-vm.sh"\n' "$release"
-  say "Choose Install, then run the VM wizard again for Deploy A and Deploy B."
+  say "Use the installed root-owned VM wizard to install, then deploy one registered instance at a time."
+  say "Reconcile each maintenance operation before beginning the next."
   if [[ "${#demo_files[@]}" -gt 0 ]]; then
-    say "For incompatible demo schemas choose reset-demo A, then reset-demo B after acceptance."
+    say "For incompatible demo schemas reset one registered instance at a time, accepting and reconciling each before the next."
     say "Keep these independent demo archive checksums for the VM prompts:"
     for value in "${demo_files[@]}"; do
       if [[ "$value" == *.epm-backup ]]; then shasum -a 256 "$value"; fi

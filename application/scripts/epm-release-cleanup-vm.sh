@@ -188,7 +188,8 @@ finish() {
 TOTAL_STAGES=4
 
 die() { printf '\nStopped: %s\n' "$*" >&2; exit 1; }
-cleanup_tool() { sudo /usr/bin/python3 -I "$helper" "$@" "${keep_args[@]}"; }
+inventory_tool() { sudo /usr/bin/python3 -I /opt/epm/admin/host_admin.py "$@"; }
+cleanup_tool() { sudo env EPM_HOST_MAINTENANCE_ID="$EPM_HOST_MAINTENANCE_ID" /usr/bin/python3 -I "$helper" "$@" "${keep_args[@]}"; }
 
 main() {
   if [[ "${1:-}" == --help ]]; then
@@ -197,23 +198,34 @@ main() {
   fi
   [[ $# == 0 && "$(uname -s)" == Linux ]] || die "Run on the Linux VM; use --help for usage."
   [[ -t 0 && -t 1 && "$EUID" != 0 ]] || die "Run interactively as the administrator login user, not sudo bash."
-  local helper release EPM_KEEP_A EPM_KEEP_B EPM_REMOVE EPM_CONFIRM
+  local helper release EPM_KEEP EPM_REMOVE EPM_CONFIRM instance instances
   local keep_args=()
-  helper="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/release_cleanup.py"
-  [[ -f "$helper" && ! -L "$helper" ]] || die "Place release_cleanup.py beside this wizard."
+  helper=/opt/epm/admin/release_cleanup.py
+  [[ -f "$helper" && ! -L "$helper" ]] || die "Install the root-owned cleanup helper first."
   sudo -v
+  if [[ -z "${EPM_HOST_MAINTENANCE_ID:-}" ]]; then
+    local resume_args=()
+    if [[ -n "${EPM_RESUME_MAINTENANCE:-}" ]]; then resume_args=(--resume "$EPM_RESUME_MAINTENANCE"); fi
+    inventory_tool maintenance --kind cleanup --action cleanup "${resume_args[@]}"
+    return
+  fi
+  inventory_tool assert-maintenance --maintenance-id "$EPM_HOST_MAINTENANCE_ID"
   trap 'die "Cleanup interrupted or failed. Inspect the selected release; removal may be partial. No services or workspace data were changed."' ERR
   banner "EPM · VM installed-release cleanup"
 
   stage "Choose rollback releases to retain"
-  say "Run only after A and B pass acceptance. Pause other deployment/reset/cleanup operations."
+  say "Run after the reviewed registered instances pass acceptance. The shared maintenance lock is held."
   say "Current service, running-process, configuration/job and checkpoint references are protected automatically."
   say "Keep the last known-good release for each instance, including its interpreter for old workspaces."
-  sudo systemctl show epm-hosted@a.service epm-hosted@b.service -p Id -p ExecStart --no-pager
+  sudo systemctl show 'epm-hosted@*.service' -p Id -p ExecStart --no-pager
   sudo ls -1 /opt/epm/releases
-  ask EPM_KEEP_A "Last known-good rollback release directory name for A:"
-  ask EPM_KEEP_B "Last known-good rollback release directory name for B:"
-  keep_args=(--keep "$EPM_KEEP_A" --keep "$EPM_KEEP_B")
+  instances="$(inventory_tool keys --maintenance-id "$EPM_HOST_MAINTENANCE_ID")" || die "Registered inventory could not be read."
+  while IFS= read -r instance; do
+    [[ -n "$instance" ]] || die "Registered inventory is empty."
+    EPM_KEEP=""
+    ask EPM_KEEP "Last known-good rollback release directory name for $instance:"
+    keep_args+=(--keep "$EPM_KEEP")
+  done <<< "$instances"
 
   stage "Inspect protections and select one candidate"
   cleanup_tool inspect
@@ -225,7 +237,7 @@ main() {
   sudo du -sh -- "/opt/epm/releases/$release"
 
   stage "Confirm removal of this release only"
-  confirm "Have both instances passed acceptance, and have you confirmed no custom job or preserved workspace needs this interpreter?" || die "Cancelled; nothing removed."
+  confirm "Have the reviewed instances passed acceptance, and have you confirmed no custom job or preserved workspace needs this interpreter?" || die "Cancelled; nothing removed."
   say "Only /opt/epm/releases/$release will be removed. This cannot be undone by this wizard."
   ask EPM_CONFIRM "Type the exact release name again to permanently remove it:"
   [[ "$EPM_CONFIRM" == "$release" ]] || die "Names differ; nothing removed."
@@ -233,7 +245,7 @@ main() {
 
   stage "Verify remaining releases"
   cleanup_tool inspect
-  sudo systemctl is-active epm-hosted@a.service epm-hosted@b.service
+  sudo systemctl show 'epm-hosted@*.service' -p Id -p ActiveState
   say "Workspace data, access databases, backups, uploaded archives and checkpoint records were retained."
   say "Run again to review another candidate. No automatic pruning was configured."
 }

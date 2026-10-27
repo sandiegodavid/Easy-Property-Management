@@ -29,6 +29,7 @@ DATA = Path("/var/lib")
 BACKUPS = Path("/var/backups")
 SYSTEMD = Path("/etc/systemd/system")
 ROOT_UID = 0
+INSTANCE_KEY = re.compile(r"[a-z0-9][a-z0-9-]{0,31}")
 STEPS = ("backed_up", "restored", "initialized", "switched", "activated", "accepted")
 DESCRIPTOR_KEYS = {
     "format",
@@ -127,7 +128,7 @@ def load_plan(record):
     )
     plan = read_json(record / "reset.json")
     require(plan["release"] == record.parent.parent.name, "Wrong reset release.")
-    require(plan["instance"] in {"a", "b"}, "Invalid reset instance.")
+    require(INSTANCE_KEY.fullmatch(plan["instance"]), "Invalid reset instance.")
     require(record.name.startswith(plan["instance"] + "."), "Wrong reset instance.")
     require(
         plan["phase"]
@@ -204,9 +205,55 @@ def snapshot(record, name, path):
     }
 
 
+def registered_instance(instance):
+    require(INSTANCE_KEY.fullmatch(instance), "Invalid reset instance.")
+    identifier = os.environ.get("EPM_HOST_MAINTENANCE_ID", "")
+    require(identifier, "Reset operations require a shared host maintenance operation.")
+    result = subprocess.run(
+        [
+            "/usr/bin/python3",
+            "-I",
+            "/opt/epm/admin/host_admin.py",
+            "select",
+            "--key",
+            instance,
+            "--maintenance-id",
+            identifier,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    allocation = json.loads(result.stdout)
+    require(allocation["key"] == instance, "Registered allocation differs from the reset target.")
+    return allocation
+
+
 def instance_paths(instance):
+    allocation = registered_instance(instance)
     base = DATA / f"epm-{instance}"
-    return base, base / "hosted-local.json", CONFIGS / f"hosted-{instance}.json"
+    local = Path(allocation["local_config"])
+    require(local.parent == base, "Registered local configuration is outside the owning instance.")
+    return base, local, CONFIGS / f"hosted-{instance}.json"
+
+
+def registered_instances():
+    identifier = os.environ.get("EPM_HOST_MAINTENANCE_ID", "")
+    require(identifier, "Reset operations require a shared host maintenance operation.")
+    result = subprocess.run(
+        [
+            "/usr/bin/python3",
+            "-I",
+            "/opt/epm/admin/host_admin.py",
+            "allocations",
+            "--maintenance-id",
+            identifier,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return json.loads(result.stdout)
 
 
 def build_candidate(args, deployment, descriptor):
@@ -222,11 +269,23 @@ def build_candidate(args, deployment, descriptor):
     require(old_id == str(deployment.workspace_id), "Old workspace/configuration binding differs.")
     new_id = descriptor["workspace_id"]
     require(new_id != old_id, "Reset must use a new workspace identity.")
-    other = CONFIGS / f"hosted-{'b' if args.instance == 'a' else 'a'}.json"
+    # Inspect every retained hosted configuration, including stopped or not yet
+    # managed instances. An unreadable configuration must stop the reset.
+    configurations = sorted(CONFIGS.glob("hosted-*.json"))
+    require(hosted in configurations, "Selected hosted configuration is missing.")
     require(
-        new_id != str(load_hosted_deployment(other).workspace_id),
-        "A and B must have distinct UUIDs.",
+        all(
+            CONFIGS / f"hosted-{item['key']}.json" in configurations
+            for item in registered_instances()
+        ),
+        "Registered hosted configurations must all be present.",
     )
+    for other in configurations:
+        if other != hosted:
+            require(
+                new_id != str(load_hosted_deployment(other).workspace_id),
+                "Fresh workspace identity conflicts with another hosted instance.",
+            )
     workspace = deployment.storage_volume / f"demo-{args.release}-{new_id}"
     admin = base / "access" / f"hosted-access-{new_id}.sqlite"
     require(
@@ -244,6 +303,7 @@ def build_candidate(args, deployment, descriptor):
 
 
 def make_plan(args, deployment, descriptor):
+    allocation = registered_instance(args.instance)
     old, workspace, admin, local, hosted = build_candidate(args, deployment, descriptor)
     identity = pwd.getpwnam(f"epm-{args.instance}")
     candidate_dir = CONFIGS / f"reset-{args.record.name}"
@@ -264,6 +324,7 @@ def make_plan(args, deployment, descriptor):
     return {
         "release": args.release,
         "instance": args.instance,
+        "allocation_id": allocation["allocation_id"],
         "phase": "prepared",
         "completed": [],
         "events": [],
@@ -353,11 +414,13 @@ def check_stopped(plan):
 
 def candidate_replacements(plan):
     instance = plan["instance"]
+    allocation = registered_instance(instance)
+    require(allocation["allocation_id"] == plan["allocation_id"], "Reset allocation changed.")
     python = RELEASES / plan["release"] / "venv/bin/python"
     local, hosted = [original["path"] for original in plan["originals"][:2]]
     command = (
         f"[Service]\nExecStart=\nExecStart={python} -m app --config "
-        f"{local} serve-hosted --deployment {hosted} --port {8001 if instance == 'a' else 8002}\n"
+        f"{local} serve-hosted --deployment {hosted} --port {allocation['port']}\n"
     )
     replacements = [
         Path(plan["candidate_local"]).read_bytes(),
@@ -416,6 +479,15 @@ def replace_configs(record, plan, rollback=False):
         changes.append((path, old if rollback else new, original["identity"]))
     event(record, plan, "rolling_back" if rollback else "switching")
     for path, desired, identity in changes:
+        require(path.parent.resolve() == path.parent, "Configuration parent cannot use symlinks.")
+        path.parent.mkdir(mode=0o755, exist_ok=True)
+        parent = path.parent.lstat()
+        require(
+            stat.S_ISDIR(parent.st_mode)
+            and parent.st_uid == ROOT_UID
+            and not parent.st_mode & 0o022,
+            "Configuration parent must be a protected directory.",
+        )
         if desired is None:
             path.unlink(missing_ok=True)
             sync_directory(path.parent)
@@ -494,12 +566,17 @@ def main():
     require(os.geteuid() == 0, "Reset checkpoints/configuration operations require root.")
     if args.action == "plan":
         require(
-            args.instance in {"a", "b"} and re.fullmatch(r"release-\d{8}-\d{2,}", args.release),
+            INSTANCE_KEY.fullmatch(args.instance)
+            and re.fullmatch(r"release-\d{8}-\d{2,}", args.release),
             "Invalid release or instance.",
         )
         prepare_plan(args)
         return
     plan = load_plan(args.record)
+    require(
+        registered_instance(plan["instance"])["allocation_id"] == plan["allocation_id"],
+        "Reset allocation changed.",
+    )
     dispatch_record(args, plan)
 
 

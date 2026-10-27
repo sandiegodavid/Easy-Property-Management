@@ -6,6 +6,12 @@ inventory in the [deployment record](CLOUDFLARE_OPERATIONS.md) before proceeding
 These instructions were checked against repository commands; this document does
 not claim a new release has been deployed or tested on the VM.
 
+The current repository wizards require the new [registered-instance
+tooling](HOSTED_INSTANCE_TOOLING.md). Complete its private bootstrap, adoption and
+Linux qualification before using these versions. Instance selections then come
+from checked inventory; A/B below describe the recorded host, not a tooling limit.
+No live tooling replacement is implied by a repository update.
+
 For ordinary inspection, backups and recovery, use the shortcuts below. For a
 code update, follow steps 1–6. Do not repeat VM, Cloudflare, enrollment or workspace
 initialization. The wheel **and matching schema resources** form the release.

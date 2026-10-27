@@ -72,6 +72,19 @@ def reset_host(tmp_path, monkeypatch):
         lambda path: HostedDeployment.model_validate(tool.read_json(path)),
     )
     monkeypatch.setattr(tool, "check_stopped", lambda _plan: None)
+    allocations = {
+        key: {
+            "key": key,
+            "allocation_id": str(uuid4()),
+            "port": port,
+            "local_config": str(tool.DATA / f"epm-{key}/hosted-local.json"),
+        }
+        for key, port in (("a", 8001), ("b", 8002), ("c", 8012))
+    }
+    monkeypatch.setattr(tool, "registered_instance", lambda key: allocations[key])
+    monkeypatch.setattr(
+        tool, "registered_instances", lambda: [allocations[key] for key in ("a", "b")]
+    )
     for instance in ("a", "b"):
         values = hosted_values(tmp_path, instance)
         workspace = Path(values["storage_volume"]) / "old"
@@ -152,6 +165,36 @@ def test_preparation_preserves_old_records_authority_and_expiry(reset_host):
     assert tool.load_plan(args.record)["completed"] == []
 
 
+def test_reset_rejects_workspace_identity_of_an_additional_instance(reset_host):
+    args = plan_args(reset_host)
+    descriptor = tool.read_json(args.descriptor)
+    extra = hosted_values(reset_host, "c")
+    extra["workspace_id"] = descriptor["workspace_id"]
+    write_json(tool.CONFIGS / "hosted-c.json", extra)
+
+    with pytest.raises(tool.ResetError, match="conflicts with another hosted instance"):
+        tool.prepare_plan(args)
+    assert not (args.record / "reset.json").exists()
+
+
+def test_reset_rejects_unreadable_additional_configuration(reset_host):
+    args = plan_args(reset_host)
+    (tool.CONFIGS / "hosted-c.json").write_text("not valid JSON")
+
+    with pytest.raises(ValueError):
+        tool.prepare_plan(args)
+    assert not (args.record / "reset.json").exists()
+
+
+def test_reset_rejects_missing_existing_instance_configuration(reset_host):
+    args = plan_args(reset_host)
+    (tool.CONFIGS / "hosted-b.json").unlink()
+
+    with pytest.raises(tool.ResetError, match="Registered hosted configurations"):
+        tool.prepare_plan(args)
+    assert not (args.record / "reset.json").exists()
+
+
 @pytest.mark.parametrize(
     "field,value",
     [
@@ -217,6 +260,28 @@ def test_switch_and_rollback_preserve_both_datasets(reset_host):
     assert Path(plan["old_workspace"]).exists()
     assert Path(plan["workspace"]).exists()
     assert Path(plan["backup"]).exists()
+
+
+def test_registered_c_reset_uses_its_allocated_port_and_preserves_a_b(reset_host):
+    values = hosted_values(reset_host, "c")
+    workspace = Path(values["storage_volume"]) / "old"
+    write_json(workspace / "workspace.json", {"workspaceId": values["workspace_id"]})
+    base, local, hosted = tool.instance_paths("c")
+    (base / "access").mkdir(mode=0o700)
+    write_json(local, {"localWorkspacePath": str(workspace)})
+    write_json(hosted, values)
+    original = {key: tool.instance_paths(key)[2].read_bytes() for key in ("a", "b")}
+    args = plan_args(reset_host, "c")
+    tool.prepare_plan(args)
+    plan = tool.load_plan(args.record)
+    restored_plan(args, plan)
+    tool.replace_configs(args.record, plan)
+    dropin = tool.SYSTEMD / "epm-hosted@c.service.d/90-release.conf"
+    assert "--port 8012" in dropin.read_text()
+    assert tool.read_json(local)["localWorkspacePath"] == plan["workspace"]
+    assert {key: tool.instance_paths(key)[2].read_bytes() for key in original} == original
+    tool.replace_configs(args.record, plan, rollback=True)
+    assert tool.read_json(local)["localWorkspacePath"] == str(workspace)
 
 
 def test_running_service_and_external_config_changes_block_switch(reset_host, monkeypatch):

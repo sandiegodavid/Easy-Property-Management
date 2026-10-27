@@ -8,6 +8,15 @@ For the short routine-operation and release-update sequence, use the
 [evidence/status](../qualification/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md) and [deployment
 record](CLOUDFLARE_OPERATIONS.md) have separate roles.
 
+The repository now also contains [registered-instance tooling](HOSTED_INSTANCE_TOOLING.md).
+After its private installation, A/B adoption and Linux qualification, use the installed
+maintenance wrappers for release/reset/cleanup and daily backup operations. They resolve
+the registered instance paths and hold the shared host lock. Until that transition is
+qualified, the recorded deployment procedures below remain the existing operating
+reference. Direct source commands remain private emergency/host-recovery procedures;
+record and reconcile out-of-band changes before resuming ordinary maintenance. Repository
+tests do not establish that this tooling is installed on the VM.
+
 The administrator owns daily recovery, passphrase custody, alerts, retention and funding
 review. Current runtime: `/opt/epm/releases/signin-nav-20261024/venv`. Use
 `hosted-local.json` for current portfolios; old `config.json` selects retained private data.

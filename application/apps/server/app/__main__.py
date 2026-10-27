@@ -115,9 +115,9 @@ def _build_parser() -> argparse.ArgumentParser:
         command.add_argument("archive")
         if name == "restore":
             command.add_argument("destination")
-            command.add_argument(
-                "--staging-directory", help="Existing external archive staging folder."
-            )
+        command.add_argument(
+            "--staging-directory", help="Existing external archive staging folder."
+        )
     commands.add_parser(
         "enable-automatic-backups", help="Opt in to daily backups using the OS credential store."
     )

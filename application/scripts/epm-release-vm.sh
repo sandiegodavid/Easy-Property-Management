@@ -190,6 +190,7 @@ set -E
 die() { printf '\nStopped: %s\n' "$*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "Required command missing: $1"; }
 valid_release() { [[ "$1" =~ ^release-[0-9]{8}-[0-9]{2,}$ ]]; }
+inventory_tool() { sudo /usr/bin/python3 -I /opt/epm/admin/host_admin.py "$@"; }
 failed() {
   printf '\nOperation failed (exit %s). No automatic rollback or reactivation was attempted.\n' "$1" >&2
   printf 'Keep affected access fenced. Inspect the service and the recorded rollback directory.\n' >&2
@@ -201,15 +202,15 @@ select_release() {
   write_env EPM_RELEASE "$EPM_RELEASE"
 }
 select_instance() {
-  ask EPM_INSTANCE "Instance (a or b):"
-  [[ "$EPM_INSTANCE" == a || "$EPM_INSTANCE" == b ]] || die "Choose a or b."
+  local selection
+  inventory_tool keys --maintenance-id "$EPM_HOST_MAINTENANCE_ID"
+  ask EPM_INSTANCE "Registered instance key:"
+  [[ "$EPM_INSTANCE" =~ ^[a-z0-9][a-z0-9-]{0,31}$ ]] || die "Invalid instance key."
+  selection="$(inventory_tool select --key "$EPM_INSTANCE" --maintenance-id "$EPM_HOST_MAINTENANCE_ID" --format tsv)" || die "Instance selection failed."
   instance="$EPM_INSTANCE"
-  port=8001
-  [[ "$instance" != b ]] || port=8002
+  IFS=$'\t' read -r port account local_config deployment volume <<< "$selection"
+  [[ "$port" =~ ^[0-9]+$ && "$account" == "epm-$instance" && -n "$volume" ]] || die "Invalid registered allocation."
   unit="epm-hosted@$instance.service"
-  account="epm-$instance"
-  local_config="/var/lib/$account/hosted-local.json"
-  deployment="/etc/epm/hosted-$instance.json"
   dropin="/etc/systemd/system/$unit.d/90-release.conf"
   write_env EPM_INSTANCE "$instance"
 }
@@ -348,9 +349,7 @@ check_partial_extraction() {
   sudo test -d "$next" && sudo test ! -L "$next" || die "Not a regular release directory."
   sudo test ! -e "$next/venv" && sudo test ! -L "$next/venv" ||
     die "A virtual environment already exists; inspect or use a new release ID."
-  local selected
-  selected="$(sudo systemctl show epm-hosted@a.service epm-hosted@b.service -p ExecStart --value)"
-  [[ "$selected" != *"$next/"* ]] || die "This release is selected by a service; do not reinstall."
+  inventory_tool release-unused --release "$EPM_RELEASE" || die "This release is selected by a service; do not reinstall."
   sudo "$previous_python" - "$archive" "$next" <<'PY'
 import hashlib, sys, tarfile
 from pathlib import Path, PurePosixPath
@@ -426,7 +425,7 @@ install_release() {
   cli_check "$next/venv/bin/python"
   sudo install -d -m 0700 "$next/wizard-state"
   printf '%s\n' "$EPM_ARCHIVE_SHA256" | sudo tee "$next/wizard-state/archive-sha256.txt" >/dev/null
-  say "Installed, not deployed. Re-run this wizard and choose Deploy, A first."
+  say "Installed, not deployed. Reconcile maintenance, then deploy one registered instance at a time."
 }
 deploy_release() {
   stage "Choose the installed release and instance"
@@ -434,9 +433,7 @@ deploy_release() {
   select_instance
   [[ -x "$next/venv/bin/python" ]] || die "Install the release first."
   cli_check "$next/venv/bin/python"
-  if [[ "$instance" == b ]]; then
-    confirm "Has A passed browser acceptance and remained usable on this release?" || die "Accept A first."
-  fi
+  confirm "Have previously deployed instances passed acceptance and remained usable?" || die "Accept prior deployments first."
   current_python
   [[ "$previous_python" != "$next/venv/bin/python" ]] || die "Already selected in systemd. Choose Resume; do not repeat backup/switch."
   read_origin
@@ -498,7 +495,7 @@ deploy_release() {
   say "Accepted instance $instance. Record this operation in CLOUDFLARE_OPERATIONS.md."
   say "Private evidence/rollback record: $record"
   say "Retain the old release and backup. Publish the verified backup off-host using the recovery runbook."
-  [[ "$instance" != a ]] || say "Re-run and choose Deploy B after confirming A stays usable."
+  say "Reconcile maintenance before deploying another registered instance."
 }
 select_record() {
   sudo find "$next/wizard-state" -maxdepth 1 -type d -name "$instance.*" -print
@@ -574,7 +571,7 @@ rollback_release() {
 }
 demo_tool() {
   [[ -f "$next/release_demo.py" ]] || die "This release lacks reset tooling. Build/upload a release with the updated Mac wizard."
-  sudo "$next/venv/bin/python" "$next/release_demo.py" "$@"
+  sudo env EPM_HOST_MAINTENANCE_ID="$EPM_HOST_MAINTENANCE_ID" "$next/venv/bin/python" "$next/release_demo.py" "$@"
 }
 reset_field() { demo_tool field --record "$record" "$1"; }
 reset_done() {
@@ -595,8 +592,8 @@ select_reset() {
   select_release
   select_instance
   [[ -x "$next/venv/bin/python" ]] || die "Install the release first."
-  if [[ "$instance" == b && "${EPM_ACTION:-}" == reset-demo ]]; then
-    confirm "Has A passed acceptance on this release?" || die "Accept A first."
+  if [[ "${EPM_ACTION:-}" == reset-demo ]]; then
+    confirm "Have previously reset instances passed acceptance?" || die "Accept prior resets first."
   fi
   read_origin
 }
@@ -770,20 +767,66 @@ rollback_reset() {
 }
 inspect_host() {
   stage "Services and bounded workspace mounts"
-  sudo systemctl status epm-hosted@a.service epm-hosted@b.service epm-cloudflared.service --no-pager || true
-  sudo systemctl show epm-hosted@a.service epm-hosted@b.service -p ExecStart -p MainPID -p NRestarts
-  sudo findmnt --mountpoint /var/lib/epm-a/volume
-  sudo findmnt --mountpoint /var/lib/epm-b/volume
-  df -h / /var/lib/epm-a/volume /var/lib/epm-b/volume
+  inventory_tool discover
+  sudo systemctl status 'epm-hosted@*.service' epm-cloudflared.service --no-pager || true
+  sudo systemctl show 'epm-hosted@*.service' -p ExecStart -p MainPID -p NRestarts
+  df -h /
   free -h
   pause "Review the status before viewing recent logs."
   stage "Recent application logs"
-  sudo journalctl -u epm-hosted@a.service -u epm-hosted@b.service --since '1 hour ago' --no-pager
+  sudo journalctl -u 'epm-hosted@*.service' --since '1 hour ago' --no-pager
   say "No services, enrollment, configuration or workspace records were changed."
+}
+backup_instance() {
+  stage "Select the registered instance for recovery maintenance"
+  select_instance
+  current_python
+  read_origin
+  next="${previous_python%/venv/bin/python}"
+  local archive_help
+  archive_help="$(as_owner "$previous_python" validate-archive --help)"
+  [[ "$archive_help" == *--staging-directory* ]] || die "This installed release lacks external archive revalidation. Qualify a compatible release before recovery maintenance."
+  record="$next/wizard-state/$instance.recovery-$EPM_HOST_MAINTENANCE_ID"
+  sudo install -d -m 0700 "$record"
+  confirm "Fence access and stop $instance for its recovery maintenance window?" || die "Backup cancelled."
+  as_owner "$previous_python" hosted-admin "$deployment" disable
+  sudo systemctl stop "$unit"
+  ensure_stopped
+
+  stage "Create or revalidate this operation's encrypted business archive"
+  local backup_root="/var/backups/$account"
+  local output="$backup_root/recovery-$EPM_HOST_MAINTENANCE_ID.epm-backup"
+  local reference="$backup_root/reference-$EPM_HOST_MAINTENANCE_ID.enc"
+  local recovery="/etc/epm/recovery-$instance.json"
+  inventory_tool prepare-backup --key "$instance" --maintenance-id "$EPM_HOST_MAINTENANCE_ID"
+  if sudo test -f "$output"; then
+    as_owner "$previous_python" validate-archive "$output" --staging-directory "$backup_root/staging"
+  else
+    as_owner "$previous_python" hosted-backup "$deployment" --output "$output" --staging-directory "$backup_root/staging"
+  fi
+  if ! sudo test -f "$reference"; then
+    as_owner "$previous_python" hosted-recovery-bundle "$deployment" --output "$reference"
+  fi
+
+  stage "Publish and independently read back through the existing recovery service"
+  if sudo test -f "$recovery"; then
+    sudo env -u PYTHONPATH -u PYTHONHOME "$previous_python" -m app --config "$local_config" \
+      hosted-publish-backup "$deployment" "$recovery" "$output" --staging-directory "/var/lib/epm-recovery/$instance/staging"
+  else
+    say "No configured off-host recovery publisher. The local archive does not prove off-host recovery."
+  fi
+  say "Encrypted binding reference retained at $reference; verify its independent off-host recovery using the runbook."
+
+  stage "Restart and explicitly review eligible access"
+  sudo systemctl start "$unit"
+  readiness
+  activate_operator "$previous_python"
+  browser_acceptance "$previous_python"
+  say "Recovery maintenance finished. Run discovery and explicitly reconcile this maintenance operation."
 }
 main() {
   if [[ "${1:-}" == --help ]]; then
-    printf 'Usage: bash epm-release-vm.sh\nActions: inspect, install, deploy, resume, rollback, reset-demo, resume-reset, rollback-reset.\n'
+    printf 'Usage: bash epm-release-vm.sh\nActions: inspect, install, deploy, resume, rollback, reset-demo, resume-reset, rollback-reset, backup.\n'
     return
   fi
   [[ $# == 0 && "$(uname -s)" == Linux ]] || die "Run on the Linux VM; use --help for usage."
@@ -796,8 +839,8 @@ main() {
   ENV_FILE="$HOME/.local/state/epm-release-wizard/vm.env"
   touch "$ENV_FILE"
   chmod 600 "$ENV_FILE"
-  say "Choose: inspect, install, deploy, resume, rollback, reset-demo, resume-reset, rollback-reset."
-  ask EPM_ACTION "Action:"
+  say "Choose: inspect, install, deploy, resume, rollback, reset-demo, resume-reset, rollback-reset, backup."
+  if [[ -z "${EPM_HOST_MAINTENANCE_ID:-}" ]]; then ask EPM_ACTION "Action:"; fi
   case "$EPM_ACTION" in
     inspect) TOTAL_STAGES=2 ;;
     install) TOTAL_STAGES=3 ;;
@@ -806,13 +849,23 @@ main() {
     rollback) TOTAL_STAGES=3 ;;
     reset-demo|resume-reset) TOTAL_STAGES=8 ;;
     rollback-reset) TOTAL_STAGES=3 ;;
+    backup) TOTAL_STAGES=4 ;;
     *) die "Unknown action." ;;
   esac
   sudo -v
+  if [[ "$EPM_ACTION" != inspect ]]; then
+    if [[ -z "${EPM_HOST_MAINTENANCE_ID:-}" ]]; then
+      local resume_args=()
+      if [[ -n "${EPM_RESUME_MAINTENANCE:-}" ]]; then resume_args=(--resume "$EPM_RESUME_MAINTENANCE"); fi
+      inventory_tool maintenance --kind release --action "$EPM_ACTION" "${resume_args[@]}"
+      return
+    fi
+    inventory_tool assert-maintenance --maintenance-id "$EPM_HOST_MAINTENANCE_ID"
+  fi
   trap 'failed "$?"' ERR
   trap 'die "Interrupted. No automatic rollback or reactivation; inspect current state."' INT TERM
   banner "EPM · VM $EPM_ACTION wizard"
-  local next instance port unit account local_config deployment dropin previous_python archive origin host record
+  local next instance port unit account local_config deployment volume dropin previous_python archive origin host record
   case "$EPM_ACTION" in
     inspect) inspect_host ;;
     install) install_release ;;
@@ -821,6 +874,7 @@ main() {
     rollback) rollback_release ;;
     reset-demo|resume-reset) reset_demo ;;
     rollback-reset) rollback_reset ;;
+    backup) backup_instance ;;
   esac
   finish
 }

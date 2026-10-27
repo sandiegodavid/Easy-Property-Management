@@ -52,10 +52,15 @@ def test_invalid_release_identifier(value):
     assert shell(f"valid_release {shlex.quote(value)}").returncode != 0
 
 
-@pytest.mark.parametrize("instance,port", [("a", 8001), ("b", 8002)])
+@pytest.mark.parametrize("instance,port", [("a", 8001), ("b", 8002), ("c", 8012)])
 def test_instance_selection_generates_matching_paths(instance, port):
     result = shell(
         f'ask() {{ printf -v "$1" %s {instance}; }}\n'
+        "EPM_HOST_MAINTENANCE_ID=test-maintenance\n"
+        'inventory_tool() { if [[ "$1" == keys ]]; then return; fi; '
+        'printf "%s\\t%s\\t%s\\t%s\\t%s\\n" '
+        f"{port} epm-{instance} /var/lib/epm-{instance}/hosted-local.json "
+        f"/etc/epm/hosted-{instance}.json /var/lib/epm-{instance}/volume; }}\n"
         "write_env() { :; }\nselect_instance\n"
         'printf "%s\\n" "$local_config" "$deployment" "$unit" "$port" "$dropin"'
     )
@@ -297,12 +302,12 @@ def test_partial_install_retry_requires_an_untouched_unused_extraction(tmp_path,
         (release / "unexpected").touch()
     elif state == "venv":
         (release / "venv").mkdir()
-    selected = str(release / "venv/bin/python") if state == "selected" else "/old/venv/bin/python"
     result = shell(
+        "EPM_RELEASE=release-20261026-01\n"
+        f"inventory_tool() {{ return {1 if state == 'selected' else 0}; }}\n"
         f"next={shlex.quote(str(release))}\narchive={shlex.quote(str(archive))}\n"
         f"previous_python={shlex.quote(sys.executable)}\n"
-        'sudo() { if [[ "$1" == systemctl ]]; then '
-        f'printf "%s\\n" {shlex.quote(selected)}; else "$@"; fi; }}\n'
+        'sudo() { "$@"; }\n'
         "check_partial_extraction"
     )
     assert (result.returncode == 0) == (state == "matching")
@@ -336,6 +341,8 @@ def test_mac_demo_exports_stay_outside_checkout_and_feed_upload_list(tmp_path):
         f"application={shlex.quote(str(application))}\n"
         f"external={shlex.quote(str(external))}\n"
         "release=release-20261026-02\nsource_commit=abc\npython_path=/unused\n"
+        "EPM_VM=vm\nEPM_PROJECT=project\nEPM_ZONE=zone\n"
+        "gcloud() { printf 'a\\nb\\nc\\n'; }\n"
         "demo_files=()\n"
         'mktemp() { command mktemp -d "$external/demo.XXXXXXXX"; }\n'
         "node() {\n"
@@ -359,7 +366,7 @@ def test_mac_demo_exports_stay_outside_checkout_and_feed_upload_list(tmp_path):
     ]
     assert [path.name for path in artifacts] == [
         f"release-20261026-02-demo-{role}{suffix}"
-        for role in ("a", "b")
+        for role in ("a", "b", "c")
         for suffix in (".epm-backup", ".json")
     ]
     assert all(path.is_file() and path.is_relative_to(external) for path in artifacts)
@@ -452,3 +459,74 @@ def test_valid_missing_reset_checkpoint_is_distinct_from_read_failure():
     )
     assert result.returncode == 0
     assert result.stdout.strip() == "pending"
+
+
+@pytest.mark.parametrize("existing", [False, True])
+def test_registered_recovery_backup_uses_external_staging_and_one_operation_output(existing):
+    result = recovery_backup_shell(existing=existing)
+    assert result.returncode == 0, result.stderr
+    output = result.stdout
+    assert "prepare-backup --key c --maintenance-id operation-id" in output
+    if existing:
+        assert (
+            "validate-archive /var/backups/epm-c/recovery-operation-id.epm-backup "
+            "--staging-directory /var/backups/epm-c/staging" in output
+        )
+        assert "hosted-backup " not in output
+    else:
+        assert (
+            "hosted-backup /etc/epm/hosted-c.json "
+            "--output /var/backups/epm-c/recovery-operation-id.epm-backup "
+            "--staging-directory /var/backups/epm-c/staging" in output
+        )
+    assert (
+        output.index("hosted-publish-backup")
+        < output.index("systemctl start")
+        < output.index("activated")
+    )
+
+
+@pytest.mark.parametrize("failure", ["backup", "publication"])
+def test_recovery_failure_leaves_service_stopped_and_access_fenced(failure):
+    result = recovery_backup_shell(failure=failure)
+    assert result.returncode != 0
+    assert "hosted-admin /etc/epm/hosted-c.json disable" in result.stdout
+    assert "systemctl stop" in result.stdout
+    assert "systemctl start" not in result.stdout
+    assert "activated" not in result.stdout
+
+
+def test_unsupported_recovery_runtime_is_rejected_before_fencing_or_stopping():
+    result = recovery_backup_shell(supported=False)
+    assert result.returncode != 0
+    assert "lacks external archive revalidation" in result.stderr
+    assert "hosted-admin" not in result.stdout
+    assert "systemctl stop" not in result.stdout
+
+
+def recovery_backup_shell(*, existing=False, failure="", supported=True):
+    return shell(
+        "EPM_HOST_MAINTENANCE_ID=operation-id\n"
+        "select_instance() { instance=c; account=epm-c; unit=epm-hosted@c.service; "
+        "deployment=/etc/epm/hosted-c.json; local_config=/var/lib/epm-c/hosted-local.json; }\n"
+        "current_python() { "
+        "previous_python=/opt/epm/releases/release-20261027-01/venv/bin/python; }\n"
+        "read_origin() { :; }\nconfirm() { return 0; }\nensure_stopped() { :; }\n"
+        'inventory_tool() { printf "inventory: %s\\n" "$*"; }\n'
+        'as_owner() { printf "owner: %s\\n" "$*"; '
+        + (
+            'if [[ "$*" == *"validate-archive --help"* ]]; '
+            "then echo --staging-directory; return; fi; "
+            if supported
+            else 'if [[ "$*" == *"validate-archive --help"* ]]; then return; fi; '
+        )
+        + ('[[ "$*" != *"hosted-backup "* ]];' if failure == "backup" else "return 0;")
+        + " }\n"
+        'sudo() { if [[ "$1" == test ]]; then '
+        + ("return 0;" if existing else '[[ "$*" != *"recovery-operation-id.epm-backup"* ]];')
+        + ' else printf "sudo: %s\\n" "$*"; '
+        + ('[[ "$*" != *"hosted-publish-backup"* ]];' if failure == "publication" else "return 0;")
+        + " fi; }\n"
+        "readiness() { :; }\nactivate_operator() { echo activated; }\n"
+        "browser_acceptance() { echo accepted; }\nbackup_instance"
+    )

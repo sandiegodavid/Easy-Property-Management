@@ -35,7 +35,7 @@ def inspect(root, **kwargs):
 
 def test_current_and_explicit_rollback_are_protected(releases):
     result = inspect(releases, effective=f"{releases}/current/venv/bin/python".encode())
-    assert result["current"] == ["effective A/B service command"]
+    assert result["current"] == ["effective registered service command"]
     assert result["rollback"] == ["explicit rollback retention"]
     assert result["unused"] == []
 
@@ -152,6 +152,59 @@ def test_unreadable_reference_stops_inventory(releases, monkeypatch, tmp_path):
     monkeypatch.setattr(Path, "read_bytes", denied)
     with pytest.raises(PermissionError):
         inspect(releases, sources=(source,))
+
+
+def test_unmanaged_instance_blocks_cleanup_before_release_scan(monkeypatch):
+    def blocked():
+        raise ValueError("Host inventory has unresolved discrepancies.")
+
+    monkeypatch.setattr(tool, "registered_inventory", blocked)
+    monkeypatch.setattr(
+        tool, "inventory", lambda *args: pytest.fail("must stop before release scan")
+    )
+    with pytest.raises(ValueError, match="unresolved discrepancies"):
+        tool.host_inventory(["rollback"])
+
+
+def test_stopped_registered_c_and_its_baseline_release_are_protected(
+    releases, monkeypatch, tmp_path
+):
+    local = tmp_path / "c-local.json"
+    local.write_text("{}")
+    monkeypatch.setattr(tool, "RELEASES", releases)
+    monkeypatch.setattr(tool, "REFERENCES", ())
+    monkeypatch.setattr(tool, "process_references", lambda: ())
+    monkeypatch.setattr(
+        tool,
+        "registered_inventory",
+        lambda: {
+            "instances": [{"key": "c", "local_config": str(local)}],
+            "protected_releases": ["rollback"],
+        },
+    )
+    calls = []
+
+    def systemctl(args, **kwargs):
+        calls.append(args)
+        return subprocess.CompletedProcess(
+            args, 0, stdout=f"{releases}/current/venv/bin/python".encode()
+        )
+
+    monkeypatch.setattr(tool.subprocess, "run", systemctl)
+    result = tool.host_inventory(["rollback"])
+    assert any("epm-hosted@c.service" in call for call in calls)
+    assert result["current"]
+    assert result["rollback"]
+    assert result["unused"] == []
+
+
+def test_failed_service_discovery_blocks_cleanup(monkeypatch):
+    def systemctl(args, **kwargs):
+        raise subprocess.CalledProcessError(1, args)
+
+    monkeypatch.setattr(tool.subprocess, "run", systemctl)
+    with pytest.raises(subprocess.CalledProcessError):
+        tool.host_inventory(["rollback"])
 
 
 def test_wizard_help_syntax_and_shared_library():
