@@ -199,6 +199,12 @@ def main():
                 "assert-maintenance",
                 "--maintenance-id",
                 identifier,
+                "--release",
+                args.release or "",
+                "--kind",
+                "cleanup",
+                "--action",
+                "cleanup",
             ],
             check=True,
         )

@@ -196,15 +196,15 @@ failed() {
   printf 'Keep affected access fenced. Inspect the service and the recorded rollback directory.\n' >&2
 }
 select_release() {
-  ask EPM_RELEASE "Release ID (release-YYYYMMDD-NN):"
+  [[ -n "${EPM_HOST_MAINTENANCE_ID:-}" && -n "${EPM_RELEASE:-}" ]] || die "No admitted release selection."
   valid_release "$EPM_RELEASE" || die "Invalid release identifier."
   next="/opt/epm/releases/$EPM_RELEASE"
   write_env EPM_RELEASE "$EPM_RELEASE"
 }
 select_instance() {
   local selection
+  [[ -n "${EPM_HOST_MAINTENANCE_ID:-}" && -n "${EPM_INSTANCE:-}" ]] || die "No admitted instance selection."
   inventory_tool keys --maintenance-id "$EPM_HOST_MAINTENANCE_ID"
-  ask EPM_INSTANCE "Registered instance key:"
   [[ "$EPM_INSTANCE" =~ ^[a-z0-9][a-z0-9-]{0,31}$ ]] || die "Invalid instance key."
   selection="$(inventory_tool select --key "$EPM_INSTANCE" --maintenance-id "$EPM_HOST_MAINTENANCE_ID" --format tsv)" || die "Instance selection failed."
   instance="$EPM_INSTANCE"
@@ -440,7 +440,7 @@ deploy_release() {
 
   stage "Record rollback and drain operator work"
   sudo install -d -m 0700 "$next/wizard-state"
-  record="$(sudo mktemp -d "$next/wizard-state/$instance.XXXXXXXX")"
+  create_record
   write_env EPM_DEPLOY_RECORD "$record"
   printf '%s\n' "$previous_python" | sudo tee "$record/previous-python.txt" >/dev/null
   sudo systemctl show "$unit" -p ExecStart --value | sudo tee "$record/previous-execstart.txt" >/dev/null
@@ -498,12 +498,16 @@ deploy_release() {
   say "Reconcile maintenance before deploying another registered instance."
 }
 select_record() {
-  sudo find "$next/wizard-state" -maxdepth 1 -type d -name "$instance.*" -print
-  ask EPM_DEPLOY_RECORD "Exact deployment/rollback directory printed above:"
   [[ "$EPM_DEPLOY_RECORD" == "$next/wizard-state/$instance."* &&
-    "$EPM_DEPLOY_RECORD" =~ ^/opt/epm/releases/release-[0-9]{8}-[0-9]{2,}/wizard-state/[ab]\.[A-Za-z0-9]+$ ]] ||
+    "$EPM_DEPLOY_RECORD" =~ ^/opt/epm/releases/release-[0-9]{8}-[0-9]{2,}/wizard-state/[a-z0-9-]+\.[a-f0-9]{32}$ ]] ||
     die "Invalid deployment record path."
   record="$EPM_DEPLOY_RECORD"
+}
+create_record() {
+  select_record
+  sudo test ! -e "$record" && sudo test ! -L "$record" ||
+    die "This operation already has a checkpoint. Resume or reconcile its original result."
+  sudo mkdir -m 0700 "$record"
 }
 resume_release() {
   stage "Choose the interrupted deployment"
@@ -606,7 +610,7 @@ prepare_reset() {
   ask EPM_DEMO_SHA256 "Independent Mac SHA-256 for this instance's demo archive:"
   [[ "$EPM_DEMO_SHA256" =~ ^[a-f0-9]{64}$ ]] || die "Invalid demo archive checksum."
   sudo install -d -m 0700 "$next/wizard-state"
-  record="$(sudo mktemp -d "$next/wizard-state/$instance.XXXXXXXX")"
+  create_record
   write_env EPM_DEPLOY_RECORD "$record"
   local incoming="/var/backups/$account/reset-$EPM_RELEASE-${record##*/}"
   sudo install -d -o "$account" -g "$account" -m 0700 "$incoming"
@@ -786,7 +790,7 @@ backup_instance() {
   local archive_help
   archive_help="$(as_owner "$previous_python" validate-archive --help)"
   [[ "$archive_help" == *--staging-directory* ]] || die "This installed release lacks external archive revalidation. Qualify a compatible release before recovery maintenance."
-  record="$next/wizard-state/$instance.recovery-$EPM_HOST_MAINTENANCE_ID"
+  select_record
   sudo install -d -m 0700 "$record"
   confirm "Fence access and stop $instance for its recovery maintenance window?" || die "Backup cancelled."
   as_owner "$previous_python" hosted-admin "$deployment" disable
@@ -856,11 +860,22 @@ main() {
   if [[ "$EPM_ACTION" != inspect ]]; then
     if [[ -z "${EPM_HOST_MAINTENANCE_ID:-}" ]]; then
       local resume_args=()
-      if [[ -n "${EPM_RESUME_MAINTENANCE:-}" ]]; then resume_args=(--resume "$EPM_RESUME_MAINTENANCE"); fi
+      if [[ -n "${EPM_RESUME_MAINTENANCE:-}" ]]; then
+        resume_args=(--resume "$EPM_RESUME_MAINTENANCE")
+      else
+        inventory_tool keys
+        ask EPM_INSTANCE "Registered instance key:"
+        resume_args=(--key "$EPM_INSTANCE")
+        if [[ "$EPM_ACTION" != backup ]]; then
+          ask EPM_RELEASE "Release ID (release-YYYYMMDD-NN):"
+          resume_args+=(--release "$EPM_RELEASE")
+        fi
+      fi
       inventory_tool maintenance --kind release --action "$EPM_ACTION" "${resume_args[@]}"
       return
     fi
-    inventory_tool assert-maintenance --maintenance-id "$EPM_HOST_MAINTENANCE_ID"
+    inventory_tool assert-maintenance --maintenance-id "$EPM_HOST_MAINTENANCE_ID" \
+      --key "$EPM_INSTANCE" --release "$EPM_RELEASE" --checkpoint "$EPM_DEPLOY_RECORD"
   fi
   trap 'failed "$?"' ERR
   trap 'die "Interrupted. No automatic rollback or reactivation; inspect current state."' INT TERM

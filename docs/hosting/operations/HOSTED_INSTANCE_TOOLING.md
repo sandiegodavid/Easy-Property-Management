@@ -90,7 +90,7 @@ bash /opt/epm/admin/epm-release-vm.sh
 bash /opt/epm/admin/epm-release-cleanup-vm.sh
 ```
 
-The VM wizard supports inspection, install, deploy/resume/rollback, fresh-demo reset/resume/rollback, and `backup`. It lists registered keys and resolves their actual ports and configuration paths. It never derives a port from an instance letter. Select one instance and retain its printed maintenance ID and private checkpoint path.
+The VM wizard supports inspection, install, deploy/resume/rollback, fresh-demo reset/resume/rollback, and `backup`. It lists registered keys and resolves their actual ports and configuration paths. It never derives a port from an instance letter. Select the instance and intended release before admission; backup derives its release from the registered source. Retain the printed maintenance ID and private checkpoint path.
 
 Every mutating wizard runs beneath the same root-held host lock. The fixed child wizard inherits the lock descriptor so a disconnected wrapper cannot admit another operation while the child still holds it. Shell injection hooks and arbitrary caller environment are not forwarded. Operator processes do not receive an Admin listener or control-store authority. One host operation runs at a time; existing business writers continue unless their selected workflow explicitly fences/stops them. A failed command leaves a durable pending-reconciliation record, and failure recording does not replace the original execution exception.
 
@@ -116,7 +116,7 @@ sudo /usr/bin/python3 -I /opt/epm/admin/host_admin.py maintenance \
 # Cleanup retry: --kind cleanup --action cleanup
 ```
 
-The expected action, kind, registered allocation and saved source checkpoints still apply. An unknown resource cannot be ignored during resume. Do not repeat a fresh reset or upload with a new identity to work around an unresolved outcome.
+The original action, instance/allocation, intended release, operation-specific checkpoint and source inventory revisions are stored before the first effect. Resume reloads those selections; it does not ask for another instance, release or checkpoint. Explicitly supplying a different key or release conflicts. New deploy/reset checkpoints are derived from the operation ID and cannot be silently replaced on retry. Reset commands also check the checkpoint through the private helper. Install and cleanup have explicit host-wide scope, with a pinned release (and a pinned dependency-source instance for install); neither can reconcile changes to instance configurations. An unknown resource cannot be ignored during resume. Do not repeat a fresh reset or upload with a new identity to work around an unresolved outcome.
 
 After the operation exits, inspect its source result/checkpoints, read `discover` again, and review the **top-level report** `digest` plus all observed changes. Explicitly reconcile that observed result:
 
@@ -126,7 +126,7 @@ sudo /usr/bin/python3 -I /opt/epm/admin/host_admin.py reconcile \
   --observed-digest REVIEWED_REPORT_DIGEST --confirm
 ```
 
-This rechecks current facts, preserves allocation IDs, uses expected instance revisions and commits all inventory changes/audit together. Unmanaged, unverifiable, stale or unexpected authority/allocation changes block it. Reconciliation of a crashed holder is allowed only after acquiring its released lock; it observes an unknown exit and does not execute the old command. A reconciled inventory is not evidence of business acceptance or a new capacity qualification, and it does not grant a session.
+This rechecks current facts, preserves allocation IDs, uses the original expected instance revisions and commits all inventory changes/audit together. Instance maintenance can reconcile only its selected instance and the intended or original release; every other instance must still match its original source digest. Changed unrelated instances also block resume. An explicit recorded root intervention remains the separate host-wide reconciliation path. Unmanaged, unverifiable, stale or unexpected authority/allocation changes block it. Reconciliation of a crashed holder is allowed only after acquiring its released lock; it observes an unknown exit and does not execute the old command. A reconciled inventory is not evidence of business acceptance or a new capacity qualification, and it does not grant a session.
 
 Private root emergency containment remains available if normal tools cannot run. Record the incident in private operations history. For an out-of-band configuration/release/tooling repair with unchanged allocation and principal identities, review fresh discovery and record the intervention explicitly:
 
@@ -144,8 +144,8 @@ This records an observed intervention, not a fabricated pre-effect intent or suc
 | --- | --- |
 | Happy paths | Explicit temporary-root A/B/C adoption and reopen; C's nonstandard port used by reset, rollback and release protection; generic Mac/VM selections |
 | Invalid combinations | Duplicate allocations; malformed/non-secret contract violations; symlinks/permissions; wrong service/mount/binding/release; unknown and unverifiable resources; unsupported CLI commands |
-| Idempotency/retry | Stable adoption IDs; durable original maintenance ID; saved reset checkpoints; one backup output and external revalidation; explicit result lookup/reconciliation |
-| Transaction rollback | Conflicting multi-instance reconciliation rolls back every row and leaves the operation pending; original execution failure survives journal failure |
+| Idempotency/retry | Immutable target/release/checkpoint and source-revision intent; A cannot resume against B or a different release/checkpoint; stable adoption IDs; durable original maintenance ID; saved reset checkpoints; one backup output and external revalidation; explicit result lookup/reconciliation |
+| Transaction rollback | Wrong-target reconciliation rolls back all changes; valid A cutover preserves B; conflicting multi-instance root reconciliation rolls back every row and leaves the operation pending; original execution failure survives journal failure |
 | Persistence/schema | Current exact schema and trigger bodies; append-only audit and retained allocations; UTC retained timestamps; missing inventory/baselines fail closed |
 | Backup/restore | Existing encrypted archive/reset validators and rollback tests remain in the focused set; private backup flow exercises staging, publication ordering and failure fencing. Actual R2 read-back, reference decryption and restore-drill evidence remain host acceptance, not mock-test claims |
 | Bounds/query behavior | Inventory list is one bounded set read; discovery/output, records, manifest artifacts, file hashes, baseline scans and maintenance history have explicit bounds. No ordinary app-startup discovery is added |
