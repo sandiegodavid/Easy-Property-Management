@@ -13,6 +13,7 @@ import stat
 import signal
 import subprocess
 import sys
+from uuid import NAMESPACE_URL, uuid5
 
 from app.modules.hosted_access.application.admin_commands import (
     AccessCommand,
@@ -23,6 +24,10 @@ from app.modules.hosted_admin.api.application import create_admin_app
 from app.modules.hosted_admin.application.contracts import AdminError
 from app.modules.hosted_admin.infrastructure.authority import AuthorityStore
 from app.modules.hosted_admin.infrastructure.broker import Broker, MAX_FRAME, rpc
+from app.modules.hosted_admin.infrastructure.private_operations import PrivateOperations
+from app.modules.hosted_admin.infrastructure.qualification import QualificationService
+from app.modules.hosted_admin.infrastructure.verified_reports import VerifiedReports
+from app.modules.hosted_admin.application.operations import fingerprint
 
 if __package__:
     from .host_admin import HostPaths, HostDiscovery, lock_host, protected, read_json
@@ -107,18 +112,7 @@ class SourceRunner:
     def __call__(self, payload):
         descriptor = lock_host(self.inventory)
         try:
-            reference = self.prepare(payload["instance"])
-            original = payload.get("source_reference", {}).get("instance", {})
-            identity_fields = (
-                "instance_id",
-                "allocation_id",
-                "operator_id",
-                "workspace_id",
-                "access_database",
-                "user",
-            )
-            if any(original.get(key) != reference["instance"][key] for key in identity_fields):
-                raise AdminError("admin_source_binding_changed", 409)
+            reference = self.checked_reference(payload)
             command = self._command(payload)
             receipt = self._transport(
                 reference["instance"], {"query": "receipt", "command": command.model_dump()}
@@ -137,6 +131,64 @@ class SourceRunner:
                     self.inventory.get(payload["instance"])
                 )
             return self._run(payload, reference["instance"])
+        finally:
+            os.close(descriptor)
+
+    def checked_reference(self, payload):
+        reference = self.prepare(payload["instance"])
+        original = payload.get("source_reference", {}).get("instance", {})
+        fields = (
+            "instance_id",
+            "allocation_id",
+            "operator_id",
+            "workspace_id",
+            "access_database",
+            "user",
+        )
+        if any(original.get(key) != reference["instance"][key] for key in fields):
+            raise AdminError("admin_source_binding_changed", 409)
+        return reference
+
+    def reconcile(self, payload):
+        """Read the exact original receipt, even after later source revisions."""
+        descriptor = lock_host(self.inventory)
+        try:
+            current = self.checked_reference(payload)
+            receipt = self._transport(
+                current["instance"],
+                {"query": "receipt", "command": self._command(payload).model_dump()},
+            )
+            return (
+                AccessResult.model_validate(receipt["result"]).model_dump()
+                if receipt.get("found")
+                else None
+            )
+        finally:
+            os.close(descriptor)
+
+    def contain(self, payload):
+        """A stale in-flight grant is contained through the owning access command."""
+        descriptor = lock_host(self.inventory)
+        try:
+            current = self.checked_reference(payload)
+            status = AccessStatus.model_validate(
+                self._transport(current["instance"], {"query": "status"})
+            )
+            if not status.active:
+                return True
+            command = AccessCommand(
+                operation_id=str(uuid5(NAMESPACE_URL, payload["operation_id"] + ":contain")),
+                action="disable",
+                expected_revision=status.admin_revision,
+                expected_binding_revision=status.binding_revision,
+                fence=status.admin_fence,
+                authority_reference=payload["authority_reference"],
+                reason="Contain fenced administration operation",
+            )
+            result = AccessResult.model_validate(
+                self._transport(current["instance"], command.model_dump())
+            )
+            return not result.active
         finally:
             os.close(descriptor)
 
@@ -203,6 +255,7 @@ def parser():
             "action-grant",
             "revoke-identity",
             "restore-identity",
+            "operations",
         ),
     )
     value.add_argument("--identity")
@@ -212,6 +265,29 @@ def parser():
 
 MIN_PORT = 1024
 MAX_PORT = 65535
+
+
+def private_request(action, path):
+    if action == "operations":
+        raw = sys.stdin.read(MAX_FRAME + 1)
+        if len(raw.encode()) > MAX_FRAME:
+            raise AdminError("admin_request_too_large", 413)
+        print(json.dumps(rpc(path, {"method": "private_operations", "request": json.loads(raw)})))
+        return True
+    if action in {"bootstrap", "action-grant", "revoke-identity", "restore-identity"}:
+        method = {
+            "bootstrap": "bootstrap",
+            "action-grant": "action_grant",
+            "revoke-identity": "revoke_identity",
+            "restore-identity": "restore_identity",
+        }[action]
+        payload = {"method": method}
+        if action == "action-grant":
+            payload["command"] = json.loads(sys.stdin.read(MAX_FRAME + 1))
+        result = rpc(path, payload)
+        print(result["credential"] if "credential" in result else json.dumps(result))
+        return True
+    return False
 
 
 def main():
@@ -227,18 +303,7 @@ def main():
         return
     if os.geteuid() != 0:
         raise AdminError("admin_private_peer_required")
-    if args.action in {"bootstrap", "action-grant", "revoke-identity", "restore-identity"}:
-        method = {
-            "bootstrap": "bootstrap",
-            "action-grant": "action_grant",
-            "revoke-identity": "revoke_identity",
-            "restore-identity": "restore_identity",
-        }[args.action]
-        payload = {"method": method}
-        if args.action == "action-grant":
-            payload["command"] = json.loads(sys.stdin.read(MAX_FRAME + 1))
-        result = rpc(path, payload)
-        print(result["credential"] if "credential" in result else json.dumps(result))
+    if private_request(args.action, path):
         return
     store_path = Path("/var/lib/epm-admin/authority/authority.sqlite")
     paths = HostPaths()
@@ -254,7 +319,14 @@ def main():
     http = pwd.getpwnam("epm-admin-http")
     if any(pwd.getpwnam(instance.user).pw_uid == http.pw_uid for instance in inventory.list()):
         raise AdminError("admin_http_identity_not_isolated", 503)
-    Broker(authority, http.pw_uid, SourceRunner(paths, inventory)).serve(path, http.pw_gid)
+    dispatch = SourceRunner(paths, inventory)
+    reports = VerifiedReports(
+        paths.control / "qualification-reports",
+        lambda: fingerprint([asdict(item) for item in inventory.list()]),
+    )
+    qualification = QualificationService(authority, reports.snapshot, reports.evidence)
+    operations = PrivateOperations(authority, qualification, dispatch)
+    Broker(authority, http.pw_uid, dispatch, operations=operations).serve(path, http.pw_gid)
 
 
 if __name__ == "__main__":

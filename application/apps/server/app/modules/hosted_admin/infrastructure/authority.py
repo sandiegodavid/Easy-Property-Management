@@ -12,13 +12,18 @@ import stat
 import time
 
 from app.modules.hosted_admin.application.contracts import AdminError
+from app.modules.hosted_admin.infrastructure.operation_schema import SCHEMA as OPERATION_SCHEMA
+from app.modules.hosted_admin.infrastructure.operations import OperationEngine, enqueue
+from app.modules.hosted_admin.application.operations import Observation
+from app.modules.hosted_admin.infrastructure.control_recovery import validate_control
 
 GRANT_SECONDS = 300
 IDLE_SECONDS = 1800
 ABSOLUTE_SECONDS = 28800
 MAX_ATTEMPTS = 10
 
-SCHEMA = """
+SCHEMA = (
+    """
 CREATE TABLE administrator (id TEXT PRIMARY KEY, generation INTEGER NOT NULL CHECK(generation>0), enabled INTEGER NOT NULL CHECK(enabled IN (0,1)));
 CREATE TABLE grant (hash TEXT PRIMARY KEY, purpose TEXT NOT NULL CHECK(purpose IN ('bootstrap','action')), request_hash TEXT,
  generation INTEGER NOT NULL, expires REAL NOT NULL CHECK(expires>=0), used INTEGER NOT NULL CHECK(used IN (0,1)));
@@ -39,6 +44,8 @@ CREATE TRIGGER audit_no_delete BEFORE DELETE ON audit BEGIN SELECT RAISE(ABORT,'
 CREATE TABLE attempts (id INTEGER PRIMARY KEY CHECK(id=1), since REAL NOT NULL, count INTEGER NOT NULL);
 PRAGMA user_version=1;
 """
+    + OPERATION_SCHEMA
+)
 
 
 def digest(value):
@@ -90,6 +97,7 @@ class AuthorityStore:
                 or len(identity["id"]) > 96
             ):
                 raise AdminError("admin_identity_invalid", 503)
+            validate_control(connection)
 
     @classmethod
     def initialize(cls, path, identity):
@@ -110,6 +118,7 @@ class AuthorityStore:
         connection = sqlite3.connect(self.path, timeout=5)
         connection.row_factory = sqlite3.Row
         try:
+            connection.execute("PRAGMA foreign_keys=ON")
             connection.execute("BEGIN IMMEDIATE")
             yield connection
             connection.commit()
@@ -280,6 +289,15 @@ class AuthorityStore:
                     self.clock(),
                 ),
             )
+            enqueue(
+                connection,
+                self,
+                identifier=command.operation_id,
+                identity=identity,
+                kind="source",
+                target=command.instance,
+                payload=payload,
+            )
             self._audit(connection, "command_admitted", command.operation_id)
             return dict(
                 connection.execute(
@@ -288,22 +306,9 @@ class AuthorityStore:
             )
 
     def execute(self, admission, dispatch):
-        # Serialize identity revocation with dispatch. Revocation cannot be bypassed by a stale worker.
-        with self.transaction() as connection:
-            identity = self._identity(connection)
-            row = connection.execute(
-                "SELECT * FROM admission WHERE id=?", (admission["id"],)
-            ).fetchone()
-            if row is None or row["generation"] != identity["generation"]:
-                raise AdminError("admin_authority_fenced", 409)
-            if row["result"] is not None:
-                return json.loads(row["result"])
-            result = dispatch(json.loads(row["payload"]))
-            connection.execute(
-                "UPDATE admission SET result=? WHERE id=?", (json.dumps(result), row["id"])
-            )
-            self._audit(connection, "command_completed", row["id"])
-            return result
+        # The source owns its immutable receipt. No authority-store write lock
+        # spans a source process/provider call; a priority fence can always commit.
+        return OperationEngine(self).run(admission["id"], SourceEffect(dispatch))
 
     def revoke_identity(self):
         with self.transaction() as connection:
@@ -328,10 +333,23 @@ class AuthorityStore:
             return self.reauthenticate(request)
         if request.method == "command":
             return self.execute(self.admit(request, getattr(dispatch, "prepare", None)), dispatch)
+        if request.method in {"operation", "operation_list", "resume", "cancel"}:
+            with self.transaction() as connection:
+                identity = dict(self.session(connection, request.token, request.csrf))
+            engine = OperationEngine(self)
+            if request.method == "operation_list":
+                return engine.recent(identity["id"])
+            if request.method == "operation":
+                return engine.get(request.operation_id, identity["id"])
+            if request.method == "cancel":
+                return engine.cancel(request.operation_id, request.expected_revision, identity)
+            return engine.resume(
+                request.operation_id, request.expected_revision, identity, request.credential
+            )
         if request.method == "source_status":
             with self.transaction() as connection:
                 self.session(connection, request.token, request.csrf)
-                return dispatch.status(request.instance)
+            return dispatch.status(request.instance)
         with self.transaction() as connection:
             identity = self.session(
                 connection, request.token, None if request.method == "session" else request.csrf
@@ -351,3 +369,30 @@ class AuthorityStore:
                     "result": json.loads(row["result"]) if row and row["result"] else None,
                 }
             return {"identity": identity["id"]}
+
+
+class SourceEffect:
+    """Adapt the source-owned receipt lookup to the durable step protocol."""
+
+    def __init__(self, dispatch):
+        self.dispatch = dispatch
+        self.result = None
+
+    def inspect(self, payload, _step):
+        if hasattr(self.dispatch, "reconcile"):
+            result = self.dispatch.reconcile(payload)
+        else:
+            # In-process application adapters may return an already verified
+            # receipt; production uses SourceRunner.reconcile on every retry.
+            result = self.result
+        return (
+            Observation("verified", result, payload["operation_id"])
+            if result is not None
+            else Observation("absent")
+        )
+
+    def apply(self, payload, _step):
+        self.result = self.dispatch(payload)
+
+    def contain(self, payload):
+        return bool(hasattr(self.dispatch, "contain") and self.dispatch.contain(payload))

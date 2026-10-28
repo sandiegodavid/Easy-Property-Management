@@ -50,21 +50,36 @@ class CommandRequest(BaseModel):
 class BrokerRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     method: Literal[
-        "login", "session", "logout", "reauthenticate", "command", "lookup", "source_status"
+        "login",
+        "session",
+        "logout",
+        "reauthenticate",
+        "command",
+        "lookup",
+        "source_status",
+        "operation",
+        "operation_list",
+        "resume",
+        "cancel",
     ]
     token: str = Field(default="", max_length=128)
     csrf: str = Field(default="", max_length=128)
     credential: str = Field(default="", max_length=128)
     command: CommandRequest | None = None
     operation_id: str | None = Field(default=None, min_length=36, max_length=36)
+    expected_revision: int | None = Field(default=None, ge=1)
     instance: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9-]{0,31}$")
 
     @model_validator(mode="after")
     def coherent(self):
         if (self.method in {"command", "reauthenticate"}) != (self.command is not None):
             raise ValueError("This operation requires exactly its registered command.")
-        if (self.method == "lookup") != (self.operation_id is not None):
+        if (self.method in {"lookup", "operation", "resume", "cancel"}) != (
+            self.operation_id is not None
+        ):
             raise ValueError("Only lookup accepts an operation identity.")
+        if (self.method in {"resume", "cancel"}) != (self.expected_revision is not None):
+            raise ValueError("Operation controls require the reviewed revision.")
         if self.operation_id is not None and str(UUID(self.operation_id)) != self.operation_id:
             raise ValueError("Canonical lookup identity required.")
         if (self.method == "source_status") != (self.instance is not None):

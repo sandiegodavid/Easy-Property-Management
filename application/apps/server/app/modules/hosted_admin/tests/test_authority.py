@@ -144,7 +144,7 @@ def test_csrf_rate_limit_and_request_vocabulary(authority):
 
 
 def test_source_committed_control_commit_lost_reconciles_same_receipt(authority):
-    store, _ = authority
+    store, clock = authority
     original = request(login(store), command())
     admission = store.admit(original)
     results = {}
@@ -163,6 +163,9 @@ def test_source_committed_control_commit_lost_reconciles_same_receipt(authority)
         store.execute(admission, source)
     with store.transaction() as connection:
         connection.execute("DROP TRIGGER fail_result")
+    # A crashed worker claim must expire; then reconciliation checks the owning
+    # receipt instead of admitting a different command.
+    clock[0] += 61
     assert store.execute(store.admit(original), source) == {"generation": 1}
     assert len(results) == 1 and len(calls) == 2
 

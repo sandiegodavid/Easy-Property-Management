@@ -27,6 +27,7 @@ def admin_problem(status, code):
         400: "The administration request is invalid.",
         401: "Sign in to private administration.",
         403: "The administration request is not permitted.",
+        404: "The administration record was not found.",
         409: "The administration request conflicts with the current state.",
         413: "Request content exceeds an allowed limit.",
         429: "Too many administration attempts. Try again later.",
@@ -142,6 +143,15 @@ def create_admin_app(origin, call):
     async def session(request: Request):
         return await forward(request, {"method": "session"})
 
+    @app.get("/admin-api/operations")
+    async def operations(request: Request):
+        return await forward(request, {"method": "operation_list"})
+
+    @app.get("/admin-api/operations/by-key/{operation_id}")
+    @app.get("/admin-api/operations/{operation_id}")
+    async def operation(operation_id: str, request: Request):
+        return await forward(request, {"method": "operation", "operation_id": operation_id})
+
     @app.post("/{action}")
     async def command(action: str, request: Request):
         methods = {
@@ -151,6 +161,9 @@ def create_admin_app(origin, call):
             "commands": "command",
             "lookup": "lookup",
             "source-status": "source_status",
+            "operation": "operation",
+            "resume": "resume",
+            "cancel": "cancel",
         }
         if action not in methods or request.headers.get("content-type") != "application/json":
             return admin_problem(400, "admin_request_invalid")
@@ -166,6 +179,7 @@ def create_admin_app(origin, call):
                 "command",
                 "operation_id",
                 "instance",
+                "expected_revision",
             }:
                 raise ValueError()
         except ValueError:
@@ -182,7 +196,10 @@ def create_admin_app(origin, call):
                 }
             )
             result = await run_in_threadpool(call, envelope.model_dump())
-            response = JSONResponse({key: value for key, value in result.items() if key != "token"})
+            response = JSONResponse(
+                {key: value for key, value in result.items() if key != "token"},
+                status_code=202 if envelope.method in {"resume", "cancel"} else 200,
+            )
             if envelope.method == "login":
                 response.set_cookie(
                     COOKIE,

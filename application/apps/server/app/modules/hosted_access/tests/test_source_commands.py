@@ -269,6 +269,8 @@ def test_lost_control_result_replays_actual_source_receipt_without_second_mutati
 
     store, commands = source
     authority = AuthorityStore.initialize(tmp_path / "control" / "authority.sqlite", "owner")
+    clock = [authority.clock()]
+    authority.clock = lambda: clock[0]
     credentials = authority.login(authority.issue())
     request = BrokerRequest(
         method="command",
@@ -303,6 +305,8 @@ def test_lost_control_result_replays_actual_source_receipt_without_second_mutati
     assert commands.status()["generation"] == 1
     with authority.transaction() as connection:
         connection.execute("DROP TRIGGER lost_control_result")
+    # The abandoned worker claim must expire before its original effect is reconciled.
+    clock[0] += 61
     assert authority.execute(authority.admit(request), dispatch)["generation"] == 1
     assert commands.status()["generation"] == 1
 

@@ -247,3 +247,68 @@ def test_source_timeout_kills_its_group_before_locks_can_be_released(monkeypatch
     assert popen.call_args.kwargs["start_new_session"] is True
     kill.assert_called_once_with(54321, signal.SIGKILL)
     assert process.communicate.call_count == 2
+
+
+@pytest.mark.parametrize("active", [False, True])
+def test_fenced_source_containment_uses_exact_registered_target_and_owning_disable(
+    runner, monkeypatch, active
+):
+    source, _, _ = runner
+    cmd = command()
+    payload = cmd.model_dump() | {
+        "source_reference": source.prepare("c"),
+        "authority_reference": "owner:1",
+    }
+    status = {
+        "admin_revision": 2,
+        "binding_revision": 1,
+        "admin_fence": 3,
+        "generation": 4,
+        "active": active,
+        "binding_matches_configuration": True,
+        "enrollments": [],
+    }
+    read_end, write_end = os.pipe()
+    monkeypatch.setattr(admin_console, "lock_host", lambda _: read_end)
+
+    def transport(_instance, request):
+        if request.get("query") == "status":
+            return status
+        assert request["action"] == "disable"
+        assert request["expected_revision"] == 2
+        assert request["expected_binding_revision"] == 1
+        assert request["fence"] == 3
+        assert request["operation_id"] != cmd.operation_id
+        return {
+            "operation_id": request["operation_id"],
+            "action": "disable",
+            "revision": 3,
+            "binding_revision": 1,
+            "fence": 4,
+            "generation": 5,
+            "active": False,
+        }
+
+    source._transport = Mock(side_effect=transport)
+    try:
+        assert source.contain(payload)
+        assert source._transport.call_count == 1 + int(active)
+    finally:
+        os.close(write_end)
+
+
+def test_source_reconciliation_never_reads_another_operator_allocation(runner, monkeypatch):
+    source, inventory, _ = runner
+    payload = command().model_dump() | {
+        "source_reference": source.prepare("c"),
+        "authority_reference": "owner:1",
+    }
+    inventory.get.return_value = replace(inventory.get.return_value, operator_id="wrong-operator")
+    source._transport = Mock(side_effect=AssertionError("Wrong source must not be queried"))
+    read_end, write_end = os.pipe()
+    monkeypatch.setattr(admin_console, "lock_host", lambda _: read_end)
+    try:
+        with pytest.raises(AdminError, match="binding_changed"):
+            source.reconcile(payload)
+    finally:
+        os.close(write_end)

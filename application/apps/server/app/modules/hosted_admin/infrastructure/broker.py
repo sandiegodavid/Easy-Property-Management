@@ -59,7 +59,8 @@ def rpc(path, payload):
 
 
 class Broker:
-    def __init__(self, authority, admin_uid, dispatch, peer=peer_uid):
+    def __init__(self, authority, admin_uid, dispatch, peer=peer_uid, operations=None):
+        self.operations = operations
         if admin_uid == 0:
             raise AdminError("admin_http_must_be_unprivileged", 503)
         self.authority, self.admin_uid, self.dispatch, self.peer = (
@@ -91,6 +92,14 @@ class Broker:
             send(connection, {"error": "admin_operation_unavailable", "status": 503})
 
     def _private(self, payload):
+        if (
+            isinstance(payload, dict)
+            and set(payload) == {"method", "request"}
+            and payload["method"] == "private_operations"
+        ):
+            if self.operations is None:
+                raise AdminError("admin_operation_service_unavailable", 503)
+            return self.operations.handle(payload["request"])
         if payload == {"method": "bootstrap"}:
             return {"credential": self.authority.issue()}
         if payload == {"method": "revoke_identity"}:

@@ -99,3 +99,11 @@ The browser server creates a disposable authority store and uses synthetic adapt
 Repository validation on October 28, 2026: **386 focused Python tests passed, 1 infrastructure test skipped; all 3 private Admin Playwright tests passed**. The skip requires an explicitly provisioned disposable Linux quota volume. Changed-file Ruff check/format, Python 3.12 syntax checks, launcher shell syntax, frontend lint/format/typecheck and diff whitespace checks passed. No full application suite or live installation/qualification was run.
 
 The Slice 2 HTTP problem-contract follow-up on October 28, 2026 passed **55 focused Admin Python tests**, including endpoint validation and safe error-envelope regressions, plus changed-file Ruff check/format. It did not change browser assets or deployment configuration.
+
+## Durable operation continuation
+
+Slice 3 routes admitted source commands through the checkpointed operation engine.
+See [Durable private Admin operations](HOSTED_ADMIN_OPERATIONS.md) for current
+status/resume/cancel contracts, private qualification commands, fresh authorization,
+worker claims, exact receipt reconciliation and credential-free restore fencing.
+These repository changes do not install or qualify the live authority or host.
