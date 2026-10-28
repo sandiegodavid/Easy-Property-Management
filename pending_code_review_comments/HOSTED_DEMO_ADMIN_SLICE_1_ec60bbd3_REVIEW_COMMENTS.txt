@@ -1,0 +1,31 @@
+Review: ec60bbd373a152b935b8452128e92227b816ffac
+Scope: HOSTED_DEMO_ADMIN_DESIGN.md, Slice 1 only
+Review date: 2026-10-27
+
+SPECIFICATION — recovery tooling
+
+1. [P2] Initialize the selected release before reading the backup origin.
+Status: still open
+File: application/scripts/epm-release-vm.sh:784-785
+Related: application/scripts/epm-release-vm.sh:262-264; application/scripts/tests/test_release_wizards.py:514
+
+backup_instance calls read_origin before assigning next from previous_python. The real read_origin builds its interpreter from "$next/venv/bin/python", while main has only declared next. A fresh backup invocation therefore attempts /venv/bin/python (or fails on an unset variable depending on shell behavior) and exits before making a recovery point. Slice 1's registered-instance backup path cannot run. The passing backup tests mask this by replacing read_origin with a no-op.
+
+Suggestion: assign next from previous_python before read_origin. Add a focused shell regression using the real read_origin and a stubbed sudo boundary that asserts the selected installed interpreter. Reproduction with sourced wizard functions and mocked external commands captured /venv/bin/python; no host mutation was performed.
+
+SPECIFICATION — maintenance identity and reconciliation
+
+2. [P1] Bind maintenance to the original instance and release before allowing resume.
+Status: still open
+File: application/scripts/host_inventory.py:353-370
+Related: application/scripts/host_admin.py:829-855; application/scripts/epm-release-vm.sh:199-219
+
+The maintenance record freezes kind/action but not target instance/allocation, selected release, or source checkpoint. Resume checks only the operation ID and permitted action, then the wizard asks for the instance/release again. Reconciliation subsequently accepts permitted field changes across every registered instance. After an interrupted deployment/reset of A, the administrator can select B under the same maintenance ID and have B's changes accepted as that operation's result. This violates the design's unchanged-intent resume and operation-owned effects requirements; the host lock prevents simultaneous execution but does not prevent wrong-target execution.
+
+Suggestion: persist the reviewed instance/allocation, intended release and source checkpoint/revisions before the first mutation; reload those exact selections on resume and reject changed targets. Reconcile only changes owned by that operation, with explicit host-wide scope for actions that legitimately need it. Add an A/B regression proving that an A operation cannot resume against or reconcile changes to B. An isolated inventory reproduction confirmed same-ID resume with a different observation digest and reconciliation of B's release replacement. This is an operator error-safety defect, not a claim of protection against malicious root.
+
+STANDARDS
+
+No additional actionable documented-standard findings established.
+
+Validation: focused Slice 1 suite passed, 169 tests. Reviewed exact parent-to-commit diff; no live VM, Cloudflare, browser or deployment validation performed. Existing tests do not cover the two cases above. No implementation changes made.
