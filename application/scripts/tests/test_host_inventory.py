@@ -12,6 +12,7 @@ from scripts.host_inventory import (
     HostInventory,
     Instance,
     InventoryError,
+    MaintenanceRequest,
     discrepancies,
     new_identity,
 )
@@ -155,7 +156,12 @@ def test_reconciliation_conflict_rolls_back_all_rows_and_keeps_operation_pending
     first, second = instance("a"), instance("c")
     inventory.register(first)
     inventory.register(second)
-    identifier = inventory.begin_maintenance("release", "deploy", "a" * 64)
+    identifier = inventory.begin_maintenance(
+        "reconciliation",
+        "breakglass",
+        "a" * 64,
+        request=MaintenanceRequest(incident="test-atomic-update"),
+    )
     inventory.finish_maintenance(identifier, 0)
     updated_first = replace(first, config_digest="c" * 64, revision=2)
     stale_second = replace(second, revision=2)
@@ -170,9 +176,17 @@ def test_reconciliation_conflict_rolls_back_all_rows_and_keeps_operation_pending
 
 
 def test_resume_retains_operation_identity_and_clears_only_current_attempt_outcome(inventory):
-    identifier = inventory.begin_maintenance("release", "deploy", "a" * 64)
+    inventory.register(instance("a"))
+    identifier = inventory.begin_maintenance(
+        "release", "deploy", "a" * 64, MaintenanceRequest(key="a", release="release-20261027-01")
+    )
     inventory.finish_maintenance(identifier, 1)
-    assert inventory.begin_maintenance("release", "resume", "b" * 64, identifier) == identifier
+    assert (
+        inventory.begin_maintenance(
+            "release", "resume", "b" * 64, request=MaintenanceRequest(resume=identifier)
+        )
+        == identifier
+    )
     row = inventory.maintenance(identifier)
     assert row["state"] == "running"
     assert row["exit_code"] is None
@@ -180,7 +194,10 @@ def test_resume_retains_operation_identity_and_clears_only_current_attempt_outco
     with inventory.connection() as connection:
         events = [
             row[0]
-            for row in connection.execute("SELECT action FROM inventory_audit ORDER BY sequence")
+            for row in connection.execute(
+                "SELECT action FROM inventory_audit WHERE reference = ? ORDER BY sequence",
+                (identifier,),
+            )
         ]
     assert events == ["maintenance_started", "maintenance_observed_exit", "maintenance_resumed"]
 
@@ -207,3 +224,125 @@ def test_instance_cannot_claim_another_service_user(inventory):
     with pytest.raises(InventoryError, match="Invalid instance key or user"):
         inventory.register(replace(instance("c"), user="epm-a"))
     assert inventory.list() == []
+
+
+@pytest.mark.parametrize("changed", ["key", "release"])
+def test_resume_cannot_change_original_intent(inventory, changed):
+    for key in ("a", "b"):
+        inventory.register(instance(key))
+    identifier = inventory.begin_maintenance(
+        "release",
+        "deploy",
+        "a" * 64,
+        request=MaintenanceRequest(key="a", release="release-20261027-01"),
+    )
+    original = inventory.maintenance_intent(identifier)
+    inventory.finish_maintenance(identifier, 1)
+    arguments = {"key": "a", "release": "release-20261027-01"}
+    arguments[changed] = "b" if changed == "key" else "release-20261028-01"
+    with pytest.raises(InventoryError, match="original instance and release"):
+        inventory.begin_maintenance(
+            "release",
+            "resume",
+            "b" * 64,
+            request=MaintenanceRequest(resume=identifier, **arguments),
+        )
+    assert inventory.maintenance(identifier)["state"] == "needs_reconciliation"
+    assert inventory.maintenance_intent(identifier) == original
+    assert (
+        inventory.begin_maintenance(
+            "release", "resume", "b" * 64, request=MaintenanceRequest(resume=identifier)
+        )
+        == identifier
+    )
+    assert inventory.maintenance_intent(identifier) == original
+
+
+def test_targeted_reconciliation_cannot_accept_another_allocation(inventory):
+    first, second = instance("a"), instance("b")
+    inventory.register(first)
+    inventory.register(second)
+    identifier = inventory.begin_maintenance(
+        "release",
+        "deploy",
+        "a" * 64,
+        request=MaintenanceRequest(key="a", release="release-20261027-01"),
+    )
+    inventory.finish_maintenance(identifier, 0)
+    with pytest.raises(InventoryError, match="outside the maintenance target"):
+        inventory.reconcile(
+            identifier,
+            [
+                (first, replace(first, release="release-20261027-01", revision=2)),
+                (second, replace(second, release="release-20261027-01", revision=2)),
+            ],
+            "b" * 64,
+        )
+    assert inventory.list() == [first, second]
+    assert inventory.maintenance(identifier)["state"] == "needs_reconciliation"
+    inventory.reconcile(
+        identifier, [(first, replace(first, release="release-20261027-01", revision=2))], "b" * 64
+    )
+    assert inventory.get("b") == second
+
+
+def test_saved_intent_is_immutable_and_source_revisions_must_match(inventory):
+    item = instance("a")
+    inventory.register(item)
+    identifier = inventory.begin_maintenance(
+        "release",
+        "deploy",
+        "a" * 64,
+        request=MaintenanceRequest(key="a", release="release-20261027-01"),
+    )
+    intent = inventory.maintenance_intent(identifier)
+    assert intent["sources"]["a"]["allocation_id"] == item.allocation_id
+    assert intent["sources"]["a"]["revision"] == item.revision
+    assert identifier.replace("-", "") in intent["checkpoint"]
+    with pytest.raises(sqlite3.IntegrityError, match="immutable"):
+        with inventory.connection(writable=True) as connection:
+            connection.execute(
+                "UPDATE maintenance SET intent_json = '{}' WHERE id = ?", (identifier,)
+            )
+    inventory.finish_maintenance(identifier, 1)
+    with inventory.connection(writable=True) as connection:
+        connection.execute("UPDATE instances SET revision = revision + 1")
+    with pytest.raises(InventoryError, match="source revisions changed"):
+        inventory.begin_maintenance(
+            "release", "resume", "b" * 64, request=MaintenanceRequest(resume=identifier)
+        )
+    with pytest.raises(InventoryError, match="source revisions changed"):
+        inventory.reconcile(identifier, [], "b" * 64)
+
+
+@pytest.mark.parametrize(
+    "kind,action,selection",
+    [
+        ("release", "deploy", MaintenanceRequest()),
+        ("release", "install", MaintenanceRequest(release="release-20261027-01")),
+        ("cleanup", "cleanup", MaintenanceRequest()),
+    ],
+)
+def test_unbound_mutating_operations_fail_before_creating_a_journal(
+    inventory, kind, action, selection
+):
+    with pytest.raises(InventoryError, match="before maintenance"):
+        inventory.begin_maintenance(kind, action, "a" * 64, selection)
+    assert inventory.maintenance_history() == []
+
+
+@pytest.mark.parametrize("kind,action", [("release", "install"), ("cleanup", "cleanup")])
+def test_host_wide_release_work_cannot_reconcile_instance_changes(inventory, kind, action):
+    item = instance("a")
+    inventory.register(item)
+    identifier = inventory.begin_maintenance(
+        kind,
+        action,
+        "a" * 64,
+        MaintenanceRequest(key="a" if action == "install" else None, release="release-20261027-01"),
+    )
+    assert inventory.maintenance_intent(identifier)["scope"] == "host"
+    inventory.finish_maintenance(identifier, 0)
+    with pytest.raises(InventoryError, match="outside the maintenance target"):
+        inventory.reconcile(identifier, [(item, replace(item, revision=2))], "b" * 64)
+    assert inventory.get("a") == item

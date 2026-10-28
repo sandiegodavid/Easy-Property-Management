@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+import shutil
 import subprocess
 import sys
 from types import SimpleNamespace
@@ -253,11 +254,23 @@ def test_maintenance_preserves_failure_and_requires_explicit_reconciliation(host
         return subprocess.CompletedProcess(argv, failure_code)
 
     monkeypatch.setattr(admin.subprocess, "run", run)
-    identifier, code = admin.run_maintenance(store, discovery, "release", "deploy")
+    identifier, code = admin.run_maintenance(
+        store,
+        discovery,
+        "release",
+        "deploy",
+        request=admin.MaintenanceRequest(key="a", release="release-20261027-02"),
+    )
     assert code == failure_code
     assert store.maintenance(identifier)["state"] == "needs_reconciliation"
     with pytest.raises(InventoryError, match="Unfinished maintenance"):
-        admin.run_maintenance(store, discovery, "release", "deploy")
+        admin.run_maintenance(
+            store,
+            discovery,
+            "release",
+            "deploy",
+            request=admin.MaintenanceRequest(key="a", release="release-20261027-02"),
+        )
     admin.reconcile(store, discovery, identifier, discovery.report(store.list())["digest"])
     assert store.maintenance(identifier)["state"] == "reconciled"
 
@@ -266,7 +279,12 @@ def test_reconcile_rejects_stale_digest_and_retains_original_allocations(host):
     _, _, discovery, store = host
     add_instance(host, "a")
     item = admin.adopt(store, discovery, "a", discovery.observe("a")["digest"])
-    identifier = store.begin_maintenance("release", "deploy", "a" * 64)
+    identifier = store.begin_maintenance(
+        "release",
+        "deploy",
+        "a" * 64,
+        admin.MaintenanceRequest(key="a", release="release-20261027-01"),
+    )
     store.finish_maintenance(identifier, 0)
     with pytest.raises(InventoryError, match="incomplete or changed"):
         admin.reconcile(store, discovery, identifier, "b" * 64)
@@ -313,11 +331,22 @@ def test_unknown_unverifiable_instance_blocks_even_resumed_maintenance(host):
     paths, _, discovery, store = host
     add_instance(host, "a")
     admin.adopt(store, discovery, "a", discovery.observe("a")["digest"])
-    identifier = store.begin_maintenance("release", "deploy", "a" * 64)
+    identifier = store.begin_maintenance(
+        "release",
+        "deploy",
+        "a" * 64,
+        admin.MaintenanceRequest(key="a", release="release-20261027-01"),
+    )
     store.finish_maintenance(identifier, 1)
     write(paths.configs / "hosted-c.json", "unreadable configuration")
     with pytest.raises(InventoryError, match="discrepancies block"):
-        admin.run_maintenance(store, discovery, "release", "resume", identifier)
+        admin.run_maintenance(
+            store,
+            discovery,
+            "release",
+            "resume",
+            request=admin.MaintenanceRequest(resume=identifier),
+        )
 
 
 def test_completed_scan_cannot_ignore_a_missing_registered_baseline(host):
@@ -333,15 +362,27 @@ def test_abandoned_maintenance_can_be_reconciled_without_replaying_commands(host
     _, _, discovery, store = host
     add_instance(host, "a")
     admin.adopt(store, discovery, "a", discovery.observe("a")["digest"])
-    identifier = store.begin_maintenance("release", "deploy", "a" * 64)
+    identifier = store.begin_maintenance(
+        "release",
+        "deploy",
+        "a" * 64,
+        admin.MaintenanceRequest(key="a", release="release-20261027-01"),
+    )
     admin.reconcile(store, discovery, identifier, discovery.report(store.list())["digest"])
     assert store.maintenance(identifier)["state"] == "reconciled"
     assert store.maintenance(identifier)["exit_code"] == -1
 
 
 def test_old_operation_cannot_borrow_an_unrelated_host_lock(host):
-    _, _, _, store = host
-    identifier = store.begin_maintenance("release", "deploy", "a" * 64)
+    _, _, discovery, store = host
+    add_instance(host, "a")
+    admin.adopt(store, discovery, "a", discovery.observe("a")["digest"])
+    identifier = store.begin_maintenance(
+        "release",
+        "deploy",
+        "a" * 64,
+        admin.MaintenanceRequest(key="a", release="release-20261027-01"),
+    )
     descriptor = admin.lock_host(store)
     try:
         with pytest.raises(InventoryError, match="different operation"):
@@ -368,7 +409,13 @@ def test_child_keeps_the_host_lock_and_does_not_receive_arbitrary_environment(ho
         return subprocess.CompletedProcess(argv, 0)
 
     monkeypatch.setattr(admin.subprocess, "run", run)
-    admin.run_maintenance(store, discovery, "release", "deploy")
+    admin.run_maintenance(
+        store,
+        discovery,
+        "release",
+        "deploy",
+        request=admin.MaintenanceRequest(key="a", release="release-20261027-02"),
+    )
 
 
 def test_journal_failure_does_not_replace_the_original_execution_failure(host, monkeypatch):
@@ -387,7 +434,13 @@ def test_journal_failure_does_not_replace_the_original_execution_failure(host, m
     monkeypatch.setattr(admin.subprocess, "run", execution_failed)
     monkeypatch.setattr(store, "finish_maintenance", journal_failed)
     with pytest.raises(RuntimeError, match="original execution failure") as caught:
-        admin.run_maintenance(store, discovery, "release", "deploy")
+        admin.run_maintenance(
+            store,
+            discovery,
+            "release",
+            "deploy",
+            request=admin.MaintenanceRequest(key="a", release="release-20261027-02"),
+        )
     assert "needs journal reconciliation" in caught.value.__notes__[0]
 
 
@@ -408,7 +461,9 @@ def test_backup_staging_is_derived_from_registered_allocation_and_idempotent(hos
     admin.adopt(store, discovery, "c", discovery.observe("c")["digest"])
     descriptor = admin.lock_host(store)
     try:
-        identifier = store.begin_maintenance("release", "backup", "a" * 64)
+        identifier = store.begin_maintenance(
+            "release", "backup", "a" * 64, request=admin.MaintenanceRequest(key="c")
+        )
         admin.mark_lock(descriptor, identifier)
         args = SimpleNamespace(key="c", maintenance_id=identifier)
         admin.prepare_backup(args, store, paths)
@@ -471,7 +526,13 @@ def test_root_tooling_changes_require_explicit_incident_reconciliation(host):
     original = admin.adopt(store, discovery, "a", discovery.observe("a")["digest"])
     write(paths.tools / "epm-release-vm.sh", "#!/bin/bash\n# reviewed private tooling update\n")
     with pytest.raises(InventoryError, match="discrepancies block"):
-        admin.run_maintenance(store, discovery, "release", "deploy")
+        admin.run_maintenance(
+            store,
+            discovery,
+            "release",
+            "deploy",
+            request=admin.MaintenanceRequest(key="a", release="release-20261027-02"),
+        )
     report = discovery.report(store.list())
     args = SimpleNamespace(incident="private-tooling-update", observed_digest=report["digest"])
     admin.record_breakglass(args, store, discovery)
@@ -481,3 +542,141 @@ def test_root_tooling_changes_require_explicit_incident_reconciliation(host):
     assert current.revision == original.revision + 1
     assert store.maintenance_history()[0]["incident_reference"] == args.incident
     assert admin.protected_releases(store) == [original.release]
+
+
+@pytest.mark.parametrize("phase", ["resume", "reconcile"])
+@pytest.mark.parametrize("change", ["release", "configuration"])
+def test_a_operation_rejects_changed_b_before_execution_or_reconciliation(
+    host, monkeypatch, phase, change
+):
+    paths, commands, discovery, store = host
+    for key, port in (("a", 8001), ("b", 8002)):
+        add_instance(host, key, port)
+        admin.adopt(store, discovery, key, discovery.observe(key)["digest"])
+    identifier = store.begin_maintenance(
+        "release",
+        "deploy",
+        discovery.report(store.list())["digest"],
+        request=admin.MaintenanceRequest(key="a", release="release-20261028-01"),
+    )
+    store.finish_maintenance(identifier, 1)
+    if change == "release":
+        shutil.copytree(
+            paths.releases / "release-20261027-01", paths.releases / "release-20261028-01"
+        )
+        commands["b"] = commands["b"].replace("release-20261027-01", "release-20261028-01")
+    else:
+        deployment = paths.configs / "hosted-b.json"
+        configuration = json.loads(deployment.read_text())
+        configuration["administrator_contact"] = "different-admin@example.com"
+        write(deployment, configuration)
+    monkeypatch.setenv("SUDO_USER", "administrator")
+    with pytest.raises(InventoryError, match="outside the maintenance target"):
+        if phase == "resume":
+            admin.run_maintenance(
+                store,
+                discovery,
+                "release",
+                "resume",
+                request=admin.MaintenanceRequest(resume=identifier),
+            )
+        else:
+            admin.reconcile(store, discovery, identifier, discovery.report(store.list())["digest"])
+    assert store.maintenance(identifier)["state"] == "needs_reconciliation"
+    assert all(item.revision == 1 for item in store.list())
+
+
+def test_resumed_child_reloads_original_selections_and_checkpoint(host, monkeypatch):
+    _, _, discovery, store = host
+    add_instance(host, "a")
+    source = admin.adopt(store, discovery, "a", discovery.observe("a")["digest"])
+    identifier = store.begin_maintenance(
+        "release",
+        "deploy",
+        discovery.report(store.list())["digest"],
+        request=admin.MaintenanceRequest(key="a", release="release-20261028-01"),
+    )
+    store.finish_maintenance(identifier, 1)
+    intent = store.maintenance_intent(identifier)
+    monkeypatch.setenv("SUDO_USER", "administrator")
+    monkeypatch.setenv("EPM_INSTANCE", "b")
+    monkeypatch.setenv("EPM_RELEASE", "release-20261029-01")
+    monkeypatch.setenv("EPM_DEPLOY_RECORD", "/different/checkpoint")
+
+    def run(argv, **kwargs):
+        environment = kwargs["env"]
+        assert environment["EPM_INSTANCE"] == source.key
+        assert environment["EPM_RELEASE"] == intent["release"]
+        assert environment["EPM_DEPLOY_RECORD"] == intent["checkpoint"]
+        with pytest.raises(InventoryError, match="original maintenance target"):
+            admin.select_command(
+                SimpleNamespace(maintenance_id=identifier, key="b", format="json"),
+                store,
+                discovery.paths,
+            )
+        with pytest.raises(InventoryError, match="original maintenance intent"):
+            admin.assert_intent(
+                SimpleNamespace(maintenance_id=identifier, checkpoint="/different/checkpoint"),
+                store,
+            )
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(admin.subprocess, "run", run)
+    assert admin.run_maintenance(
+        store, discovery, "release", "resume", request=admin.MaintenanceRequest(resume=identifier)
+    ) == (
+        identifier,
+        0,
+    )
+    assert store.maintenance_intent(identifier) == intent
+
+
+def test_reconciliation_accepts_only_intended_target_release_and_keeps_b(host):
+    paths, commands, discovery, store = host
+    for key, port in (("a", 8001), ("b", 8002)):
+        add_instance(host, key, port)
+        admin.adopt(store, discovery, key, discovery.observe(key)["digest"])
+    original_b = store.get("b")
+    identifier = store.begin_maintenance(
+        "release",
+        "deploy",
+        discovery.report(store.list())["digest"],
+        request=admin.MaintenanceRequest(key="a", release="release-20261028-01"),
+    )
+    store.finish_maintenance(identifier, 0)
+    shutil.copytree(paths.releases / "release-20261027-01", paths.releases / "release-20261028-01")
+    commands["a"] = commands["a"].replace("release-20261027-01", "release-20261028-01")
+    admin.reconcile(store, discovery, identifier, discovery.report(store.list())["digest"])
+    assert store.get("a").release == "release-20261028-01"
+    assert store.get("a").revision == original_b.revision + 1
+    assert store.get("b") == original_b
+    assert store.maintenance(identifier)["state"] == "reconciled"
+
+
+def test_maintenance_cli_forwards_the_reviewed_selection(host, monkeypatch):
+    _, _, discovery, store = host
+    arguments = admin.argument_parser().parse_args(
+        [
+            "maintenance",
+            "--kind",
+            "release",
+            "--action",
+            "deploy",
+            "--key",
+            "a",
+            "--release",
+            "release-20261028-01",
+        ]
+    )
+
+    def run(actual_store, actual_discovery, kind, action, request):
+        assert actual_store is store
+        assert actual_discovery is discovery
+        assert (kind, action) == ("release", "deploy")
+        assert request == admin.MaintenanceRequest(key="a", release="release-20261028-01")
+        return "original-maintenance", 0
+
+    monkeypatch.setattr(admin, "run_maintenance", run)
+    with pytest.raises(SystemExit) as caught:
+        admin.maintenance_command(arguments, store, discovery)
+    assert caught.value.code == 0

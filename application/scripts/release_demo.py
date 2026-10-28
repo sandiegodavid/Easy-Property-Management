@@ -564,20 +564,48 @@ def main():
         storage(args)
         return
     require(os.geteuid() == 0, "Reset checkpoints/configuration operations require root.")
+    identifier = os.environ.get("EPM_HOST_MAINTENANCE_ID", "")
+    require(identifier, "Reset operations require the original maintenance ID.")
     if args.action == "plan":
         require(
             INSTANCE_KEY.fullmatch(args.instance)
             and re.fullmatch(r"release-\d{8}-\d{2,}", args.release),
             "Invalid release or instance.",
         )
+        check_maintenance_intent(identifier, args.instance, args.release, args.record)
         prepare_plan(args)
         return
     plan = load_plan(args.record)
+    check_maintenance_intent(identifier, plan["instance"], plan["release"], args.record)
     require(
         registered_instance(plan["instance"])["allocation_id"] == plan["allocation_id"],
         "Reset allocation changed.",
     )
     dispatch_record(args, plan)
+
+
+def check_maintenance_intent(identifier, instance, release, record):
+    subprocess.run(
+        [
+            "/usr/bin/python3",
+            "-I",
+            "/opt/epm/admin/host_admin.py",
+            "assert-maintenance",
+            "--maintenance-id",
+            identifier,
+            "--key",
+            instance,
+            "--release",
+            release,
+            "--checkpoint",
+            str(record),
+            "--kind",
+            "release",
+            "--action",
+            "reset-demo",
+        ],
+        check=True,
+    )
 
 
 def dispatch_record(args, plan):

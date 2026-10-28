@@ -31,6 +31,7 @@ if __package__:
         Instance,
         InventoryError,
         MaintenanceBusy,
+        MaintenanceRequest,
         digest_json,
         new_identity,
     )
@@ -52,6 +53,7 @@ else:
         Instance,
         InventoryError,
         MaintenanceBusy,
+        MaintenanceRequest,
         digest_json,
         new_identity,
     )
@@ -747,7 +749,9 @@ def require_maintenance(store, identifier):
         raise InventoryError("Maintenance holder is no longer running; explicitly resume it.")
 
 
-def run_maintenance(store, discovery, kind, action, resume=None):
+def run_maintenance(store, discovery, kind, action, request=None):
+    request = request or MaintenanceRequest()
+    key, release, resume = request.key, request.release, request.resume
     if kind not in {"release", "cleanup"}:
         raise InventoryError("Unsupported executable maintenance kind.")
     descriptor = lock_host(store)
@@ -770,7 +774,19 @@ def run_maintenance(store, discovery, kind, action, resume=None):
         account = pwd.getpwnam(login)
         if account.pw_uid == 0 or login.startswith("epm-"):
             raise InventoryError("Run private maintenance from the administrator login account.")
-        identifier = store.begin_maintenance(kind, action, report["digest"], resume)
+        if resume:
+            operation = store.maintenance(resume)
+            intent = store.maintenance_intent(resume)
+            check_intent_observation(intent, report, operation["kind"], operation["action"])
+        elif (kind == "release" and not key) or (action != "backup" and not release):
+            raise InventoryError("Select the instance and intended release before maintenance.")
+        identifier = store.begin_maintenance(
+            kind,
+            action,
+            report["digest"],
+            request=MaintenanceRequest(resume=resume, key=key, release=release),
+        )
+        intent = store.maintenance_intent(identifier)
         mark_lock(descriptor, identifier)
         environment = {
             "PATH": "/usr/sbin:/usr/bin:/sbin:/bin",
@@ -778,6 +794,9 @@ def run_maintenance(store, discovery, kind, action, resume=None):
             "LANG": os.environ.get("LANG", "C.UTF-8"),
             "EPM_HOST_MAINTENANCE_ID": identifier,
             "EPM_ACTION": action,
+            "EPM_INSTANCE": intent["key"] or "",
+            "EPM_RELEASE": intent["release"] or "",
+            "EPM_DEPLOY_RECORD": intent["checkpoint"] or "",
         }
         print(
             f"Maintenance {identifier} started; keep this ID for explicit resume/reconciliation.",
@@ -822,6 +841,9 @@ def reconcile(store, discovery, identifier, expected_digest):
                 "Observed inventory is incomplete or changed; review discovery again."
             )
         operation = store.maintenance(identifier)
+        check_intent_observation(
+            store.maintenance_intent(identifier), report, operation["kind"], operation["action"]
+        )
         if operation["state"] == "running":
             # We hold the exclusive lock, so no admitted wizard remains alive.
             # Reconciliation observes a crashed holder; it does not rerun it.
@@ -857,6 +879,32 @@ def reconcile(store, discovery, identifier, expected_digest):
         os.close(descriptor)
 
 
+def check_intent_observation(intent, report, kind, action):
+    """Keep unrelated sources unchanged, even when a target cutover is incomplete."""
+    if set(report["observed"]) != set(intent["sources"]):
+        raise InventoryError("Observed inventory differs from the maintenance sources.")
+    for key, source in intent["sources"].items():
+        observed = report["observed"][key]["fields"]
+        if kind == "reconciliation":
+            continue
+        if intent["scope"] == "instance" and key == intent["key"]:
+            allowed = {"release", "config_digest", "profile", "template"}
+            if action == "backup":
+                allowed = {"template"}
+            if action == "reset-demo":
+                allowed |= {"workspace_id", "workspace", "access_database"}
+            if any(
+                value != source[field] for field, value in observed.items() if field not in allowed
+            ):
+                raise InventoryError(
+                    "Observed allocation or authority differs from maintenance intent."
+                )
+            if observed["release"] not in {source["release"], intent["release"]}:
+                raise InventoryError("Observed release differs from maintenance intent.")
+        elif observed["config_digest"] != source["config_digest"]:
+            raise InventoryError("Changes are outside the maintenance target.")
+
+
 def private_directory(path, paths, identity):
     """Create a fixed derived directory without following a substituted target."""
     protected(path.parent, paths, identity.pw_uid, regular=False)
@@ -882,6 +930,7 @@ def prepare_backup(args, store, paths):
     operation = require_maintenance(store, args.maintenance_id)
     if operation["kind"] != "release" or operation["action"] != "backup":
         raise InventoryError("Backup staging requires its admitted maintenance action.")
+    require_target(store, args.maintenance_id, args.key)
     item = store.get(args.key)
     identity = pwd.getpwnam(item.user)
     directory = paths.backups / item.user
@@ -907,7 +956,10 @@ def record_breakglass(args, store, discovery):
                 "Break-glass observation is incomplete or changed; review discovery again."
             )
         identifier = store.begin_maintenance(
-            "reconciliation", "breakglass", report["digest"], incident=args.incident
+            "reconciliation",
+            "breakglass",
+            report["digest"],
+            request=MaintenanceRequest(incident=args.incident),
         )
         store.finish_maintenance(identifier, -1)
     finally:
@@ -939,8 +991,15 @@ def argument_parser():
     maintenance.add_argument("--kind", choices=("release", "cleanup"), required=True)
     maintenance.add_argument("--action", required=True)
     maintenance.add_argument("--resume")
+    maintenance.add_argument("--key")
+    maintenance.add_argument("--release")
     check = commands.add_parser("assert-maintenance")
     check.add_argument("--maintenance-id", required=True)
+    check.add_argument("--key")
+    check.add_argument("--release")
+    check.add_argument("--checkpoint")
+    check.add_argument("--kind")
+    check.add_argument("--action")
     allocations = commands.add_parser("allocations")
     allocations.add_argument("--maintenance-id", required=True)
     backup = commands.add_parser("prepare-backup")
@@ -974,7 +1033,7 @@ def main():
         ),
         "adopt": lambda: adopt_command(args, store, discovery),
         "maintenance": lambda: maintenance_command(args, store, discovery),
-        "assert-maintenance": lambda: require_maintenance(store, args.maintenance_id),
+        "assert-maintenance": lambda: assert_intent(args, store),
         "allocations": lambda: allocations_command(args, store),
         "select": lambda: select_command(args, store, paths),
         "reconcile": lambda: reconcile(store, discovery, args.maintenance_id, args.observed_digest),
@@ -1003,7 +1062,13 @@ def adopt_command(args, store, discovery):
 
 
 def maintenance_command(args, store, discovery):
-    identifier, code = run_maintenance(store, discovery, args.kind, args.action, args.resume)
+    identifier, code = run_maintenance(
+        store,
+        discovery,
+        args.kind,
+        args.action,
+        MaintenanceRequest(key=args.key, release=args.release, resume=args.resume),
+    )
     print(f"Maintenance {identifier}: exit {code}; explicit discovery/reconciliation is required.")
     raise SystemExit(code)
 
@@ -1015,6 +1080,7 @@ def allocations_command(args, store):
 
 def select_command(args, store, paths):
     require_maintenance(store, args.maintenance_id)
+    require_target(store, args.maintenance_id, args.key)
     item = store.get(args.key)
     if args.format == "tsv":
         print(
@@ -1030,6 +1096,24 @@ def select_command(args, store, paths):
         )
     else:
         print(json.dumps(asdict(item), sort_keys=True))
+
+
+def require_target(store, identifier, key):
+    if store.maintenance_intent(identifier)["key"] != key:
+        raise InventoryError("Instance differs from the original maintenance target.")
+
+
+def assert_intent(args, store):
+    operation = require_maintenance(store, args.maintenance_id)
+    intent = store.maintenance_intent(args.maintenance_id)
+    for argument, field in (("key", "key"), ("release", "release"), ("checkpoint", "checkpoint")):
+        supplied = getattr(args, argument, None)
+        if supplied is not None and supplied != intent[field]:
+            raise InventoryError("Selection differs from the original maintenance intent.")
+    for field in ("kind", "action"):
+        supplied = getattr(args, field, None)
+        if supplied is not None and supplied != operation[field]:
+            raise InventoryError("Command differs from the admitted maintenance action.")
 
 
 def checked_export(args, store, discovery):

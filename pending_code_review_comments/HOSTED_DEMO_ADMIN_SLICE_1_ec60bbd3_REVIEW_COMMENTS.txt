@@ -13,10 +13,18 @@ backup_instance calls read_origin before assigning next from previous_python. Th
 
 Suggestion: assign next from previous_python before read_origin. Add a focused shell regression using the real read_origin and a stubbed sudo boundary that asserts the selected installed interpreter. Reproduction with sourced wizard functions and mocked external commands captured /venv/bin/python; no host mutation was performed.
 
+STANDARDS
+
+No additional actionable documented-standard findings established.
+
+Validation: focused Slice 1 suite passed, 169 tests. Reviewed exact parent-to-commit diff; no live VM, Cloudflare, browser or deployment validation performed. Existing tests do not cover the two cases above. No implementation changes made.
+
+RESOLVED FINDINGS
+
 SPECIFICATION — maintenance identity and reconciliation
 
 2. [P1] Bind maintenance to the original instance and release before allowing resume.
-Status: still open
+Status: resolved (2026-10-28)
 File: application/scripts/host_inventory.py:353-370
 Related: application/scripts/host_admin.py:829-855; application/scripts/epm-release-vm.sh:199-219
 
@@ -24,8 +32,6 @@ The maintenance record freezes kind/action but not target instance/allocation, s
 
 Suggestion: persist the reviewed instance/allocation, intended release and source checkpoint/revisions before the first mutation; reload those exact selections on resume and reject changed targets. Reconcile only changes owned by that operation, with explicit host-wide scope for actions that legitimately need it. Add an A/B regression proving that an A operation cannot resume against or reconcile changes to B. An isolated inventory reproduction confirmed same-ID resume with a different observation digest and reconciliation of B's release replacement. This is an operator error-safety defect, not a claim of protection against malicious root.
 
-STANDARDS
+Resolution: maintenance admission now persists immutable target/allocation, intended release, operation-derived checkpoint and source inventory snapshots before launching the wizard. Resume reloads those selections; alternate targets, releases and checkpoints fail. Reconciliation is restricted to operation-owned target changes and unchanged unrelated sources. Install/cleanup use explicit host-wide scope without accepting instance changes; root interventions retain their separate recorded reconciliation path.
 
-No additional actionable documented-standard findings established.
-
-Validation: focused Slice 1 suite passed, 169 tests. Reviewed exact parent-to-commit diff; no live VM, Cloudflare, browser or deployment validation performed. Existing tests do not cover the two cases above. No implementation changes made.
+Validation (2026-10-28): 183 focused inventory, Admin helper, release-wizard, cleanup and reset tests passed. Ruff check, Ruff format --check, shell syntax and diff whitespace checks passed. No live host operations performed.

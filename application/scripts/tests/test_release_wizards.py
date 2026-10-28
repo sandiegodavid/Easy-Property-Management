@@ -55,7 +55,7 @@ def test_invalid_release_identifier(value):
 @pytest.mark.parametrize("instance,port", [("a", 8001), ("b", 8002), ("c", 8012)])
 def test_instance_selection_generates_matching_paths(instance, port):
     result = shell(
-        f'ask() {{ printf -v "$1" %s {instance}; }}\n'
+        f'EPM_INSTANCE={instance}\nask() {{ die "must use retained target"; }}\n'
         "EPM_HOST_MAINTENANCE_ID=test-maintenance\n"
         'inventory_tool() { if [[ "$1" == keys ]]; then return; fi; '
         'printf "%s\\t%s\\t%s\\t%s\\t%s\\n" '
@@ -507,6 +507,8 @@ def test_unsupported_recovery_runtime_is_rejected_before_fencing_or_stopping():
 def recovery_backup_shell(*, existing=False, failure="", supported=True):
     return shell(
         "EPM_HOST_MAINTENANCE_ID=operation-id\n"
+        "EPM_DEPLOY_RECORD=/opt/epm/releases/release-20261027-01/wizard-state/c."
+        "0123456789abcdef0123456789abcdef\n"
         "select_instance() { instance=c; account=epm-c; unit=epm-hosted@c.service; "
         "deployment=/etc/epm/hosted-c.json; local_config=/var/lib/epm-c/hosted-local.json; }\n"
         "current_python() { "
@@ -530,3 +532,18 @@ def recovery_backup_shell(*, existing=False, failure="", supported=True):
         "readiness() { :; }\nactivate_operator() { echo activated; }\n"
         "browser_acceptance() { echo accepted; }\nbackup_instance"
     )
+
+
+def test_resume_selectors_reuse_saved_release_and_checkpoint_without_prompting():
+    checkpoint = "/opt/epm/releases/release-20261027-01/wizard-state/c." + "a" * 32
+    result = shell(
+        "EPM_HOST_MAINTENANCE_ID=original-operation\n"
+        "EPM_RELEASE=release-20261027-01\ninstance=c\n"
+        f"EPM_DEPLOY_RECORD={checkpoint}\n"
+        'ask() { die "must not ask for a different selection"; }\n'
+        'sudo() { die "must not search for another checkpoint"; }\n'
+        "write_env() { :; }\nselect_release\nselect_record\n"
+        'printf "%s\\n" "$next" "$record"'
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == ["/opt/epm/releases/release-20261027-01", checkpoint]

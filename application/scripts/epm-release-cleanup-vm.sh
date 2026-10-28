@@ -205,11 +205,16 @@ main() {
   sudo -v
   if [[ -z "${EPM_HOST_MAINTENANCE_ID:-}" ]]; then
     local resume_args=()
-    if [[ -n "${EPM_RESUME_MAINTENANCE:-}" ]]; then resume_args=(--resume "$EPM_RESUME_MAINTENANCE"); fi
+    if [[ -n "${EPM_RESUME_MAINTENANCE:-}" ]]; then
+      resume_args=(--resume "$EPM_RESUME_MAINTENANCE")
+    else
+      ask EPM_REMOVE "Exact installed release directory name to remove (Ctrl-C cancels):"
+      resume_args=(--release "$EPM_REMOVE")
+    fi
     inventory_tool maintenance --kind cleanup --action cleanup "${resume_args[@]}"
     return
   fi
-  inventory_tool assert-maintenance --maintenance-id "$EPM_HOST_MAINTENANCE_ID"
+  inventory_tool assert-maintenance --maintenance-id "$EPM_HOST_MAINTENANCE_ID" --release "$EPM_RELEASE"
   trap 'die "Cleanup interrupted or failed. Inspect the selected release; removal may be partial. No services or workspace data were changed."' ERR
   banner "EPM · VM installed-release cleanup"
 
@@ -231,8 +236,7 @@ main() {
   cleanup_tool inspect
   say "KEEP entries cannot be removed here. Checkpoints and their referenced releases stay protected even after acceptance."
   say "Jobs outside the standard systemd/cron/EPM configuration paths require your own review."
-  ask EPM_REMOVE "Exact installed release directory name to remove (Ctrl-C cancels):"
-  release="$EPM_REMOVE"
+  release="$EPM_RELEASE"
   cleanup_tool check --release "$release"
   sudo du -sh -- "/opt/epm/releases/$release"
 

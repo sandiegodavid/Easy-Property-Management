@@ -76,6 +76,14 @@ def valid_hostname(value):
 
 
 @dataclass(frozen=True)
+class MaintenanceRequest:
+    key: str | None = None
+    release: str | None = None
+    resume: str | None = None
+    incident: str | None = None
+
+
+@dataclass(frozen=True)
 class Instance:
     key: str
     instance_id: str
@@ -182,7 +190,7 @@ CREATE TABLE maintenance (
   state TEXT NOT NULL CHECK (state IN ('running', 'needs_reconciliation', 'reconciled')),
   started_at TEXT NOT NULL, finished_at TEXT, exit_code INTEGER,
   before_digest TEXT NOT NULL, after_digest TEXT,
-  incident_reference TEXT,
+  incident_reference TEXT, intent_json TEXT NOT NULL,
   CHECK (
     (state = 'running' AND finished_at IS NULL AND exit_code IS NULL AND after_digest IS NULL)
     OR (state = 'needs_reconciliation' AND finished_at IS NOT NULL AND exit_code IS NOT NULL
@@ -191,6 +199,9 @@ CREATE TABLE maintenance (
         AND after_digest IS NOT NULL)
   )
 ) STRICT;
+CREATE TRIGGER maintenance_intent_immutable
+BEFORE UPDATE OF kind, action, before_digest, intent_json ON maintenance
+BEGIN SELECT RAISE(ABORT, 'Maintenance intent is immutable'); END;
 CREATE UNIQUE INDEX one_unfinished_maintenance ON maintenance ((1))
   WHERE state != 'reconciled';
 CREATE TABLE inventory_audit (
@@ -340,7 +351,14 @@ class HostInventory:
             (action, reference, digest, datetime.now(UTC).isoformat()),
         )
 
-    def begin_maintenance(self, kind, action, before_digest, resume=None, *, incident=None):
+    def begin_maintenance(self, kind, action, before_digest, request=None):
+        request = request or MaintenanceRequest()
+        key, release, resume, incident = (
+            request.key,
+            request.release,
+            request.resume,
+            request.incident,
+        )
         if action not in MAINTENANCE_ACTIONS.get(kind, set()):
             raise InventoryError("Unknown maintenance action.")
         if (kind == "reconciliation") != (incident is not None):
@@ -362,6 +380,12 @@ class HostInventory:
                     raise InventoryError(
                         "Unfinished maintenance requires explicit resume or reconciliation."
                     )
+                intent = json.loads(unfinished["intent_json"])
+                if (key is not None and key != intent["key"]) or (
+                    release is not None and release != intent["release"]
+                ):
+                    raise InventoryError("Resume must retain the original instance and release.")
+                self._check_sources(connection, intent)
                 connection.execute(
                     "UPDATE maintenance SET state = 'running', finished_at = NULL, "
                     "exit_code = NULL WHERE id = ?",
@@ -371,15 +395,71 @@ class HostInventory:
                 return resume
             if resume:
                 raise InventoryError("Maintenance operation cannot be resumed.")
+            if action in {"resume", "rollback", "resume-reset", "rollback-reset"}:
+                raise InventoryError("This action requires the original maintenance ID.")
             identifier = str(uuid4())
+            intent = self._new_intent(connection, kind, action, identifier, request)
             connection.execute(
                 "INSERT INTO maintenance "
-                "(id, kind, action, state, started_at, before_digest, incident_reference) "
-                "VALUES (?, ?, ?, 'running', ?, ?, ?)",
-                (identifier, kind, action, datetime.now(UTC).isoformat(), before_digest, incident),
+                "(id, kind, action, state, started_at, before_digest, "
+                "incident_reference, intent_json) "
+                "VALUES (?, ?, ?, 'running', ?, ?, ?, ?)",
+                (
+                    identifier,
+                    kind,
+                    action,
+                    datetime.now(UTC).isoformat(),
+                    before_digest,
+                    incident,
+                    json.dumps(intent, sort_keys=True, separators=(",", ":")),
+                ),
             )
             self._audit(connection, "maintenance_started", identifier, before_digest)
             return identifier
+
+    @staticmethod
+    def _new_intent(connection, kind, action, identifier, request):
+        key, release = request.key, request.release
+        if (kind == "release" and not key) or (
+            kind != "reconciliation" and action != "backup" and not release
+        ):
+            raise InventoryError("Select the instance and intended release before maintenance.")
+        sources = {
+            row["key"]: dict(row)
+            for row in connection.execute("SELECT * FROM instances ORDER BY key")
+        }
+        if key is not None and key not in sources:
+            raise InventoryError("Instance is not registered.")
+        if release is not None and not re.fullmatch(r"release-[0-9]{8}-[0-9]{2,}", release):
+            raise InventoryError("Invalid intended release.")
+        if action == "backup" and key is not None:
+            if release is not None and release != sources[key]["release"]:
+                raise InventoryError("Backup must use the registered source release.")
+            release = sources[key]["release"]
+        scope = "host" if kind != "release" or action == "install" else "instance"
+        return {
+            "scope": scope,
+            "key": key,
+            "release": release,
+            "sources": sources,
+            "checkpoint": (
+                f"/opt/epm/releases/{release}/wizard-state/{key}.{UUID(identifier).hex}"
+                if key is not None and release is not None
+                else None
+            ),
+        }
+
+    @staticmethod
+    def _check_sources(connection, intent):
+        current = {
+            row["key"]: dict(row)
+            for row in connection.execute("SELECT * FROM instances ORDER BY key")
+        }
+        if current != intent["sources"]:
+            raise InventoryError("Registered source revisions changed during maintenance.")
+
+    def maintenance_intent(self, identifier):
+        return json.loads(self.maintenance(identifier)["intent_json"])
 
     def finish_maintenance(self, identifier, exit_code):
         with self.connection(writable=True) as connection:
@@ -427,11 +507,24 @@ class HostInventory:
                 raise InventoryError("Reconciliation cannot replace allocation identities.")
         with self.connection(writable=True) as connection:
             operation = connection.execute(
-                "SELECT state FROM maintenance WHERE id = ?", (identifier,)
+                "SELECT * FROM maintenance WHERE id = ?", (identifier,)
             ).fetchone()
             if operation is None or operation["state"] != "needs_reconciliation":
                 raise InventoryError("Maintenance must finish before reconciliation.")
+            intent = json.loads(operation["intent_json"])
+            self._check_sources(connection, intent)
             for old, new in replacements:
+                source = intent["sources"].get(old.key, {})
+                if any(source.get(field) != value for field, value in asdict(old).items()):
+                    raise InventoryError("Inventory changed during reconciliation.")
+                if operation["kind"] != "reconciliation":
+                    if (
+                        operation["action"] not in {"deploy", "reset-demo"}
+                        or old.key != intent["key"]
+                    ):
+                        raise InventoryError("Changes are outside the maintenance target.")
+                    if new.release not in {old.release, intent["release"]}:
+                        raise InventoryError("Observed release differs from maintenance intent.")
                 fields = asdict(new)
                 assignments = ", ".join(f"{name} = ?" for name in fields)
                 changed = connection.execute(
