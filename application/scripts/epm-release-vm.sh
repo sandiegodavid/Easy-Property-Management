@@ -781,8 +781,8 @@ backup_instance() {
   stage "Select the registered instance for recovery maintenance"
   select_instance
   current_python
-  read_origin
   next="${previous_python%/venv/bin/python}"
+  read_origin
   local archive_help
   archive_help="$(as_owner "$previous_python" validate-archive --help)"
   [[ "$archive_help" == *--staging-directory* ]] || die "This installed release lacks external archive revalidation. Qualify a compatible release before recovery maintenance."

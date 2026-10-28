@@ -466,6 +466,9 @@ def test_registered_recovery_backup_uses_external_staging_and_one_operation_outp
     result = recovery_backup_shell(existing=existing)
     assert result.returncode == 0, result.stderr
     output = result.stdout
+    assert (
+        "origin interpreter: /opt/epm/releases/release-20261027-01/venv/bin/python" in result.stderr
+    )
     assert "prepare-backup --key c --maintenance-id operation-id" in output
     if existing:
         assert (
@@ -511,7 +514,7 @@ def recovery_backup_shell(*, existing=False, failure="", supported=True):
         "deployment=/etc/epm/hosted-c.json; local_config=/var/lib/epm-c/hosted-local.json; }\n"
         "current_python() { "
         "previous_python=/opt/epm/releases/release-20261027-01/venv/bin/python; }\n"
-        "read_origin() { :; }\nconfirm() { return 0; }\nensure_stopped() { :; }\n"
+        "confirm() { return 0; }\nensure_stopped() { :; }\n"
         'inventory_tool() { printf "inventory: %s\\n" "$*"; }\n'
         'as_owner() { printf "owner: %s\\n" "$*"; '
         + (
@@ -522,7 +525,12 @@ def recovery_backup_shell(*, existing=False, failure="", supported=True):
         )
         + ('[[ "$*" != *"hosted-backup "* ]];' if failure == "backup" else "return 0;")
         + " }\n"
-        'sudo() { if [[ "$1" == test ]]; then '
+        'sudo() { if [[ "${2:-}" == -c ]]; then '
+        '[[ "$1" == /opt/epm/releases/release-20261027-01/venv/bin/python && '
+        '"${4:-}" == /etc/epm/hosted-c.json ]] || return 1; '
+        'printf "origin interpreter: %s\\n" "$1" >&2; '
+        'printf "%s\\n" https://demo-c.example.com; '
+        'elif [[ "$1" == test ]]; then '
         + ("return 0;" if existing else '[[ "$*" != *"recovery-operation-id.epm-backup"* ]];')
         + ' else printf "sudo: %s\\n" "$*"; '
         + ('[[ "$*" != *"hosted-publish-backup"* ]];' if failure == "publication" else "return 0;")

@@ -2,17 +2,6 @@ Review: ec60bbd373a152b935b8452128e92227b816ffac
 Scope: HOSTED_DEMO_ADMIN_DESIGN.md, Slice 1 only
 Review date: 2026-10-27
 
-SPECIFICATION — recovery tooling
-
-1. [P2] Initialize the selected release before reading the backup origin.
-Status: still open
-File: application/scripts/epm-release-vm.sh:784-785
-Related: application/scripts/epm-release-vm.sh:262-264; application/scripts/tests/test_release_wizards.py:514
-
-backup_instance calls read_origin before assigning next from previous_python. The real read_origin builds its interpreter from "$next/venv/bin/python", while main has only declared next. A fresh backup invocation therefore attempts /venv/bin/python (or fails on an unset variable depending on shell behavior) and exits before making a recovery point. Slice 1's registered-instance backup path cannot run. The passing backup tests mask this by replacing read_origin with a no-op.
-
-Suggestion: assign next from previous_python before read_origin. Add a focused shell regression using the real read_origin and a stubbed sudo boundary that asserts the selected installed interpreter. Reproduction with sourced wizard functions and mocked external commands captured /venv/bin/python; no host mutation was performed.
-
 SPECIFICATION — maintenance identity and reconciliation
 
 2. [P1] Bind maintenance to the original instance and release before allowing resume.
@@ -29,3 +18,20 @@ STANDARDS
 No additional actionable documented-standard findings established.
 
 Validation: focused Slice 1 suite passed, 169 tests. Reviewed exact parent-to-commit diff; no live VM, Cloudflare, browser or deployment validation performed. Existing tests do not cover the two cases above. No implementation changes made.
+
+RESOLVED FINDINGS
+
+SPECIFICATION — recovery tooling
+
+1. [P2] Initialize the selected release before reading the backup origin.
+Status: resolved (2026-10-28)
+File: application/scripts/epm-release-vm.sh:784-785
+Related: application/scripts/epm-release-vm.sh:262-264; application/scripts/tests/test_release_wizards.py:514
+
+backup_instance calls read_origin before assigning next from previous_python. The real read_origin builds its interpreter from "$next/venv/bin/python", while main has only declared next. A fresh backup invocation therefore attempts /venv/bin/python (or fails on an unset variable depending on shell behavior) and exits before making a recovery point. Slice 1's registered-instance backup path cannot run. The passing backup tests mask this by replacing read_origin with a no-op.
+
+Suggestion: assign next from previous_python before read_origin. Add a focused shell regression using the real read_origin and a stubbed sudo boundary that asserts the selected installed interpreter. Reproduction with sourced wizard functions and mocked external commands captured /venv/bin/python; no host mutation was performed.
+
+Resolution: backup_instance now assigns the installed release from previous_python before calling read_origin. The focused backup shell tests retain the real read_origin and assert its selected installed interpreter and protected deployment path through a stubbed sudo boundary, covering both fresh archives and retries.
+
+Validation (2026-10-28): 57 focused release-wizard tests passed; Ruff check, Ruff format --check, and bash -n passed. No live host operations performed.
