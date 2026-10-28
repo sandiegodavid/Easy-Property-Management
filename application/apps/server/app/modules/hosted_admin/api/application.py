@@ -7,12 +7,32 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
+from starlette.exceptions import HTTPException
 
 from app.modules.hosted_admin.application.contracts import AdminError, BrokerRequest
 from app.modules.hosted_admin.infrastructure.broker import MAX_FRAME
 from app.modules.hosted_admin.api.sign_in import CSRF_COOKIE, sign_in_page
+from app.platform.api_errors import api_problem, register_api_error_handlers, validation_problem
 
 COOKIE = "epm_private_admin"
+
+
+def problem_response(problem):
+    return JSONResponse({"detail": problem.detail}, status_code=problem.status_code)
+
+
+def admin_problem(status, code):
+    # Fixed prose only: neither validation inputs nor broker exception text is public.
+    message = {
+        400: "The administration request is invalid.",
+        401: "Sign in to private administration.",
+        403: "The administration request is not permitted.",
+        409: "The administration request conflicts with the current state.",
+        413: "Request content exceeds an allowed limit.",
+        429: "Too many administration attempts. Try again later.",
+        503: "Private administration is unavailable. Try again later.",
+    }.get(status, "The administration request could not be completed.")
+    return problem_response(api_problem(status, code, message))
 
 
 def create_admin_app(origin, call):
@@ -31,6 +51,11 @@ def create_admin_app(origin, call):
     ):
         raise AdminError("admin_origin_invalid", 503)
     app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
+    register_api_error_handlers(app)
+
+    @app.exception_handler(HTTPException)
+    async def http_error(_request, error):
+        return admin_problem(error.status_code, "admin_request_invalid")
 
     @app.middleware("http")
     async def transport(request, next_handler):
@@ -42,7 +67,7 @@ def create_admin_app(origin, call):
             or request.method not in {"GET", "POST"}
             or request.query_params
         ):
-            response = JSONResponse({"code": "admin_transport_denied"}, status_code=403)
+            response = admin_problem(403, "admin_transport_denied")
         else:
             response = await next_handler(request)
         response.headers.update(
@@ -78,7 +103,7 @@ def create_admin_app(origin, call):
         async for part in request.stream():
             raw.extend(part)
             if len(raw) > MAX_FRAME:
-                return JSONResponse({"code": "admin_request_too_large"}, status_code=413)
+                return admin_problem(413, "admin_request_too_large")
         try:
             if request.headers.get("content-type") != "application/x-www-form-urlencoded":
                 raise ValueError()
@@ -106,6 +131,8 @@ def create_admin_app(origin, call):
             return response
         except AdminError as error:
             return sign_in_page(error=error.code, status=error.status)
+        except ValidationError as error:
+            return problem_response(validation_problem(error))
         except ValueError:
             return sign_in_page(error="admin_request_invalid", status=400)
         except OSError:
@@ -126,12 +153,12 @@ def create_admin_app(origin, call):
             "source-status": "source_status",
         }
         if action not in methods or request.headers.get("content-type") != "application/json":
-            return JSONResponse({"code": "admin_request_invalid"}, status_code=400)
+            return admin_problem(400, "admin_request_invalid")
         raw = bytearray()
         async for part in request.stream():
             raw.extend(part)
             if len(raw) > MAX_FRAME:
-                return JSONResponse({"code": "admin_request_too_large"}, status_code=413)
+                return admin_problem(413, "admin_request_too_large")
         try:
             body = json.loads(raw)
             if not isinstance(body, dict) or set(body) - {
@@ -142,7 +169,7 @@ def create_admin_app(origin, call):
             }:
                 raise ValueError()
         except ValueError:
-            return JSONResponse({"code": "admin_request_invalid"}, status_code=400)
+            return admin_problem(400, "admin_request_invalid")
         return await forward(request, body | {"method": methods[action]})
 
     async def forward(request, payload):
@@ -179,10 +206,10 @@ def create_admin_app(origin, call):
                 response.delete_cookie(CSRF_COOKIE, path="/", httponly=True, samesite="strict")
             return response
         except AdminError as error:
-            return JSONResponse({"code": error.code}, status_code=error.status)
-        except ValidationError:
-            return JSONResponse({"code": "admin_request_invalid"}, status_code=400)
+            return admin_problem(error.status, error.code)
+        except ValidationError as error:
+            return problem_response(validation_problem(error))
         except (OSError, ValueError) as _error:
-            return JSONResponse({"code": "admin_broker_unavailable"}, status_code=503)
+            return admin_problem(503, "admin_broker_unavailable")
 
     return app

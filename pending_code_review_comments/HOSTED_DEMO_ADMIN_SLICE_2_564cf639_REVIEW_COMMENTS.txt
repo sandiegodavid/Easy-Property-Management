@@ -5,7 +5,7 @@ Scope: git diff 564cf639^ 564cf639
 SPECIFICATION — Private Admin HTTP boundary
 
 1. [P2] Apply the shared validation status and problem envelope to Admin requests.
-Status: still open
+Status: resolved (2026-10-28)
 File: application/apps/server/app/modules/hosted_admin/api/application.py:181-184
 Requirement: docs/hosting/design/HOSTED_DEMO_ADMIN_DESIGN.md:275
 Shared implementation: application/apps/server/app/platform/api_errors.py:63-69
@@ -13,6 +13,10 @@ Shared implementation: application/apps/server/app/platform/api_errors.py:63-69
 All Pydantic failures return HTTP 400 with a code-only body. A POST /commands containing a 1,001-character reason, below the 16 KiB frame limit, returns 400 {"code":"admin_request_invalid"} instead of the required 413. A negative expected_revision likewise returns 400 instead of 422. These responses also omit the shared detail.code/message envelope. This prevents API consumers from applying the documented size-limit and field-validation handling consistently.
 
 Use the shared validation_problem mapping for typed validation failures and the shared problem envelope for Admin API errors, preserving safe messages without reflecting credentials or private inputs. Add focused endpoint tests for oversized bounded fields, malformed command fields, and the error response shape.
+
+Resolution: Admin HTTP validation now reuses validation_problem: bounded-field violations return 413 and malformed typed fields return 422. JSON transport, parsing, broker and framework errors use the shared detail.code/message envelope with fixed safe messages. Native sign-in retains its human-readable authentication errors; typed native-form validation uses the shared mapping. No validation inputs or exception text are returned.
+Focused regression coverage: a 1,001-character reason below the frame limit; oversized subject and credentials; negative/non-integer revisions, invalid UUID/action/confirmation and inconsistent command fields; transport/frame/JSON failures; authentication, conflict and dependency failures. Invalid requests never reach the broker.
+Validation: 55 hosted_admin Python tests passed; changed-file Ruff check and format check passed. No deployment or live qualification performed.
 
 STANDARDS
 

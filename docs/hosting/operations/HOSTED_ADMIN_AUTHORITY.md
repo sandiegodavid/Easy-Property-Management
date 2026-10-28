@@ -72,6 +72,7 @@ Revocation disables the identity, revokes sessions/grants and fences admitted wo
 | --- | --- |
 | Happy path | Native keyboard sign-in, reload, sign-out; bounded status; identity-only approval; fixed target-UID command dispatch |
 | Invalid combinations | Wrong Host/Origin/CSRF/peer, operator cookie, unknown method/path/environment, invalid/used/expired grant, changed enrollment or source configuration, inactive/mismatched runtime |
+| HTTP problem contract | Typed bounds return 413; malformed typed fields return 422. JSON errors use `detail.code` and `detail.message` with fixed safe prose, never private input or exception text; invalid requests do not reach the broker. Native sign-in authentication errors remain human-readable HTML |
 | Idempotency/retry | Exact one-use authorization/admission; unchanged original receipts; changed intent conflict; lost control-result recovery without a second generation change or allocation switch |
 | Transaction rollback | Source audit failure rolls back mutation/receipt; admission failure cannot consume authorization; control commit failure leaves the original source receipt recoverable |
 | Persistence/schema | Exact greenfield schemas; immutable source audit/receipts and admission intent/result; malformed source history rejected; separate binding revision/fence/session generation |
@@ -96,3 +97,5 @@ npm run test:admin
 The browser server creates a disposable authority store and uses synthetic adapter results. It proves the real HTTP/form/cookie behavior, not Linux privilege separation or live source admission. Playwright traces are disabled to avoid recording even test credentials. On unsupported peer-credential platforms the production broker fails closed; macOS unit tests are not Linux qualification. The existing Linux quota-volume test also requires explicitly provisioned disposable infrastructure. No live acceptance is implied by skipped infrastructure checks.
 
 Repository validation on October 28, 2026: **386 focused Python tests passed, 1 infrastructure test skipped; all 3 private Admin Playwright tests passed**. The skip requires an explicitly provisioned disposable Linux quota volume. Changed-file Ruff check/format, Python 3.12 syntax checks, launcher shell syntax, frontend lint/format/typecheck and diff whitespace checks passed. No full application suite or live installation/qualification was run.
+
+The Slice 2 HTTP problem-contract follow-up on October 28, 2026 passed **55 focused Admin Python tests**, including endpoint validation and safe error-envelope regressions, plus changed-file Ruff check/format. It did not change browser assets or deployment configuration.
