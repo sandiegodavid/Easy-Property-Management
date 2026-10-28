@@ -1,0 +1,25 @@
+[Unit]
+Description=EPM private Admin authority broker
+After=local-fs.target
+
+[Service]
+Type=simple
+User=root
+Group=epm-admin-http
+RuntimeDirectory=epm-admin
+RuntimeDirectoryMode=0750
+UMask=0077
+ExecStart=/opt/epm/admin/venv/bin/python -I /opt/epm/admin/admin_console.py broker
+Restart=on-failure
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec=30
+# Source commands drop to each registered service user through fixed runuser argv.
+# Broker never opens a business database or accepts arbitrary executable/path inputs.
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

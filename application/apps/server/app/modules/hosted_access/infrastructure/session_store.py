@@ -4,15 +4,26 @@ from datetime import datetime
 import os
 import stat
 from typing import Mapping
+from uuid import uuid4
+
+from app.modules.hosted_access.application.admin_commands import (
+    MAX_ENROLLMENTS,
+    AccessCommand,
+    deployment_fingerprint,
+)
 
 from sqlalchemy import MetaData, Table, delete, func, select, update
 
 from app.modules.hosted_access.application.configuration import HostedDeployment
 from app.modules.hosted_access.domain.models import HostedAccessError
-from app.modules.hosted_access.infrastructure.schema import REVISION, initialize_schema
+from app.modules.hosted_access.infrastructure.schema import (
+    REVISION,
+    initialize_schema,
+    validate_schema,
+)
+from app.modules.hosted_access.infrastructure.source_commands import AccessCommands
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
-MAX_ENROLLMENTS = 16
 MAX_SESSIONS = 32
 
 
@@ -36,6 +47,8 @@ class SQLiteHostedSessionStore:
             "hosted_blocked_assertion",
             "hosted_draft_lease",
             "alembic_version",
+            "hosted_admin_receipt",
+            "hosted_admin_audit",
         }
         if set(metadata.tables) != expected:
             raise HostedAccessError("hosted_store_invalid", "Hosted access schema is invalid.", 503)
@@ -44,12 +57,14 @@ class SQLiteHostedSessionStore:
         self.sessions = metadata.tables["hosted_session"]
         self.blocked = metadata.tables["hosted_blocked_assertion"]
         with self.engine.connect() as connection:
+            validate_schema(connection)
             revisions = connection.execute(select(metadata.tables["alembic_version"])).all()
             operator = connection.execute(select(self.operator)).mappings().one_or_none()
         if revisions != [(REVISION,)] or not self._matches(operator):
             raise HostedAccessError(
                 "hosted_store_invalid", "Hosted access binding is invalid.", 503
             )
+        AccessCommands(self).validate_retained()
 
     def _matches(self, operator) -> bool:
         return operator is not None and all(
@@ -86,6 +101,10 @@ class SQLiteHostedSessionStore:
                         generation=0,
                         not_before=0,
                         restore_marker=None,
+                        admin_revision=0,
+                        binding_revision=0,
+                        admin_fence=0,
+                        binding_digest=deployment_fingerprint(deployment),
                     )
                 )
         finally:
@@ -116,6 +135,9 @@ class SQLiteHostedSessionStore:
                     active=False,
                     generation=operator["generation"] + 1,
                     not_before=now.timestamp(),
+                    admin_revision=operator["admin_revision"] + 1,
+                    binding_revision=operator["binding_revision"] + 1,
+                    admin_fence=operator["admin_fence"] + 1,
                 )
                 connection.execute(delete(self.sessions))
                 connection.execute(delete(self.enrollment))
@@ -123,44 +145,56 @@ class SQLiteHostedSessionStore:
                 leases = Table("hosted_draft_lease", MetaData(), autoload_with=connection)
                 connection.execute(delete(leases))
             connection.execute(update(self.operator).values(**values))
-
-    def activate(self, subject: str) -> None:
-        with immediate_transaction(self.engine) as connection:
-            candidate = (
-                connection.execute(
-                    select(self.enrollment).where(self.enrollment.c.subject == subject)
+            if previous is not None:
+                AccessCommands(self).record_restore(
+                    connection, operator, dict(operator) | values, now
                 )
-                .mappings()
-                .one_or_none()
-            )
-            if candidate is None or candidate["email"] != self.deployment.allowed_email:
+
+    def _private_command(self, action, now=None, subject=None, *, recovery_override=False):
+        """Existing private recovery CLI seam; browser commands never receive this override."""
+        commands = AccessCommands(
+            self, activation_check=(lambda *_: None) if recovery_override else None
+        )
+        snapshot = commands.status()
+        values = {}
+        if subject is not None:
+            with self.engine.connect() as connection:
+                candidate = (
+                    connection.execute(
+                        select(self.enrollment).where(self.enrollment.c.subject == subject)
+                    )
+                    .mappings()
+                    .one_or_none()
+                )
+            if candidate is None:
                 raise HostedAccessError(
                     "hosted_enrollment_missing", "Verified enrollment required.", 409
                 )
-            existing = connection.execute(select(self.operator)).mappings().one()
-            if existing["subject"] is not None and existing["subject"] != subject:
-                raise HostedAccessError(
-                    "hosted_rebinding_required", "Explicit rebinding is required.", 409
-                )
-            connection.execute(update(self.operator).values(subject=subject, active=True))
+            values = {"subject": subject, "enrollment_received_at": candidate["received_at"]}
+        return commands.execute(
+            AccessCommand(
+                operation_id=str(uuid4()),
+                action=action,
+                expected_revision=snapshot["admin_revision"],
+                expected_binding_revision=snapshot["binding_revision"],
+                fence=snapshot["admin_fence"],
+                authority_reference="private-recovery-cli",
+                reason="Explicit private recovery command",
+                **values,
+            ),
+            now,
+        )
+
+    def activate(self, subject: str) -> None:
+        # Compatibility for the explicitly private recovery procedure, not Admin onboarding.
+        self._private_command("approve", subject=subject)
+        self._private_command("enable", recovery_override=True)
 
     def disable(self, now: datetime) -> None:
-        with immediate_transaction(self.engine) as connection:
-            connection.execute(
-                update(self.operator).values(
-                    active=False,
-                    generation=self.operator.c.generation + 1,
-                    not_before=now.timestamp(),
-                )
-            )
+        self._private_command("disable", now)
 
     def revoke_all(self, now: datetime) -> None:
-        with immediate_transaction(self.engine) as connection:
-            connection.execute(
-                update(self.operator).values(
-                    generation=self.operator.c.generation + 1, not_before=now.timestamp()
-                )
-            )
+        self._private_command("revoke", now)
 
     def begin_session(self, values: Mapping[str, object]) -> None:
         pending = False
@@ -222,28 +256,7 @@ class SQLiteHostedSessionStore:
             )
 
     def rebind(self, subject: str, now: datetime) -> None:
-        with immediate_transaction(self.engine) as connection:
-            operator = connection.execute(select(self.operator)).mappings().one()
-            candidate = (
-                connection.execute(
-                    select(self.enrollment).where(self.enrollment.c.subject == subject)
-                )
-                .mappings()
-                .one_or_none()
-            )
-            if operator["active"] or candidate is None:
-                raise HostedAccessError(
-                    "hosted_rebinding_required",
-                    "Disable access and verify the new subject first.",
-                    409,
-                )
-            connection.execute(
-                update(self.operator).values(
-                    subject=subject,
-                    generation=self.operator.c.generation + 1,
-                    not_before=now.timestamp(),
-                )
-            )
+        self._private_command("rebind", now, subject)
 
     def _require_eligible(self, connection, operator, values) -> None:
         blocked = connection.scalar(
@@ -254,6 +267,7 @@ class SQLiteHostedSessionStore:
         )
         if (
             not operator["active"]
+            or operator["binding_digest"] != deployment_fingerprint(self.deployment)
             or operator["subject"] != values["subject"]
             or values["issued_at"] <= operator["not_before"]
             or blocked
@@ -264,7 +278,7 @@ class SQLiteHostedSessionStore:
 
     def session(self, token_hash: str) -> Mapping[str, object] | None:
         with self.engine.connect() as connection:
-            return (
+            result = (
                 connection.execute(
                     select(
                         self.sessions,
@@ -273,6 +287,7 @@ class SQLiteHostedSessionStore:
                         self.operator.c.email,
                         self.operator.c.subject,
                         self.operator.c.active,
+                        self.operator.c.binding_digest,
                         self.operator.c.not_before,
                         self.operator.c.generation.label("current_generation"),
                     )
@@ -282,6 +297,11 @@ class SQLiteHostedSessionStore:
                 .mappings()
                 .one_or_none()
             )
+            if result is not None and result["binding_digest"] != deployment_fingerprint(
+                self.deployment
+            ):
+                return dict(result) | {"active": False}
+            return result
 
     def revoke(
         self,

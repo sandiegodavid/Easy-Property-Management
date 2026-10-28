@@ -1,0 +1,31 @@
+[Unit]
+Description=EPM private loopback Admin listener
+After=epm-admin-broker.service
+Requires=epm-admin-broker.service
+
+[Service]
+Type=simple
+User=epm-admin-http
+Group=epm-admin-http
+# Installation pins the same nonprivileged port in this file and the launcher.
+ExecStart=/opt/epm/admin/venv/bin/python -I /opt/epm/admin/admin_console.py serve --port ADMIN_PORT
+UMask=0077
+NoNewPrivileges=true
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+InaccessiblePaths=/var/lib/epm-admin /etc/epm /var/backups
+# Operator workspace roots must also be explicitly hidden at installation.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressDeny=any
+IPAddressAllow=localhost
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

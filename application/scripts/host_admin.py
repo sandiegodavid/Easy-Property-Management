@@ -400,6 +400,23 @@ class HostDiscovery:
             "rollback_acceptance": "not_recorded",
         }
 
+    def source_command_ready(self, instance):
+        """Grant-side checks; containment does not depend on a working business volume."""
+        service, argv, release, _, local_path = self._service(instance.key)
+        profile = (
+            "observed-"
+            + digest_json({field: service.get(field, "") for field in RESOURCE_FIELDS})[:16]
+        )
+        if (
+            release.name != instance.release
+            or str(local_path) != instance.local_config
+            or int(argv[9]) != instance.port
+            or profile != instance.profile
+            or self.systemctl("is-active", f"epm-hosted@{instance.key}.service").strip() != "active"
+        ):
+            raise InventoryError("Registered source runtime is not ready.")
+        self._release(release)
+
     def _service(self, key):
         paths = self.paths
         deployment_path = paths.configs / f"hosted-{key}.json"
