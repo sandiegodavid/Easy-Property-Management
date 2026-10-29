@@ -88,6 +88,11 @@ export function useRead<T>(path: string, interval = 30000): Read<T> {
       controller?.abort();
       controller = new AbortController();
       const current = controller;
+      let timedOut = false;
+      const deadline = setTimeout(() => {
+        timedOut = true;
+        current.abort();
+      }, 10000);
       try {
         const response = await fetch(path, {
           credentials: "same-origin",
@@ -106,6 +111,7 @@ export function useRead<T>(path: string, interval = 30000): Read<T> {
         }
         if (!response.ok) throw new Error("Read unavailable");
         const data = (await response.json()) as T;
+        if (current.signal.aborted || current !== controller) return;
         if (!ended) setRead({ data, path, failed: false, expired: false });
         delay = interval;
         if (
@@ -116,7 +122,7 @@ export function useRead<T>(path: string, interval = 30000): Read<T> {
         )
           delay = 30000;
       } catch {
-        if (current.signal.aborted) return;
+        if (ended || current !== controller || (current.signal.aborted && !timedOut)) return;
         if (!ended)
           setRead((prior) => ({
             ...(prior.path === path ? prior : {}),
@@ -125,6 +131,8 @@ export function useRead<T>(path: string, interval = 30000): Read<T> {
             expired: false,
           }));
         delay = Math.min(delay * 2, 60000);
+      } finally {
+        clearTimeout(deadline);
       }
       if (!ended)
         timer = setTimeout(() => {

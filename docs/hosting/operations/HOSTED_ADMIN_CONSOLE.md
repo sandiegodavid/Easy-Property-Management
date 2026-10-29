@@ -48,6 +48,10 @@ material, private report payloads and raw exception text are excluded.
 The browser checks normal read pages every 30 seconds, observation sections every
 five seconds and active operations every two seconds. Completed operations slow to
 30 seconds; failures back off to at most 60 seconds. Hidden pages stop polling.
+Each read has a 10-second deadline covering both the response and JSON body.
+Timeouts retain prior data as stale (or show unknown without prior data) and retry
+with the same bounded backoff. Hiding or leaving the page cancels the read without
+reporting a connection failure or scheduling a retry while hidden.
 Every observed section identifies its state and exact last verification/check time,
 shown in browser-local time with the zone. After failure, the last verified data
 and its original time remain visible as stale. The cache is disposable: restarting

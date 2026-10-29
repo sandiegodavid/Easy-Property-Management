@@ -206,3 +206,70 @@ test("hidden pages stop observation polling and resume checking only on return",
   });
   await expect.poll(() => reads).toBeGreaterThan(0);
 });
+
+for (const stage of ["response", "body"] as const) {
+  for (const refresh of [false, true]) {
+    test(`a stalled ${refresh ? "refresh" : "initial read"} ${stage} times out and recovers`, async ({
+      page,
+      request,
+    }) => {
+      await page.addInitScript(
+        ({ stage, refresh }) => {
+          const original = window.fetch.bind(window);
+          let count = 0;
+          window.fetch = async (input, init) => {
+            if (input !== "/admin-api/operators/a/observations/access")
+              return original(input, init);
+            count += 1;
+            const data = {
+              state: "available",
+              observed: 1793293200,
+              data: {
+                active: true,
+                binding_matches: true,
+                pending_enrollments: 0,
+                starts: 0,
+                expires: 4102444800,
+                capabilities: ["records.read"],
+              },
+            };
+            const pending = () =>
+              new Promise<never>((_, reject) => {
+                const abort = () => reject(new DOMException("Aborted", "AbortError"));
+                if (init?.signal?.aborted) abort();
+                else init?.signal?.addEventListener("abort", abort, { once: true });
+              });
+            if (count === (refresh ? 2 : 1)) {
+              if (stage === "response") return pending();
+              const response = Response.json(data);
+              response.json = pending;
+              return response;
+            }
+            return Response.json(data);
+          };
+        },
+        { stage, refresh },
+      );
+      await page.clock.install();
+      await signIn(page, request, "/operators/a");
+      const access = page.getByRole("region", { name: "Access", exact: true });
+      if (refresh) {
+        await expect(access.locator(".state")).toHaveText("Available");
+        await page.clock.runFor(5000);
+      } else {
+        await expect(access).toContainText("Loading…");
+      }
+      const checked = await access.getByText(/^Last verified:/).textContent();
+      await page.clock.runFor(10001);
+      await expect(access).toContainText("Connection unavailable");
+      await expect(access.locator(".state")).toHaveText(refresh ? "Stale" : "Unknown");
+      await expect(access.getByText(/^Last verified:/)).toHaveText(checked ?? "");
+      await expect(access).not.toContainText("Loading…");
+      if (refresh) await expect(access).toContainText("Access enabled");
+      await page.clock.runFor(10001);
+      await expect(access.locator(".state")).toHaveText("Available");
+      await expect(access).not.toContainText("Connection unavailable");
+      await expect(access).toContainText("Access enabled");
+    });
+  }
+}

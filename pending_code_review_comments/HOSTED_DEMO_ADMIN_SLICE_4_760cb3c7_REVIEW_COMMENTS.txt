@@ -4,7 +4,7 @@ Review date: 2026-10-29
 SPECIFICATION — Browser observation availability
 
 1. [P2] Bound pending reads so a stalled connection cannot preserve an available status indefinitely.
-Status: still open
+Status: resolved — 2026-10-29
 File: application/apps/web/src/admin/reads.ts:92-96
 Related: application/apps/web/src/admin/reads.ts:118-132; application/apps/web/src/admin/main.tsx:49-58
 
@@ -13,6 +13,8 @@ The fetch has no deadline, and the next poll is scheduled only after the fetch a
 Add a bounded deadline covering both the response and body read. Treat deadline expiration as a failed read, retain prior data with a stale indication, and schedule bounded backoff. Distinguish timeout cancellation from deliberate visibility/unmount cancellation, since the existing aborted-signal early return would otherwise suppress retries. Test an unresolved initial request and an unresolved refresh after success, then verify recovery when subsequent requests succeed.
 
 Validation: Executed the actual transpiled useRead hook with one successful response followed by an unresolved fetch. It retained state=available and failed=false, with zero pending retry timers. Focused console/observation tests: 14 passed. Admin Playwright suite: 10 passed. Existing browser tests exercise rejected/failed observations, not an unresolved transport request.
+
+Resolution (2026-10-29): Added a 10-second request deadline spanning fetch and JSON body consumption. Timeout cancellation marks the read failed, retains prior data and verification time as stale, and schedules bounded backoff; visibility/unmount cancellation still suppresses retries. Superseded responses cannot overwrite the current read. Four new browser regressions cover stalled initial responses/bodies, stalled refresh responses/bodies, and successful recovery after each timeout. All 14 Admin Playwright tests passed, including existing hidden-page cancellation coverage.
 
 STANDARDS
 No additional actionable findings.
