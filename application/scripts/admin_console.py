@@ -27,9 +27,11 @@ from app.modules.hosted_admin.infrastructure.broker import Broker, MAX_FRAME, rp
 from app.modules.hosted_admin.infrastructure.private_operations import PrivateOperations
 from app.modules.hosted_admin.infrastructure.qualification import QualificationService
 from app.modules.hosted_admin.infrastructure.verified_reports import VerifiedReports
+from app.modules.hosted_admin.infrastructure.console import ConsoleReads
 from app.modules.hosted_admin.application.operations import fingerprint
 
 if __package__:
+    from .admin_observations import HostConsoleInventory
     from .host_admin import HostPaths, HostDiscovery, lock_host, protected, read_json
     from .host_inventory import HostInventory, InventoryError
 else:
@@ -39,6 +41,7 @@ else:
         *directory.parents,
         directory / "host_admin.py",
         directory / "host_inventory.py",
+        directory / "admin_observations.py",
     ):
         info = item.lstat()
         if info.st_uid != 0 or info.st_mode & 0o022 or stat.S_ISLNK(info.st_mode):
@@ -46,6 +49,7 @@ else:
     sys.path.insert(0, str(directory))
     from host_admin import HostPaths, HostDiscovery, lock_host, protected, read_json
     from host_inventory import HostInventory, InventoryError
+    from admin_observations import HostConsoleInventory
 
 
 def source_process(argv, **options):
@@ -100,12 +104,17 @@ class SourceRunner:
         }
 
     def status(self, key):
+        return self.access_snapshot(key)[1]
+
+    def access_snapshot(self, key):
         descriptor = lock_host(self.inventory)
         try:
             instance = self.prepare(key)["instance"]
-            return AccessStatus.model_validate(
+            deployment = read_json(self.paths.configs / f"hosted-{key}.json", self.paths)
+            status = AccessStatus.model_validate(
                 self._transport(instance, {"query": "status"})
             ).model_dump()
+            return deployment, status
         finally:
             os.close(descriptor)
 
@@ -326,7 +335,13 @@ def main():
     )
     qualification = QualificationService(authority, reports.snapshot, reports.evidence)
     operations = PrivateOperations(authority, qualification, dispatch)
-    Broker(authority, http.pw_uid, dispatch, operations=operations).serve(path, http.pw_gid)
+    console = ConsoleReads(authority, HostConsoleInventory(dispatch, HostDiscovery(paths), reports))
+    try:
+        Broker(authority, http.pw_uid, dispatch, operations=operations, console=console).serve(
+            path, http.pw_gid
+        )
+    finally:
+        console.close()
 
 
 if __name__ == "__main__":

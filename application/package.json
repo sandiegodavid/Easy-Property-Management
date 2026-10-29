@@ -21,13 +21,14 @@
     "contracts:check": "node scripts/generate-contracts.mjs --check",
     "dev": "npm run dev --workspace @epm/web",
     "build": "npm run contracts:check && npm run build --workspace @epm/web",
+    "build:admin": "npm exec --workspace @epm/web -- vite build --config vite.admin.config.ts",
     "test:web": "node scripts/web_acceptance.mjs",
     "test:components": "playwright test --config playwright.components.config.ts",
     "test:hosted": "playwright test --config playwright.hosted.config.ts",
     "test:admin": "playwright test --config playwright.admin.config.ts",
     "test:recovery": "playwright test --config playwright.recovery.config.ts",
     "test:demo": "playwright test --config playwright.demo.config.ts",
-    "package:web": "npm run build && node scripts/python.mjs scripts/package_web.py",
+    "package:web": "npm run build && npm run build:admin && node scripts/python.mjs scripts/package_web.py",
     "check": "npm run lint && npm run format:check && npm run typecheck"
   },
   "devDependencies": {

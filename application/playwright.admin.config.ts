@@ -15,7 +15,8 @@ export default defineConfig({
     },
   },
   webServer: {
-    command: "node scripts/python.mjs scripts/admin_browser_server.py --port 18756",
+    command:
+      "npm run build:admin && node scripts/python.mjs scripts/admin_browser_server.py --port 18756",
     url: "http://127.0.0.1:18756/",
     reuseExistingServer: false,
     timeout: 30_000,

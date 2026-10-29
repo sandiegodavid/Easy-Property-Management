@@ -10,6 +10,7 @@ config*.json
 # Build output and generated contracts are replaced by their owning tools.
 **/node_modules/
 **/dist/
+**/dist-admin/
 **/coverage/
 test-results/
 playwright-report/

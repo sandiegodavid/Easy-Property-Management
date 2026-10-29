@@ -10,6 +10,7 @@ export default defineConfig([
   globalIgnores([
     "**/node_modules/**",
     "**/dist/**",
+    "**/dist-admin/**",
     "**/coverage/**",
     "test-results/**",
     "playwright-report/**",

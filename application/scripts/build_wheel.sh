@@ -85,6 +85,8 @@ with ZipFile(wheel) as archive:
     names = set(archive.namelist())
     if not {"app/__main__.py", "app/web_build/index.html"} <= names:
         raise SystemExit("Wheel is missing Python entry point or compiled frontend.")
+    if not {"app/admin_build/admin.js", "app/admin_build/admin.css"} <= names:
+        raise SystemExit("Wheel is missing the separate private Admin build.")
     if not any(n.startswith("app/web_build/assets/") and n.endswith(".js") for n in names):
         raise SystemExit("Wheel is missing compiled JavaScript assets.")
     bad_file = archive.testzip()

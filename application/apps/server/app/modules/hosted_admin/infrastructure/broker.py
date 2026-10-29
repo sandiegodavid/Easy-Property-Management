@@ -13,6 +13,7 @@ from pydantic import ValidationError
 from app.modules.hosted_admin.application.contracts import AdminError, BrokerRequest, CommandRequest
 
 MAX_FRAME = 16384
+MAX_RESPONSE_FRAME = 256 * 1024
 
 
 def peer_uid(connection):
@@ -33,16 +34,16 @@ def read_exact(connection, size):
     return bytes(chunks)
 
 
-def receive(connection):
+def receive(connection, maximum=MAX_FRAME):
     size = struct.unpack("!I", read_exact(connection, 4))[0]
-    if not 0 < size <= MAX_FRAME:
+    if not 0 < size <= maximum:
         raise AdminError("admin_request_too_large", 413)
     return json.loads(read_exact(connection, size))
 
 
 def send(connection, value):
     raw = json.dumps(value).encode()
-    if len(raw) > MAX_FRAME:
+    if len(raw) > MAX_RESPONSE_FRAME:
         raise AdminError("admin_response_too_large", 503)
     connection.sendall(struct.pack("!I", len(raw)) + raw)
 
@@ -52,14 +53,17 @@ def rpc(path, payload):
         connection.settimeout(30)
         connection.connect(str(path))
         send(connection, payload)
-        result = receive(connection)
+        result = receive(connection, MAX_RESPONSE_FRAME)
     if "error" in result:
         raise AdminError(result["error"], result["status"])
     return result["result"]
 
 
 class Broker:
-    def __init__(self, authority, admin_uid, dispatch, peer=peer_uid, operations=None):
+    def __init__(
+        self, authority, admin_uid, dispatch, peer=peer_uid, operations=None, console=None
+    ):
+        self.console = console
         self.operations = operations
         if admin_uid == 0:
             raise AdminError("admin_http_must_be_unprivileged", 503)
@@ -81,7 +85,7 @@ class Broker:
                 result = self._private(payload)
             else:
                 request = BrokerRequest.model_validate(payload)
-                result = self.authority.handle(request, self.dispatch)
+                result = self.authority.handle(request, self.dispatch, self.console)
             send(connection, {"result": result})
         except AdminError as error:
             send(connection, {"error": error.code, "status": error.status})

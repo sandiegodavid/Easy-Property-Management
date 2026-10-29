@@ -1,10 +1,11 @@
 """Separate loopback-only Admin listener. Not mounted in the business application."""
 
 import json
+from pathlib import Path
 from urllib.parse import parse_qs
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
 from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException
@@ -12,6 +13,7 @@ from starlette.exceptions import HTTPException
 from app.modules.hosted_admin.application.contracts import AdminError, BrokerRequest
 from app.modules.hosted_admin.infrastructure.broker import MAX_FRAME
 from app.modules.hosted_admin.api.sign_in import CSRF_COOKIE, sign_in_page
+from app.modules.hosted_admin.api.console_page import console_page, console_route
 from app.platform.api_errors import api_problem, register_api_error_handlers, validation_problem
 
 COOKIE = "epm_private_admin"
@@ -36,7 +38,7 @@ def admin_problem(status, code):
     return problem_response(api_problem(status, code, message))
 
 
-def create_admin_app(origin, call):
+def create_admin_app(origin, call, assets=None):
     # The installed launcher/Host are fixed. Cookies are scoped to this dedicated hostname.
     from urllib.parse import urlsplit
 
@@ -52,6 +54,7 @@ def create_admin_app(origin, call):
     ):
         raise AdminError("admin_origin_invalid", 503)
     app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
+    assets = Path(assets) if assets else Path(__file__).resolve().parents[3] / "admin_build"
     register_api_error_handlers(app)
 
     @app.exception_handler(HTTPException)
@@ -75,7 +78,7 @@ def create_admin_app(origin, call):
             {
                 "Cache-Control": "no-store",
                 "X-Content-Type-Options": "nosniff",
-                "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'; form-action 'self'",
+                "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'",
                 "X-Frame-Options": "DENY",
                 "Referrer-Policy": "same-origin",
             }
@@ -83,23 +86,36 @@ def create_admin_app(origin, call):
         return response
 
     @app.get("/")
+    @app.get("/operators")
+    @app.get("/operators/{instance}")
+    @app.get("/operations")
+    @app.get("/operations/{operation_id}")
+    @app.get("/qualification")
+    @app.get("/discrepancies")
     async def home(request: Request):
+        if not console_route(request.url.path):
+            return admin_problem(404, "admin_request_invalid")
         try:
             result = await run_in_threadpool(
                 call,
                 BrokerRequest(method="session", token=request.cookies.get(COOKIE, "")).model_dump(),
             )
-            return sign_in_page(result["identity"], request.cookies.get(CSRF_COOKIE, ""))
+            return console_page(result["identity"], request.cookies.get(CSRF_COOKIE, ""))
         except AdminError as error:
             if error.status == 503:
-                return sign_in_page(error="admin_broker_unavailable", status=503)
-            return sign_in_page()
+                return sign_in_page(
+                    error="admin_broker_unavailable", status=503, return_to=request.url.path
+                )
+            return sign_in_page(return_to=request.url.path)
         except OSError:
-            return sign_in_page(error="admin_broker_unavailable", status=503)
+            return sign_in_page(
+                error="admin_broker_unavailable", status=503, return_to=request.url.path
+            )
 
     @app.post("/sign-in")
     @app.post("/sign-out")
     async def native_form(request: Request):
+        return_to = ["/"]
         raw = bytearray()
         async for part in request.stream():
             raw.extend(part)
@@ -108,8 +124,11 @@ def create_admin_app(origin, call):
         try:
             if request.headers.get("content-type") != "application/x-www-form-urlencoded":
                 raise ValueError()
-            values = parse_qs(raw.decode(), strict_parsing=True, max_num_fields=1)
+            values = parse_qs(raw.decode(), strict_parsing=True, max_num_fields=2)
             key = "credential" if request.url.path == "/sign-in" else "csrf"
+            return_to = values.pop("return_to", ["/"])
+            if len(return_to) != 1 or not console_route(return_to[0]):
+                raise ValueError()
             if set(values) != {key} or len(values[key]) != 1:
                 raise ValueError()
             payload = BrokerRequest(
@@ -124,24 +143,65 @@ def create_admin_app(origin, call):
                 response.delete_cookie(COOKIE, path="/", httponly=True, samesite="strict")
                 response.delete_cookie(CSRF_COOKIE, path="/", httponly=True, samesite="strict")
                 return response
-            response = RedirectResponse("/", status_code=303)
+            response = RedirectResponse(return_to[0], status_code=303)
             for name, value in ((COOKIE, result["token"]), (CSRF_COOKIE, result["csrf"])):
                 response.set_cookie(
                     name, value, httponly=True, samesite="strict", path="/", max_age=28800
                 )
             return response
         except AdminError as error:
-            return sign_in_page(error=error.code, status=error.status)
+            return sign_in_page(error=error.code, status=error.status, return_to=return_to[0])
         except ValidationError as error:
             return problem_response(validation_problem(error))
         except ValueError:
             return sign_in_page(error="admin_request_invalid", status=400)
         except OSError:
-            return sign_in_page(error="admin_broker_unavailable", status=503)
+            return sign_in_page(
+                error="admin_broker_unavailable", status=503, return_to=return_to[0]
+            )
 
     @app.get("/session")
     async def session(request: Request):
         return await forward(request, {"method": "session"})
+
+    @app.get("/admin-assets/{filename}")
+    async def asset(filename: str, request: Request):
+        if filename not in {"admin.js", "admin.css"}:
+            return admin_problem(404, "admin_request_invalid")
+        try:
+            await run_in_threadpool(
+                call,
+                BrokerRequest(method="session", token=request.cookies.get(COOKIE, "")).model_dump(),
+            )
+        except AdminError as error:
+            return admin_problem(error.status, error.code)
+        except OSError:
+            return admin_problem(503, "admin_broker_unavailable")
+        if not (assets / filename).is_file():
+            return admin_problem(503, "admin_console_assets_unavailable")
+        return FileResponse(assets / filename)
+
+    @app.get("/admin-api/operators/page/{offset}")
+    async def directory(offset: int, request: Request):
+        return await forward(request, {"method": "console_directory", "offset": offset})
+
+    @app.get("/admin-api/operators/{instance}")
+    async def operator_record(instance: str, request: Request):
+        return await forward(request, {"method": "console_record", "instance": instance})
+
+    @app.get("/admin-api/observations/{section}")
+    async def host_observation(section: str, request: Request):
+        return await forward(request, {"method": "console_observation", "section": section})
+
+    @app.get("/admin-api/operators/{instance}/observations/{section}")
+    async def instance_observation(instance: str, section: str, request: Request):
+        return await forward(
+            request, {"method": "console_observation", "section": section, "instance": instance}
+        )
+
+    @app.get("/admin-api/qualification")
+    async def qualification(request: Request):
+        return await forward(request, {"method": "console_qualification"})
 
     @app.get("/admin-api/operations")
     async def operations(request: Request):
@@ -151,6 +211,10 @@ def create_admin_app(origin, call):
     @app.get("/admin-api/operations/{operation_id}")
     async def operation(operation_id: str, request: Request):
         return await forward(request, {"method": "operation", "operation_id": operation_id})
+
+    @app.get("/admin-api/operation-details/{operation_id}")
+    async def operation_details(operation_id: str, request: Request):
+        return await forward(request, {"method": "console_operation", "operation_id": operation_id})
 
     @app.post("/{action}")
     async def command(action: str, request: Request):
@@ -192,7 +256,9 @@ def create_admin_app(origin, call):
                 payload
                 | {
                     "token": request.cookies.get(COOKIE, ""),
-                    "csrf": request.headers.get("x-epm-admin-csrf", ""),
+                    "csrf": request.cookies.get(CSRF_COOKIE, "")
+                    if request.method == "GET"
+                    else request.headers.get("x-epm-admin-csrf", ""),
                 }
             )
             result = await run_in_threadpool(call, envelope.model_dump())

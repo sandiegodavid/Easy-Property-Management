@@ -7,6 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.modules.hosted_access.application.admin_commands import AccessCommand
+from app.modules.hosted_admin.application.console import HostSection, InstanceSection
 
 
 class AdminError(ValueError):
@@ -61,6 +62,11 @@ class BrokerRequest(BaseModel):
         "operation_list",
         "resume",
         "cancel",
+        "console_directory",
+        "console_record",
+        "console_observation",
+        "console_qualification",
+        "console_operation",
     ]
     token: str = Field(default="", max_length=128)
     csrf: str = Field(default="", max_length=128)
@@ -68,13 +74,15 @@ class BrokerRequest(BaseModel):
     command: CommandRequest | None = None
     operation_id: str | None = Field(default=None, min_length=36, max_length=36)
     expected_revision: int | None = Field(default=None, ge=1)
-    instance: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9-]{0,31}$")
+    instance: str | None = Field(default=None, pattern=r"^[a-z0-9][a-z0-9-]{0,31}$")
+    offset: int = Field(default=0, ge=0, le=950, multiple_of=50)
+    section: HostSection | InstanceSection | None = None
 
     @model_validator(mode="after")
     def coherent(self):
         if (self.method in {"command", "reauthenticate"}) != (self.command is not None):
             raise ValueError("This operation requires exactly its registered command.")
-        if (self.method in {"lookup", "operation", "resume", "cancel"}) != (
+        if (self.method in {"lookup", "operation", "resume", "cancel", "console_operation"}) != (
             self.operation_id is not None
         ):
             raise ValueError("Only lookup accepts an operation identity.")
@@ -82,6 +90,16 @@ class BrokerRequest(BaseModel):
             raise ValueError("Operation controls require the reviewed revision.")
         if self.operation_id is not None and str(UUID(self.operation_id)) != self.operation_id:
             raise ValueError("Canonical lookup identity required.")
-        if (self.method == "source_status") != (self.instance is not None):
+        if (
+            self.method in {"source_status", "console_record"}
+            or (
+                self.method == "console_observation"
+                and self.section in {"access", "runtime", "recovery"}
+            )
+        ) != (self.instance is not None):
             raise ValueError("Only source status accepts an instance selector.")
+        if (self.method == "console_observation") != (self.section is not None):
+            raise ValueError("Observations require a registered section.")
+        if self.method != "console_directory" and self.offset:
+            raise ValueError("Only the directory accepts a page offset.")
         return self

@@ -25,6 +25,10 @@ def public_build_files() -> list[Path]:
 
 def package() -> None:
     files = public_build_files()
+    admin = APPLICATION / "apps/web/dist-admin"
+    admin_files = [admin / name for name in ("admin.js", "admin.css")]
+    if any(not file.is_file() or file.is_symlink() for file in admin_files):
+        raise RuntimeError("Run npm run build:admin before packaging private Admin assets.")
     with TemporaryDirectory(prefix="epm-web-package-") as temporary:
         source = Path(temporary)
         shutil.copy(APPLICATION / "pyproject.toml", source / "pyproject.toml")
@@ -32,8 +36,11 @@ def package() -> None:
         shutil.copytree(
             APPLICATION / "apps/server/app",
             package_root,
-            ignore=shutil.ignore_patterns("__pycache__", "tests", "web_build"),
+            ignore=shutil.ignore_patterns("__pycache__", "tests", "web_build", "admin_build"),
         )
+        (package_root / "admin_build").mkdir()
+        for file in admin_files:
+            shutil.copy(file, package_root / "admin_build" / file.name)
         for file in files:
             destination = (
                 package_root / "web_build" / file.relative_to(APPLICATION / "apps/web/dist")

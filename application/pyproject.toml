@@ -38,6 +38,7 @@ where = ["apps/server"]
 # source maps, environment files, or arbitrary contents of the build directory.
 [tool.setuptools.package-data]
 app = ["web_build/index.html", "web_build/assets/*.js", "web_build/assets/*.css",
+       "admin_build/admin.js", "admin_build/admin.css",
        "web_build/assets/*.svg", "web_build/assets/*.png", "web_build/assets/*.jpg",
        "web_build/assets/*.webp", "web_build/assets/*.ico", "web_build/assets/*.woff2"]
 

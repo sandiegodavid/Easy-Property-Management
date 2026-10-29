@@ -26,6 +26,8 @@ application/logs/
 # Node dependencies and frontend build/check output.
 node_modules/
 application/apps/web/dist/
+application/apps/web/dist-admin/
+application/apps/server/app/admin_build/
 application/packages/*/dist/
 coverage/
 *.tsbuildinfo

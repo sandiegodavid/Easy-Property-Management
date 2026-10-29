@@ -326,13 +326,19 @@ class AuthorityStore:
             connection.execute("DELETE FROM grant")
             self._audit(connection, "identity_restored", "administrator")
 
-    def handle(self, request, dispatch):
+    def handle(self, request, dispatch, console=None):
         if request.method == "login":
             return self.login(request.credential)
         if request.method == "reauthenticate":
             return self.reauthenticate(request)
         if request.method == "command":
             return self.execute(self.admit(request, getattr(dispatch, "prepare", None)), dispatch)
+        if request.method.startswith("console_"):
+            with self.transaction() as connection:
+                identity = dict(self.session(connection, request.token, request.csrf))
+            if console is None:
+                raise AdminError("admin_console_unavailable", 503)
+            return console.handle(request, identity)
         if request.method in {"operation", "operation_list", "resume", "cancel"}:
             with self.transaction() as connection:
                 identity = dict(self.session(connection, request.token, request.csrf))
