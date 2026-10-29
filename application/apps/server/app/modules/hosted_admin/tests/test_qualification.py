@@ -379,3 +379,85 @@ def test_start_cannot_be_reused_to_bypass_resume_authorization(qualification):
         service.command(resume, identity(store), store.issue(resume.fingerprint()))["state"]
         == "running"
     )
+
+
+@pytest.mark.parametrize("abort", [True, False])
+def test_expired_plan_can_retire_with_fresh_cleanup_but_cannot_promote(qualification, abort):
+    service, store, clock, snapshot, reports, plan = qualification
+    service.create(plan, identity(store))
+    service.command(action(service, store, plan, "start"), identity(store))
+    evidence(service, store, reports, plan)
+    original_reports = dict(reports)
+    clock[0] = plan.expires + 1
+    service.snapshot = lambda: snapshot.model_copy(update={"observed": clock[0]})
+    with pytest.raises(AdminError, match="window_invalid"):
+        service.command(action(service, store, plan, "resume"), identity(store))
+    intent = OperationIntent(
+        operation_id=str(uuid4()),
+        target="expired-test",
+        kind="qualification_test",
+        qualification_id=plan.id,
+        expected_revision=0,
+        reason="Expired test must stay blocked",
+    )
+    with pytest.raises(AdminError, match="not_running"):
+        OperationEngine(store).reserve(
+            intent, allocation(plan), identity(store), admit_check=service.admission_check
+        )
+    if abort:
+        service.command(action(service, store, plan, "abort"), identity(store))
+    with pytest.raises(AdminError, match="evidence_incomplete"):
+        service.command(action(service, store, plan, "retire"), identity(store))
+    evidence(service, store, reports, plan, {"retirement"}, expires=clock[0] + 300)
+    with pytest.raises(AdminError, match="evidence_incomplete"):
+        service.command(action(service, store, plan, "retire"), identity(store))
+    evidence(service, store, reports, plan, {"restoration"}, expires=clock[0] + 300, passed=False)
+    with pytest.raises(AdminError, match="evidence_incomplete"):
+        service.command(action(service, store, plan, "retire"), identity(store))
+    clock[0] += 1
+    evidence(service, store, reports, plan, {"restoration"}, expires=clock[0] + 300)
+    retire = action(service, store, plan, "retire")
+    result = service.command(retire, identity(store))
+    assert result["state"] == "retired" and result["ceiling"] == 2
+    assert service.command(retire, identity(store)) == result
+    with pytest.raises(AdminError, match="evidence_incomplete"):
+        service.command(action(service, store, plan, "promote"), identity(store))
+    assert all(reports[key] == value for key, value in original_reports.items())
+    with store.transaction() as connection:
+        assert connection.execute("SELECT count(*) FROM qualification_evidence").fetchone()[0] == (
+            len(REQUIRED_EVIDENCE) + 3
+        )
+        assert connection.execute("SELECT ceiling,revision FROM capacity").fetchone()[:] == (2, 1)
+
+
+@pytest.mark.parametrize("kind", sorted(REQUIRED_EVIDENCE - {"retirement", "restoration"}))
+def test_expired_plan_cannot_register_new_test_evidence(qualification, kind):
+    service, store, clock, _, reports, plan = qualification
+    service.create(plan, identity(store))
+    service.command(action(service, store, plan, "start"), identity(store))
+    clock[0] = plan.expires + 1
+    with pytest.raises(AdminError, match="evidence_stale"):
+        evidence(service, store, reports, plan, {kind}, expires=clock[0] + 300)
+
+
+def test_latest_cleanup_failure_blocks_older_pass_and_reports_remain_immutable(qualification):
+    service, store, clock, _, reports, plan = qualification
+    service.create(plan, identity(store))
+    service.command(action(service, store, plan, "start"), identity(store))
+    evidence(service, store, reports, plan, {"retirement", "restoration"})
+    clock[0] += 1
+    evidence(service, store, reports, plan, {"retirement"}, passed=False)
+    with pytest.raises(AdminError, match="evidence_incomplete"):
+        service.command(action(service, store, plan, "retire"), identity(store))
+    latest = next(reversed(reports.values()))
+    assert service.register(latest.id, identity(store))["registered"]
+    reports[latest.id] = latest.model_copy(update={"passed": True})
+    with pytest.raises(AdminError, match="evidence_conflict"):
+        service.register(latest.id, identity(store))
+    with store.transaction() as connection:
+        for sql in (
+            "DELETE FROM qualification_evidence",
+            "UPDATE qualification_evidence SET passed=1",
+        ):
+            with pytest.raises(sqlite3.IntegrityError):
+                connection.execute(sql)

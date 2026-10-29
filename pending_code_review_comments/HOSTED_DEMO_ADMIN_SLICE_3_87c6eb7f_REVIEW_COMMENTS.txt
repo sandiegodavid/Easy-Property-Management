@@ -4,7 +4,7 @@ Review date: 2026-10-28
 SPECIFICATION — Qualification cleanup and retirement
 
 1. [P2] Permit verified retirement after the qualification test window expires.
-Status: still open
+Status: resolved (2026-10-28)
 File: application/apps/server/app/modules/hosted_admin/infrastructure/qualification.py:130-134
 Related: application/apps/server/app/modules/hosted_admin/infrastructure/qualification.py:214-219, 275-281
 Design: docs/hosting/design/HOSTED_DEMO_ADMIN_DESIGN.md:317-320
@@ -15,7 +15,11 @@ Separate the authorization window for running tests from the validity window for
 
 Reproduced with the existing qualification fixtures: after advancing the clock past plan.expires and supplying a fresh capacity snapshot, retire returns admin_qualification_evidence_incomplete; registering fresh retirement evidence returns admin_qualification_evidence_stale.
 
+Resolution: Retirement/restoration evidence now has its own validity window and can be registered for running or aborted plans after test expiry. Fresh cleanup reports append immutable history under new IDs; retirement uses the latest observed report per kind (registration order breaks ties), rechecks its protected artifact and requires both current passed reports plus verified capacity restoration. Test admission/resume and non-cleanup evidence remain bounded by the original window; promotion still requires all current evidence. Regression tests cover expired running/aborted plans, missing/failed cleanup, refreshed cleanup, immutable evidence, receipt retries and blocked promotion.
+
 STANDARDS
 No additional actionable findings.
 
-Validation: focused hosted_admin, hosted_access and admin launcher tests: 253 passed, 1 skipped. No live host deployment or qualification performed.
+Original review validation: focused hosted_admin, hosted_access and admin launcher tests: 253 passed, 1 skipped. No live host deployment or qualification performed.
+
+Fix validation (2026-10-28): focused hosted_admin suite: 106 passed. Ruff check and format --check passed for all three changed Python files; git diff --check passed. No live host deployment or qualification performed.

@@ -12,6 +12,7 @@ from app.modules.hosted_admin.application.qualification import (
 
 MAX_PLANS = 100
 FRESH_SECONDS = 300
+CLEANUP_EVIDENCE = frozenset({"retirement", "restoration"})
 
 
 class QualificationService:
@@ -127,11 +128,8 @@ class QualificationService:
                 raise AdminError("admin_qualification_not_running", 409)
             if (
                 evidence.environment_hash != plan.environment_hash
-                or not plan.starts
-                <= evidence.observed
-                <= self.store.clock()
-                < evidence.expires
-                <= plan.expires
+                or not plan.starts <= evidence.observed <= self.store.clock() < evidence.expires
+                or (evidence.kind not in CLEANUP_EVIDENCE and evidence.expires > plan.expires)
             ):
                 raise AdminError("admin_qualification_evidence_stale", 409)
             values = (
@@ -145,8 +143,9 @@ class QualificationService:
                 int(evidence.passed),
             )
             existing = connection.execute(
-                "SELECT * FROM qualification_evidence WHERE qualification_id=? AND kind=?",
-                (plan.id, evidence.kind),
+                "SELECT * FROM qualification_evidence WHERE id=? OR "
+                "(qualification_id=? AND kind=? AND kind NOT IN ('retirement','restoration'))",
+                (evidence.id, plan.id, evidence.kind),
             ).fetchone()
             if existing:
                 if tuple(existing) != values:
@@ -213,7 +212,7 @@ class QualificationService:
             return "running"
         if action == "retire" and state in {"running", "aborted"}:
             self._fresh(snapshot)
-            self._evidence(connection, plan, {"retirement", "restoration"})
+            self._evidence(connection, plan, CLEANUP_EVIDENCE)
             if not snapshot.test_resources_retired or not snapshot.baseline_restored:
                 raise AdminError("admin_qualification_restoration_pending", 409)
             return "retired"
@@ -249,7 +248,12 @@ class QualificationService:
 
     def _evidence(self, connection, plan, kinds):
         rows = connection.execute(
-            "SELECT * FROM qualification_evidence WHERE qualification_id=?", (plan.id,)
+            "SELECT e.* FROM qualification_evidence e WHERE qualification_id=? "
+            "AND NOT EXISTS (SELECT 1 FROM qualification_evidence newer "
+            "WHERE newer.qualification_id=e.qualification_id AND newer.kind=e.kind "
+            "AND (newer.observed>e.observed OR "
+            "(newer.observed=e.observed AND newer.rowid>e.rowid)))",
+            (plan.id,),
         ).fetchall()
         valid = set()
         for row in rows:

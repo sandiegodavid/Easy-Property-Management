@@ -61,9 +61,11 @@ CREATE TRIGGER qualification_intent_immutable BEFORE UPDATE OF id,request_hash,p
 CREATE TABLE qualification_evidence (
  id TEXT PRIMARY KEY, qualification_id TEXT NOT NULL REFERENCES qualification(id),
  kind TEXT NOT NULL, digest TEXT NOT NULL, environment_hash TEXT NOT NULL,
- observed REAL NOT NULL, expires REAL NOT NULL, passed INTEGER NOT NULL CHECK(passed IN (0,1)),
- UNIQUE(qualification_id,kind)
+ observed REAL NOT NULL, expires REAL NOT NULL, passed INTEGER NOT NULL CHECK(passed IN (0,1))
 ) STRICT;
+CREATE UNIQUE INDEX qualification_test_evidence ON qualification_evidence(qualification_id,kind)
+ WHERE kind NOT IN ('retirement','restoration');
+CREATE INDEX qualification_evidence_history ON qualification_evidence(qualification_id,kind,observed);
 CREATE TRIGGER evidence_no_update BEFORE UPDATE ON qualification_evidence BEGIN SELECT RAISE(ABORT,'immutable evidence'); END;
 CREATE TRIGGER evidence_no_delete BEFORE DELETE ON qualification_evidence BEGIN SELECT RAISE(ABORT,'immutable evidence'); END;
 CREATE TABLE qualification_receipt (

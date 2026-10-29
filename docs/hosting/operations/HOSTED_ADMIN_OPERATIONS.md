@@ -129,12 +129,22 @@ window/environment/capacity. Resume requires fresh authorization. Abort preserve
 failed evidence and reservations; it cannot reactivate anything.
 
 Retire requires independently verified test retirement and A/B restoration.
+The test authorization window limits running tests, not cleanup: a running or
+aborted plan can register fresh retirement/restoration evidence and retire after
+that window expires. Cleanup reports remain immutable history; a fresh report
+uses a new ID. The latest observed report for each cleanup kind (latest registered
+on a timestamp tie) must pass, remain unexpired, match the plan environment and
+still verify against its protected artifact. An expired or failed report cannot
+be reused in place of fresh cleanup verification. Other evidence must still fall
+within the original test window; cleanup does not authorize test resumption.
 Promotion additionally requires passed load, isolation, recovery, revocation,
 mount-failure, reboot and rollout evidence, all current for the exact environment;
 no conflicting live plan; restored ordinary services on the tested profile;
 current physical headroom; and a fresh grant bound to the exact promotion command.
 The ceiling changes to three atomically with its audit and immutable receipt.
 Failed evidence stays failed; use a new reviewed plan for another qualification.
+Retiring an expired plan does not promote it: promotion still requires all test
+evidence to be current, alongside fresh cleanup evidence and the existing checks.
 No command provisions C, invites testers, restarts A/B or changes VM size itself.
 
 ## Trusted measurement/evidence input
@@ -208,6 +218,7 @@ business access, revives a session or silently promotes capacity.
 | Recovery | Credential-free projection round trip; imported unfinished work remains paused and administrator disabled; no old sessions, automatic jobs or capacity grants restored |
 | Authority | Root-only qualification RPC denies operator and HTTP peers; session/CSRF/revision checks protect status/control routes; fresh action authorization is required after identity revocation |
 | Evidence/capacity | Unknown/stale inventory, insufficient memory/disk, duplicate tester identities, failed/expired/tampered/missing evidence, wrong environment, missing restoration and unqualified ordinary C all fail closed |
+| Cleanup after expiry | Expiry blocks test admission/resume and new test evidence; abort retains the plan until fresh retirement/restoration reports verify. Missing/failed cleanup blocks retirement, new immutable cleanup reports permit retirement, and expired test evidence still blocks promotion. Latest failed cleanup cannot fall back to an older pass; report mutation/deletion is rejected |
 | Query bound | Recent operations use one limited control-store projection; exact operation lookup loads only that operation/its fixed steps; neither read fans out to providers/workspaces |
 | Browser boundary | Existing isolated private sign-in keyboard/reload/logout, credential privacy, expiration/revocation and transport-denial tests remain the focused browser regression; management/progress UI is Slice 4 |
 
