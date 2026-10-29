@@ -1,0 +1,21 @@
+Review: commit 87c6eb7f — HOSTED_DEMO_ADMIN_DESIGN.md, Slice 3
+Review date: 2026-10-28
+
+SPECIFICATION — Qualification cleanup and retirement
+
+1. [P2] Permit verified retirement after the qualification test window expires.
+Status: still open
+File: application/apps/server/app/modules/hosted_admin/infrastructure/qualification.py:130-134
+Related: application/apps/server/app/modules/hosted_admin/infrastructure/qualification.py:222-228, 281-288
+Design: docs/hosting/design/HOSTED_DEMO_ADMIN_DESIGN.md:317-320
+
+All evidence, including retirement/restoration evidence, must expire no later than plan.expires. Retirement then requires evidence that is still unexpired. Once the test window ends, previously registered cleanup evidence cannot authorize retirement and fresh cleanup evidence cannot be registered. Aborting does not escape this state: aborted plans retain their budget and block conflicting qualifications/promotion. Thus a test that overruns its window or needs recovery afterward cannot be closed through the supported commands, even after independently verified cleanup and A/B restoration.
+
+Separate the authorization window for running tests from the validity window for cleanup evidence. Allow fresh, independently verified retirement/restoration evidence after test expiry, without allowing expired plans to resume tests or bypass promotion requirements. Add a regression covering expiry, abort, verified cleanup and successful retirement; also verify missing/failed cleanup evidence remains blocked.
+
+Reproduced with the existing qualification fixtures: after advancing the clock past plan.expires and supplying a fresh capacity snapshot, retire returns admin_qualification_evidence_incomplete; registering fresh retirement evidence returns admin_qualification_evidence_stale.
+
+STANDARDS
+No additional actionable findings.
+
+Validation: focused hosted_admin, hosted_access and admin launcher tests: 253 passed, 1 skipped. No live host deployment or qualification performed.
