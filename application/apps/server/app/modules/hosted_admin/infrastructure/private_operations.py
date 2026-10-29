@@ -63,7 +63,8 @@ class PrivateOperationRequest(BaseModel):
 
 
 class PrivateOperations:
-    def __init__(self, authority, qualification, dispatch):
+    def __init__(self, authority, qualification, dispatch, provisioning=None):
+        self.provisioning = provisioning
         self.authority, self.qualification, self.dispatch = authority, qualification, dispatch
         self.engine = OperationEngine(authority)
 
@@ -101,17 +102,23 @@ class PrivateOperations:
 
     def run(self, identifier):
         operation = self.engine.get(identifier)
-        if operation["kind"] != "source":
+        if operation["kind"] != "source" and self.provisioning is None:
             raise AdminError("admin_effect_adapter_not_installed", 409)
-        self.engine.run(identifier, SourceEffect(self.dispatch))
+        self.engine.run(
+            identifier,
+            SourceEffect(self.dispatch) if operation["kind"] == "source" else self.provisioning,
+        )
         return self.engine.get(identifier)
 
     def stop(self, identifier, expected_revision, identity):
         operation = self.engine.get(identifier)
-        if operation["kind"] != "source":
+        if operation["kind"] != "source" and self.provisioning is None:
             raise AdminError("admin_effect_adapter_not_installed", 409)
         self.engine.cancel(identifier, expected_revision, identity)
-        self.engine.finish_cancel(identifier, SourceEffect(self.dispatch))
+        self.engine.finish_cancel(
+            identifier,
+            SourceEffect(self.dispatch) if operation["kind"] == "source" else self.provisioning,
+        )
         return self.engine.get(identifier)
 
     def resume_grant(self, identifier):

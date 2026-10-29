@@ -70,6 +70,7 @@ class AccessStatus(BaseModel):
     admin_fence: int = Field(ge=0)
     generation: int = Field(ge=0)
     active: bool
+    identity_approved: bool = False
     binding_matches_configuration: bool
     enrollments: list[EnrollmentReference] = Field(max_length=MAX_ENROLLMENTS)
 

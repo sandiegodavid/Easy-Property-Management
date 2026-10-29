@@ -30,6 +30,7 @@ export type Operator = {
   hostname: string;
   release: string;
   profile: string;
+  setup_id?: string | null;
   access: Observation<Access>;
   runtime: Observation<Runtime>;
   recovery: Observation<Recovery>;

@@ -18,6 +18,7 @@ import {
   type OperationList,
 } from "./reads";
 import "./style.css";
+import { SetupPage } from "./setup";
 
 function ReadState({ read }: { read: Read<unknown> }) {
   if (read.expired)
@@ -189,13 +190,13 @@ function DirectoryPage() {
     <>
       <div className="heading">
         <h1>Operators</h1>
-        <button disabled aria-describedby="creation-gate">
+        <a className="button" href="/setups/new" aria-describedby="creation-gate">
           Add operator
-        </button>
+        </a>
       </div>
       <p id="creation-gate">
-        Operator creation is not enabled in this read-only delivery. Provisioning and qualification
-        gates remain in force.
+        Save an operator setup while capacity is unresolved. Creating an instance requires fresh
+        qualification, resource and Access-seat checks.
       </p>
       <HostSummary />
       <Panel title="Qualification">
@@ -296,10 +297,18 @@ function OperatorDetails({ instance }: { instance: string }) {
           </a>
         </p>
       )}
-      <p className="notice">
-        Read-only observations. Enrollment approval, invitation, renewal and activation are not
-        enabled here. Access enabled is not an onboarding acceptance claim.
-      </p>
+      {item?.setup_id ? (
+        <p>
+          <a className="button" href={`/setups/${item.setup_id}`}>
+            Resume operator setup
+          </a>
+        </p>
+      ) : (
+        <p className="notice">
+          Read-only observations. Enrollment approval, invitation, renewal and activation are not
+          enabled here. Access enabled is not an onboarding acceptance claim.
+        </p>
+      )}
       <div className="grid">
         <Panel title="Access">
           <Observed read={access}>
@@ -523,7 +532,9 @@ function App() {
   const path = window.location.pathname.split("/");
   const [dark, setDark] = useState(window.matchMedia("(prefers-color-scheme: dark)").matches);
   const content =
-    path[1] === "qualification" ? (
+    path[1] === "setups" ? (
+      <SetupPage id={path[2]} />
+    ) : path[1] === "qualification" ? (
       <>
         <h1>Qualification plan</h1>
         <Panel title="Private qualification">
@@ -554,6 +565,9 @@ function App() {
         </a>
         <a href="/operations" aria-current={path[1] === "operations" ? "page" : undefined}>
           Operations
+        </a>
+        <a href="/setups" aria-current={path[1] === "setups" ? "page" : undefined}>
+          Operator setups
         </a>
         <a href="/qualification" aria-current={path[1] === "qualification" ? "page" : undefined}>
           Qualification plan

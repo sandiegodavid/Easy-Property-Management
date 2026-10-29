@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import stat
+import tempfile
 
 from app.modules.hosted_admin.application.contracts import AdminError
 from app.modules.hosted_admin.application.operations import canonical
@@ -82,6 +83,39 @@ class VerifiedReports:
 
     def snapshot(self):
         return CapacitySnapshot.model_validate(self.report("capacity"))
+
+    def publish(self, identifier, payload):
+        """Private verifier output only; never exposed by the broker vocabulary."""
+        if not re.fullmatch(r"[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}", identifier):
+            raise AdminError("admin_verifier_identity_invalid", 400)
+        pinned = json.loads(self._read(self.directory / "verifier.json", MAX_REPORT_BYTES))
+        key = self._read(self.directory / "verifier.key", 128)
+        if len(key) < 32 or set(pinned) != {"verifier_digest"}:
+            raise AdminError("admin_verifier_signature_invalid", 409)
+        unsigned = {
+            "payload": payload,
+            "verifier_digest": pinned["verifier_digest"],
+            "inventory_digest": self.inventory_digest(),
+        }
+        encoded = canonical(
+            unsigned | {"signature": hmac.digest(key, canonical(unsigned).encode(), "sha256").hex()}
+        ).encode()
+        if len(encoded) > MAX_REPORT_BYTES:
+            raise AdminError("admin_verifier_artifact_too_large", 413)
+        descriptor, temporary = tempfile.mkstemp(dir=self.directory, prefix=".verification-")
+        try:
+            with os.fdopen(descriptor, "wb") as stream:
+                stream.write(encoded)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, self.directory / f"{identifier}.json")
+            directory = os.open(self.directory, os.O_RDONLY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        finally:
+            Path(temporary).unlink(missing_ok=True)
 
     def evidence(self, identifier):
         report = QualificationEvidence.model_validate(self.report(identifier))

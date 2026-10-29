@@ -284,8 +284,8 @@ class QualificationService:
         if not kinds <= valid:
             raise AdminError("admin_qualification_evidence_incomplete", 409)
 
-    def admission_check(self, connection, intent, reservations):
-        snapshot = self.snapshot()
+    def admission_check(self, connection, intent, reservations, *, snapshot=None):
+        snapshot = snapshot or self.snapshot()
         self._fresh(snapshot)
         required = {
             "hostname",
@@ -350,14 +350,18 @@ class QualificationService:
                 raise AdminError("admin_qualification_budget_exceeded", 409)
         else:
             reserved = connection.execute(
-                "SELECT count(*) FROM operation WHERE kind='provision' AND state!='cancelled'"
+                "SELECT count(*) FROM operation o WHERE o.kind='provision' AND NOT EXISTS (SELECT 1 FROM reservation r WHERE r.operation_id=o.id AND r.kind='hostname' AND r.identity IN (SELECT value FROM json_each(?)))",
+                (json.dumps(snapshot.retained_hostnames),),
             ).fetchone()[0]
             if snapshot.active_count + reserved >= capacity["ceiling"]:
                 raise AdminError("admin_capacity_unqualified", 409)
         # Per-operation physical limits include all retained reservations. A
         # qualification bypasses only the ordinary count ceiling, never capacity.
         totals = dict(
-            connection.execute("SELECT kind,sum(amount) FROM reservation GROUP BY kind").fetchall()
+            connection.execute(
+                "SELECT r.kind,sum(r.amount) FROM reservation r WHERE NOT EXISTS (SELECT 1 FROM reservation h WHERE h.operation_id=r.operation_id AND h.kind='hostname' AND h.identity IN (SELECT value FROM json_each(?))) GROUP BY r.kind",
+                (json.dumps(snapshot.retained_hostnames),),
+            ).fetchall()
         )
         memory = (
             snapshot.memory_committed

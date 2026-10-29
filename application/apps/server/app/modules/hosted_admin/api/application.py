@@ -92,6 +92,9 @@ def create_admin_app(origin, call, assets=None):
     @app.get("/operations/{operation_id}")
     @app.get("/qualification")
     @app.get("/discrepancies")
+    @app.get("/setups")
+    @app.get("/setups/new")
+    @app.get("/setups/{draft_id}")
     async def home(request: Request):
         if not console_route(request.url.path):
             return admin_problem(404, "admin_request_invalid")
@@ -203,6 +206,22 @@ def create_admin_app(origin, call, assets=None):
     async def qualification(request: Request):
         return await forward(request, {"method": "console_qualification"})
 
+    @app.get("/admin-api/setup-options")
+    async def setup_options(request: Request):
+        return await forward(request, {"method": "setup_options"})
+
+    @app.get("/admin-api/setup-drafts")
+    async def setup_list(request: Request):
+        return await forward(request, {"method": "setup_list"})
+
+    @app.get("/admin-api/setup-drafts/{draft_id}")
+    async def setup_get(draft_id: str, request: Request):
+        return await forward(request, {"method": "setup_get", "draft_id": draft_id})
+
+    @app.get("/admin-api/setup-status/{draft_id}")
+    async def setup_status(draft_id: str, request: Request):
+        return await forward(request, {"method": "setup_status", "draft_id": draft_id})
+
     @app.get("/admin-api/operations")
     async def operations(request: Request):
         return await forward(request, {"method": "operation_list"})
@@ -228,6 +247,7 @@ def create_admin_app(origin, call, assets=None):
             "operation": "operation",
             "resume": "resume",
             "cancel": "cancel",
+            "setup-command": "setup_command",
         }
         if action not in methods or request.headers.get("content-type") != "application/json":
             return admin_problem(400, "admin_request_invalid")
@@ -244,6 +264,7 @@ def create_admin_app(origin, call, assets=None):
                 "operation_id",
                 "instance",
                 "expected_revision",
+                "setup",
             }:
                 raise ValueError()
         except ValueError:
@@ -264,7 +285,10 @@ def create_admin_app(origin, call, assets=None):
             result = await run_in_threadpool(call, envelope.model_dump())
             response = JSONResponse(
                 {key: value for key, value in result.items() if key != "token"},
-                status_code=202 if envelope.method in {"resume", "cancel"} else 200,
+                status_code=202
+                if envelope.method in {"resume", "cancel"}
+                or (envelope.setup and envelope.setup.action == "create")
+                else 200,
             )
             if envelope.method == "login":
                 response.set_cookie(

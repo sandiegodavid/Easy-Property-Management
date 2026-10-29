@@ -61,9 +61,17 @@ def rpc(path, payload):
 
 class Broker:
     def __init__(
-        self, authority, admin_uid, dispatch, peer=peer_uid, operations=None, console=None
+        self,
+        authority,
+        admin_uid,
+        dispatch,
+        peer=peer_uid,
+        operations=None,
+        console=None,
+        setup=None,
     ):
         self.console = console
+        self.setup = setup
         self.operations = operations
         if admin_uid == 0:
             raise AdminError("admin_http_must_be_unprivileged", 503)
@@ -85,7 +93,7 @@ class Broker:
                 result = self._private(payload)
             else:
                 request = BrokerRequest.model_validate(payload)
-                result = self.authority.handle(request, self.dispatch, self.console)
+                result = self.authority.handle(request, self.dispatch, self.console, self.setup)
             send(connection, {"result": result})
         except AdminError as error:
             send(connection, {"error": error.code, "status": error.status})

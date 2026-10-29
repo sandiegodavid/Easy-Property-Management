@@ -3,6 +3,7 @@
 Repository delivery, October 28, 2026. This is not a live deployment, A/B
 re-acceptance, third-operator qualification or permission to change tunnel policy.
 Use the existing [private installation and launcher](HOSTED_ADMIN_AUTHORITY.md).
+Slice 5 extends this read foundation with the [operator setup workflow](HOSTED_ADMIN_PROVISIONING.md).
 
 ## Pages and scope
 
@@ -21,10 +22,12 @@ Use the existing [private installation and launcher](HOSTED_ADMIN_AUTHORITY.md).
   remains unregistered/unqualified. Exact runtime/configuration checks appear in
   the corresponding registered detail. No automatic adoption, deletion or repair.
 
-Add operator is visibly disabled with an explanation. There are no browser
-approval, activation, invitation, renew, cancel/resume or resource-mutation
-controls in this slice. Use the source-owned private operation procedure where
-already supported. Provisioning and lifecycle/recovery completion remain Slices 5–6.
+Add operator now opens the Slice 5 setup workflow. It permits acknowledged drafts
+while creation remains subject to qualification, capacity and provider-seat gates.
+See the provisioning runbook for identity approval, invitations, safe stop/resume
+and private pre-enrollment recovery verification. Activation, renewal, approved-binding
+recovery and onboarding completion remain Slice 6. The observation pages below
+remain read-only; opening them does not dispatch a command.
 
 ## Observations and limits
 

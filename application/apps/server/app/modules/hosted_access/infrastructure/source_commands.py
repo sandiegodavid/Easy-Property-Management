@@ -57,6 +57,7 @@ class AccessCommands:
             ).mappings()
             return AccessStatus(
                 **state(row),
+                identity_approved=row["subject"] is not None,
                 binding_matches_configuration=(
                     row["binding_digest"] == deployment_fingerprint(self.store.deployment)
                 ),

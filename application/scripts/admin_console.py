@@ -1,6 +1,7 @@
 """Private Admin composition. Install beside the protected Slice 1 inventory tools."""
 
 import argparse
+from getpass import getpass
 from dataclasses import asdict
 from functools import partial
 import json
@@ -13,7 +14,8 @@ import stat
 import signal
 import subprocess
 import sys
-from uuid import NAMESPACE_URL, uuid5
+from uuid import NAMESPACE_URL, UUID, uuid5
+from types import SimpleNamespace
 
 from app.modules.hosted_access.application.admin_commands import (
     AccessCommand,
@@ -29,11 +31,25 @@ from app.modules.hosted_admin.infrastructure.qualification import QualificationS
 from app.modules.hosted_admin.infrastructure.verified_reports import VerifiedReports
 from app.modules.hosted_admin.infrastructure.console import ConsoleReads
 from app.modules.hosted_admin.application.operations import fingerprint
+from app.modules.hosted_admin.infrastructure.setup import SetupService, SetupWorker
+from app.modules.hosted_admin.infrastructure.provisioning import (
+    ProvisioningHost,
+    ProvisioningDependencies,
+)
+from app.modules.hosted_admin.infrastructure.linux_provisioning import LinuxProvisioning
+from app.modules.hosted_admin.infrastructure.pre_enrollment import PreEnrollmentRecovery
 
 if __package__:
     from .admin_observations import HostConsoleInventory
-    from .host_admin import HostPaths, HostDiscovery, lock_host, protected, read_json
-    from .host_inventory import HostInventory, InventoryError
+    from .host_admin import (
+        HostPaths,
+        HostDiscovery,
+        lock_host,
+        protected,
+        read_json,
+        publish_baseline as save_baseline,
+    )
+    from .host_inventory import HostInventory, InventoryError, Instance
 else:
     directory = Path(__file__).absolute().parent
     for item in (
@@ -47,8 +63,15 @@ else:
         if info.st_uid != 0 or info.st_mode & 0o022 or stat.S_ISLNK(info.st_mode):
             raise SystemExit("Install the Admin tooling in a protected root-owned directory.")
     sys.path.insert(0, str(directory))
-    from host_admin import HostPaths, HostDiscovery, lock_host, protected, read_json
-    from host_inventory import HostInventory, InventoryError
+    from host_admin import (
+        HostPaths,
+        HostDiscovery,
+        lock_host,
+        protected,
+        read_json,
+        publish_baseline as save_baseline,
+    )
+    from host_inventory import HostInventory, InventoryError, Instance
     from admin_observations import HostConsoleInventory
 
 
@@ -136,6 +159,8 @@ class SourceRunner:
                 ).fetchone():
                     raise AdminError("admin_private_maintenance_pending", 409)
             if command.action not in {"disable", "revoke"}:
+                if hasattr(self, "grant_check"):
+                    self.grant_check(payload["instance"])
                 HostDiscovery(self.paths).source_command_ready(
                     self.inventory.get(payload["instance"])
                 )
@@ -265,8 +290,10 @@ def parser():
             "revoke-identity",
             "restore-identity",
             "operations",
+            "verify-pre-enrollment",
         ),
     )
+    value.add_argument("--operation")
     value.add_argument("--identity")
     value.add_argument("--port", type=int)
     return value
@@ -299,6 +326,62 @@ def private_request(action, path):
     return False
 
 
+def compose(authority, paths, inventory):
+    dispatch = SourceRunner(paths, inventory)
+    reports = VerifiedReports(
+        paths.control / "qualification-reports",
+        lambda: fingerprint([asdict(item) for item in inventory.list()]),
+    )
+    qualification = QualificationService(authority, reports.snapshot, reports.evidence)
+    discovery = HostDiscovery(paths)
+    platform = LinuxProvisioning(
+        SimpleNamespace(
+            paths=paths,
+            inventory=inventory,
+            source=dispatch,
+            discovery=discovery,
+            read_json=read_json,
+            protected=protected,
+            lock_host=lock_host,
+            save_baseline=save_baseline,
+            instance_type=Instance,
+        ),
+        source_process,
+    )
+    provisioning = ProvisioningHost(
+        ProvisioningDependencies(
+            authority,
+            dispatch,
+            discovery,
+            qualification,
+            reports,
+            platform,
+        )
+    )
+    setup = SetupService(authority, provisioning)
+    dispatch.grant_check = provisioning.check_grant
+    worker = SetupWorker(setup)
+    operations = PrivateOperations(authority, qualification, dispatch, provisioning)
+    console = ConsoleReads(authority, HostConsoleInventory(dispatch, discovery, reports))
+    return SimpleNamespace(
+        setup=setup,
+        reports=reports,
+        platform=platform,
+        dispatch=dispatch,
+        worker=worker,
+        operations=operations,
+        console=console,
+    )
+
+
+def verify_pre_enrollment(services, operation):
+    if not operation or str(UUID(operation)) != operation:
+        raise AdminError("admin_operation_identity_required", 422)
+    return PreEnrollmentRecovery(services.setup, services.reports, services.platform).verify(
+        operation, getpass("Pre-enrollment recovery passphrase: ")
+    )
+
+
 def main():
     args = parser().parse_args()
     path = "/run/epm-admin/broker.sock"
@@ -328,20 +411,26 @@ def main():
     http = pwd.getpwnam("epm-admin-http")
     if any(pwd.getpwnam(instance.user).pw_uid == http.pw_uid for instance in inventory.list()):
         raise AdminError("admin_http_identity_not_isolated", 503)
-    dispatch = SourceRunner(paths, inventory)
-    reports = VerifiedReports(
-        paths.control / "qualification-reports",
-        lambda: fingerprint([asdict(item) for item in inventory.list()]),
-    )
-    qualification = QualificationService(authority, reports.snapshot, reports.evidence)
-    operations = PrivateOperations(authority, qualification, dispatch)
-    console = ConsoleReads(authority, HostConsoleInventory(dispatch, HostDiscovery(paths), reports))
+    services = compose(authority, paths, inventory)
+    if args.action == "verify-pre-enrollment":
+        result = verify_pre_enrollment(services, args.operation)
+        print(json.dumps(result))
+        services.console.close()
+        return
+    worker = services.worker
+    worker.start()
     try:
-        Broker(authority, http.pw_uid, dispatch, operations=operations, console=console).serve(
-            path, http.pw_gid
-        )
+        Broker(
+            authority,
+            http.pw_uid,
+            services.dispatch,
+            operations=services.operations,
+            console=services.console,
+            setup=services.setup,
+        ).serve(path, http.pw_gid)
     finally:
-        console.close()
+        worker.close()
+        services.console.close()
 
 
 if __name__ == "__main__":

@@ -293,8 +293,11 @@ main() {
   cp -X "$application/scripts/stage_schema_resources.py" "$application/scripts/verify_installation.py" "$bundle/"
   cp -X "$application/scripts/epm-release-vm.sh" "$bundle/release-vm.sh"
   cp -X "$application/scripts/release_demo.py" "$bundle/release_demo.py"
+  mkdir "$bundle/admin-seed"
+  cp -X "$application/demo/seed.py" "$application/demo/dataset.json" "$bundle/admin-seed/"
   mkdir "$bundle/admin-tools"
   cp -X "$application/scripts/host_admin.py" "$application/scripts/host_inventory.py" \
+    "$application/scripts/admin_console.py" "$application/scripts/admin_observations.py" \
     "$application/scripts/release_cleanup.py" "$application/scripts/epm-release-vm.sh" \
     "$application/scripts/epm-release-cleanup-vm.sh" "$bundle/admin-tools/"
   printf '%s\n' "$source_commit" > "$bundle/SOURCE_COMMIT.txt"

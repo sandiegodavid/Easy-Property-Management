@@ -121,6 +121,34 @@ def allocation(plan, index=0):
     ]
 
 
+def test_registered_provision_reservations_are_not_counted_twice(qualification):
+    service, store, _, snapshot, _, plan = qualification
+    first = OperationIntent(
+        operation_id=str(uuid4()),
+        kind="provision",
+        target="test-0",
+        expected_revision=0,
+        reason="Retained provision",
+    )
+    OperationEngine(store).reserve(
+        first, allocation(plan, 0), identity(store), admit_check=lambda *_: None
+    )
+    current = snapshot.model_copy(
+        update={"retained_hostnames": [plan.identities[0].hostname], "memory_committed": 6500}
+    )
+    second = first.model_copy(update={"operation_id": str(uuid4()), "target": "test-1"})
+    with store.transaction() as connection:
+        connection.execute("UPDATE capacity SET ceiling=3")
+        service.admission_check(connection, second, allocation(plan, 1), snapshot=current)
+        with pytest.raises(AdminError, match="capacity_unqualified"):
+            service.admission_check(
+                connection,
+                second,
+                allocation(plan, 1),
+                snapshot=current.model_copy(update={"retained_hostnames": []}),
+            )
+
+
 def test_three_test_plan_can_run_without_raising_ordinary_ceiling(qualification):
     service, store, _, _, _, plan = qualification
     created = service.create(plan, identity(store))

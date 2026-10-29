@@ -8,7 +8,7 @@ import shutil
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from app.modules.workspace.domain.models import WORKSPACE_FORMAT_VERSION, WorkspaceManifest
 from app.modules.workspace.infrastructure.sqlite_store import (
@@ -71,11 +71,16 @@ class WorkspaceService:
     def from_local_config(cls, config_path: Path | None) -> "WorkspaceService":
         return cls(load_local_config(config_path))
 
-    def initialize(self) -> WorkspaceManifest:
+    def initialize(self, *, workspace_id: str | None = None) -> WorkspaceManifest:
         """Explicitly create a new workspace or validate the one already at this path."""
         self._validate_external_location()
+        if workspace_id is not None and str(UUID(workspace_id)) != workspace_id:
+            raise WorkspaceError("A canonical workspace identity is required.")
         if self.paths.manifest.exists():
-            return self.open()
+            existing = self.open()
+            if workspace_id is not None and existing.workspace_id != workspace_id:
+                raise WorkspaceError("The workspace identity differs from its reservation.")
+            return existing
 
         if self.paths.root.exists() and any(self.paths.root.iterdir()):
             raise WorkspaceError(
@@ -84,7 +89,7 @@ class WorkspaceService:
             )
 
         manifest = WorkspaceManifest(
-            workspace_id=str(uuid4()),
+            workspace_id=workspace_id or str(uuid4()),
             format_version=WORKSPACE_FORMAT_VERSION,
             created_at=datetime.now(UTC),
             database_path="database/property-management.sqlite",

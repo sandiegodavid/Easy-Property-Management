@@ -1,0 +1,732 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Private Admin setup",
+    "version": "1"
+  },
+  "paths": {},
+  "components": {
+    "schemas": {
+      "SetupData": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "default": "",
+            "maxLength": 100,
+            "title": "Name",
+            "type": "string"
+          },
+          "email": {
+            "default": "",
+            "maxLength": 254,
+            "title": "Email",
+            "type": "string"
+          },
+          "reference": {
+            "default": "",
+            "maxLength": 80,
+            "title": "Reference",
+            "type": "string"
+          },
+          "support": {
+            "default": "",
+            "maxLength": 254,
+            "title": "Support",
+            "type": "string"
+          },
+          "release": {
+            "default": "",
+            "maxLength": 80,
+            "title": "Release",
+            "type": "string"
+          },
+          "template": {
+            "default": "synthetic",
+            "enum": ["synthetic", "empty"],
+            "title": "Template",
+            "type": "string"
+          },
+          "access": {
+            "default": "read_write",
+            "enum": ["read_write", "read_only"],
+            "title": "Access",
+            "type": "string"
+          },
+          "starts": {
+            "default": 0.0,
+            "minimum": 0,
+            "title": "Starts",
+            "type": "number"
+          },
+          "expires": {
+            "default": 0.0,
+            "minimum": 0,
+            "title": "Expires",
+            "type": "number"
+          },
+          "timezone": {
+            "default": "UTC",
+            "maxLength": 80,
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "title": "SetupData",
+        "type": "object"
+      },
+      "SetupCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": ["save", "discard", "create"],
+            "title": "Action",
+            "type": "string"
+          },
+          "draft_id": {
+            "pattern": "^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$",
+            "title": "Draft Id",
+            "type": "string"
+          },
+          "expected_revision": {
+            "minimum": 0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SetupData"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "operation_id": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Operation Id"
+          },
+          "confirmed": {
+            "default": false,
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "review_hash": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Review Hash"
+          }
+        },
+        "required": ["action", "draft_id", "expected_revision"],
+        "title": "SetupCommand",
+        "type": "object"
+      },
+      "AccessStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "admin_revision": {
+            "minimum": 0,
+            "title": "Admin Revision",
+            "type": "integer"
+          },
+          "binding_revision": {
+            "minimum": 0,
+            "title": "Binding Revision",
+            "type": "integer"
+          },
+          "admin_fence": {
+            "minimum": 0,
+            "title": "Admin Fence",
+            "type": "integer"
+          },
+          "generation": {
+            "minimum": 0,
+            "title": "Generation",
+            "type": "integer"
+          },
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "identity_approved": {
+            "default": false,
+            "title": "Identity Approved",
+            "type": "boolean"
+          },
+          "binding_matches_configuration": {
+            "title": "Binding Matches Configuration",
+            "type": "boolean"
+          },
+          "enrollments": {
+            "items": {
+              "$ref": "#/components/schemas/EnrollmentReference"
+            },
+            "maxItems": 16,
+            "title": "Enrollments",
+            "type": "array"
+          }
+        },
+        "required": [
+          "admin_revision",
+          "binding_revision",
+          "admin_fence",
+          "generation",
+          "active",
+          "binding_matches_configuration",
+          "enrollments"
+        ],
+        "title": "AccessStatus",
+        "type": "object"
+      },
+      "EnrollmentReference": {
+        "additionalProperties": false,
+        "properties": {
+          "subject": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Subject",
+            "type": "string"
+          },
+          "received_at": {
+            "minimum": 0,
+            "title": "Received At",
+            "type": "number"
+          }
+        },
+        "required": ["subject", "received_at"],
+        "title": "EnrollmentReference",
+        "type": "object"
+      },
+      "SetupEnrollment": {
+        "additionalProperties": false,
+        "properties": {
+          "approved": {
+            "title": "Approved",
+            "type": "boolean"
+          },
+          "issuer": {
+            "title": "Issuer",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AccessStatus"
+          }
+        },
+        "required": ["approved", "issuer", "email", "status"],
+        "title": "SetupEnrollment",
+        "type": "object"
+      },
+      "SetupOperation": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "provision",
+            "title": "Kind",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "queued",
+              "running",
+              "waiting",
+              "unknown",
+              "failed",
+              "paused",
+              "cancelled",
+              "succeeded"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "cancel_requested": {
+            "enum": [0, 1],
+            "title": "Cancel Requested",
+            "type": "integer"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "created": {
+            "title": "Created",
+            "type": "number"
+          },
+          "updated": {
+            "title": "Updated",
+            "type": "number"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/SetupStep"
+            },
+            "maxItems": 4,
+            "title": "Steps",
+            "type": "array"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StepResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "target",
+          "revision",
+          "state",
+          "cancel_requested",
+          "error",
+          "created",
+          "updated",
+          "steps",
+          "result"
+        ],
+        "title": "SetupOperation",
+        "type": "object"
+      },
+      "SetupStep": {
+        "additionalProperties": false,
+        "properties": {
+          "sequence": {
+            "maximum": 3,
+            "minimum": 0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": ["allocate", "workspace", "provider_setup", "readiness"],
+            "title": "Kind",
+            "type": "string"
+          },
+          "state": {
+            "enum": ["pending", "intent", "verified"],
+            "title": "State",
+            "type": "string"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference"
+          },
+          "checked": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked"
+          }
+        },
+        "required": ["sequence", "kind", "state", "reference", "checked"],
+        "title": "SetupStep",
+        "type": "object"
+      },
+      "SetupView": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "state": {
+            "enum": ["draft", "started", "discarded"],
+            "title": "State",
+            "type": "string"
+          },
+          "saved": {
+            "title": "Saved",
+            "type": "number"
+          },
+          "operation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation Id"
+          },
+          "data": {
+            "$ref": "#/components/schemas/SetupData"
+          },
+          "instance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instance"
+          },
+          "hostname": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hostname"
+          },
+          "operation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SetupOperation"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "enrollment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SetupEnrollment"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "lifecycle": {
+            "anyOf": [
+              {
+                "enum": [
+                  "scheduled",
+                  "awaiting_approval",
+                  "waiting_for_sign_in",
+                  "identity_approved_recovery_pending",
+                  "expired"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Lifecycle"
+          },
+          "invitation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Invitation"
+          },
+          "ready_instructions": {
+            "default": null,
+            "title": "Ready Instructions",
+            "type": "null"
+          },
+          "review_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Review Hash"
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "state",
+          "saved",
+          "operation_id",
+          "data",
+          "instance",
+          "hostname"
+        ],
+        "title": "SetupView",
+        "type": "object"
+      },
+      "StepResult": {
+        "additionalProperties": false,
+        "description": "Safe checkpoint/result projection; never persist raw provider responses.",
+        "properties": {
+          "operation_id": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Operation Id"
+          },
+          "action": {
+            "anyOf": [
+              {
+                "enum": ["approve", "enable", "disable", "revoke", "rebind", "restore_reset"],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Action"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Revision"
+          },
+          "binding_revision": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Binding Revision"
+          },
+          "fence": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Fence"
+          },
+          "generation": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Generation"
+          },
+          "active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Active"
+          },
+          "verified": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Verified"
+          },
+          "done": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Done"
+          },
+          "resource_reference": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9._:-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Resource Reference"
+          },
+          "spec_hash": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Spec Hash"
+          }
+        },
+        "title": "StepResult",
+        "type": "object"
+      },
+      "SetupDirectory": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SetupView"
+            },
+            "maxItems": 100,
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": ["items"],
+        "title": "SetupDirectory",
+        "type": "object"
+      },
+      "SetupOptions": {
+        "additionalProperties": false,
+        "properties": {
+          "releases": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "title": "Releases",
+            "type": "array"
+          },
+          "templates": {
+            "items": {
+              "enum": ["synthetic", "empty"],
+              "type": "string"
+            },
+            "maxItems": 2,
+            "title": "Templates",
+            "type": "array"
+          },
+          "workspace_mib": {
+            "const": 250,
+            "title": "Workspace Mib",
+            "type": "integer"
+          },
+          "file_mib": {
+            "const": 50,
+            "title": "File Mib",
+            "type": "integer"
+          },
+          "backup_policy": {
+            "maxLength": 300,
+            "title": "Backup Policy",
+            "type": "string"
+          }
+        },
+        "required": ["releases", "templates", "workspace_mib", "file_mib", "backup_policy"],
+        "title": "SetupOptions",
+        "type": "object"
+      }
+    }
+  }
+}

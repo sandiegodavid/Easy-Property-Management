@@ -29,7 +29,7 @@ test("overview and operator details show independent facts without granting new 
   });
   const credential = await signIn(page, request);
   await expect(page.getByRole("heading", { name: "Operators", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Add operator", exact: true })).toBeDisabled();
+  await expect(page.getByRole("link", { name: "Add operator", exact: true })).toBeVisible();
   await expect(page.getByRole("region", { name: "Operator directory", exact: true })).toContainText(
     "2 registered operators",
   );

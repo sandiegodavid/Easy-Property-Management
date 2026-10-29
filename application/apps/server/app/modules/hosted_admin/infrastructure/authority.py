@@ -13,6 +13,7 @@ import time
 
 from app.modules.hosted_admin.application.contracts import AdminError
 from app.modules.hosted_admin.infrastructure.operation_schema import SCHEMA as OPERATION_SCHEMA
+from app.modules.hosted_admin.infrastructure.setup_schema import SCHEMA as SETUP_SCHEMA
 from app.modules.hosted_admin.infrastructure.operations import OperationEngine, enqueue
 from app.modules.hosted_admin.application.operations import Observation
 from app.modules.hosted_admin.infrastructure.control_recovery import validate_control
@@ -45,6 +46,7 @@ CREATE TABLE attempts (id INTEGER PRIMARY KEY CHECK(id=1), since REAL NOT NULL, 
 PRAGMA user_version=1;
 """
     + OPERATION_SCHEMA
+    + SETUP_SCHEMA
 )
 
 
@@ -326,7 +328,27 @@ class AuthorityStore:
             connection.execute("DELETE FROM grant")
             self._audit(connection, "identity_restored", "administrator")
 
-    def handle(self, request, dispatch, console=None):
+    def handle(self, request, dispatch, console=None, setup=None):
+        if request.method.startswith("setup_"):
+            from app.modules.hosted_admin.application.setup import (
+                SetupView,
+                SetupOptions,
+                SetupDirectory,
+            )
+
+            with self.transaction() as connection:
+                identity = dict(self.session(connection, request.token, request.csrf))
+            if setup is None:
+                raise AdminError("admin_setup_unavailable", 503)
+            value = setup.handle(request, identity)
+            model = (
+                SetupOptions
+                if request.method == "setup_options"
+                else SetupDirectory
+                if request.method == "setup_list"
+                else SetupView
+            )
+            return model.model_validate(value).model_dump(mode="json", exclude_unset=True)
         if request.method == "login":
             return self.login(request.credential)
         if request.method == "reauthenticate":
@@ -336,9 +358,20 @@ class AuthorityStore:
         if request.method.startswith("console_"):
             with self.transaction() as connection:
                 identity = dict(self.session(connection, request.token, request.csrf))
+                setups = (
+                    {
+                        row["key"]: dict(row)
+                        for row in connection.execute(
+                            "SELECT id,json_extract(data,'$.name') AS name,json_extract(plan,'$.key') AS key FROM setup_draft WHERE state='started' AND identity=? LIMIT 100",
+                            (identity["id"],),
+                        )
+                    }
+                    if request.method in {"console_directory", "console_record"}
+                    else {}
+                )
             if console is None:
                 raise AdminError("admin_console_unavailable", 503)
-            return console.handle(request, identity)
+            return console.handle(request, identity, setups)
         if request.method in {"operation", "operation_list", "resume", "cancel"}:
             with self.transaction() as connection:
                 identity = dict(self.session(connection, request.token, request.csrf))

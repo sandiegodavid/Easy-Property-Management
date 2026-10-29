@@ -39,7 +39,7 @@ class ConsoleReads:
     def close(self):
         self.executor.shutdown(wait=True, cancel_futures=True)
 
-    def handle(self, request, identity):
+    def handle(self, request, identity, setups=None):
         if request.method == "console_qualification":
             return self.qualification()
         if request.method == "console_operation":
@@ -48,6 +48,15 @@ class ConsoleReads:
         if len(records) > 1000 or len({item.key for item in records}) != len(records):
             raise AdminError("admin_inventory_invalid", 503)
         records.sort(key=lambda item: item.key)
+        setups = setups or {}
+        records = [
+            item.model_copy(
+                update={"name": setups[item.key]["name"], "setup_id": setups[item.key]["id"]}
+            )
+            if item.key in setups
+            else item
+            for item in records
+        ]
         if request.method == "console_directory":
             page = records[request.offset : request.offset + PAGE_SIZE]
             return {

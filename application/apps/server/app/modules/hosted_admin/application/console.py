@@ -20,6 +20,9 @@ class RegisteredOperator(ConsoleRecord):
     release: str = Field(max_length=128)
     profile: str = Field(max_length=128)
     registered_revision: int = Field(ge=1)
+    setup_id: str | None = Field(
+        default=None, pattern=r"^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$"
+    )
 
 
 class AccessObservation(ConsoleRecord):

@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse
 def console_route(path):
     return bool(
         re.fullmatch(
-            r"/(?:operators(?:/[a-z0-9][a-z0-9-]{0,31})?|operations(?:/[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12})?|qualification|discrepancies)?",
+            r"/(?:operators(?:/[a-z0-9][a-z0-9-]{0,31})?|operations(?:/[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12})?|setups(?:/new|/[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12})?|qualification|discrepancies)?",
             path,
         )
     )
@@ -26,4 +26,4 @@ def console_page(identity, csrf):
       <button type="submit">Sign out</button></form></header>
       <p class="privacy">Private connection · Signing out does not cancel admitted work.</p>
       <div id="admin-root"></div><noscript><main>Enable JavaScript for asynchronous observations.
-      No management changes can be made from this read-only console.</main></noscript></body></html>''')
+      Use the private terminal launcher if JavaScript is unavailable.</main></noscript></body></html>''')

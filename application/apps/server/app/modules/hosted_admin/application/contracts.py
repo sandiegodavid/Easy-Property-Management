@@ -8,6 +8,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.modules.hosted_access.application.admin_commands import AccessCommand
 from app.modules.hosted_admin.application.console import HostSection, InstanceSection
+from app.modules.hosted_admin.application.setup import SetupCommand
 
 
 class AdminError(ValueError):
@@ -67,6 +68,11 @@ class BrokerRequest(BaseModel):
         "console_observation",
         "console_qualification",
         "console_operation",
+        "setup_options",
+        "setup_list",
+        "setup_get",
+        "setup_status",
+        "setup_command",
     ]
     token: str = Field(default="", max_length=128)
     csrf: str = Field(default="", max_length=128)
@@ -77,9 +83,17 @@ class BrokerRequest(BaseModel):
     instance: str | None = Field(default=None, pattern=r"^[a-z0-9][a-z0-9-]{0,31}$")
     offset: int = Field(default=0, ge=0, le=950, multiple_of=50)
     section: HostSection | InstanceSection | None = None
+    setup: SetupCommand | None = None
+    draft_id: str | None = Field(
+        default=None, pattern=r"^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$"
+    )
 
     @model_validator(mode="after")
     def coherent(self):
+        if (self.method == "setup_command") != (self.setup is not None):
+            raise ValueError("Only setup commands accept setup changes.")
+        if (self.method in {"setup_get", "setup_status"}) != (self.draft_id is not None):
+            raise ValueError("Select exactly one saved setup.")
         if (self.method in {"command", "reauthenticate"}) != (self.command is not None):
             raise ValueError("This operation requires exactly its registered command.")
         if (self.method in {"lookup", "operation", "resume", "cancel", "console_operation"}) != (

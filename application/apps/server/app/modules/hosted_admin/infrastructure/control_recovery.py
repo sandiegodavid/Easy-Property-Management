@@ -21,6 +21,7 @@ TABLES = (
     "operation",
     "operation_step",
     "reservation",
+    "setup_draft",
     "operation_audit",
     "admission",
     "capacity",
@@ -60,7 +61,11 @@ def validate_control(connection):
                 raise AdminError("admin_control_data_invalid", 503)
         else:
             intent = OperationIntent.model_validate(
-                {key: value for key, value in payload.items() if key != "allocation_spec"}
+                {
+                    key: value
+                    for key, value in payload.items()
+                    if key not in {"allocation_spec", "setup"}
+                }
             )
             retained = connection.execute(
                 "SELECT kind,identity,amount FROM reservation WHERE operation_id=? ORDER BY kind",
@@ -119,6 +124,45 @@ def validate_control(connection):
             or canonical(plan.model_dump()) != row["payload"]
         ):
             raise AdminError("admin_control_data_invalid", 503)
+
+    from app.modules.hosted_admin.application.setup import SetupData, SetupPlan
+    from uuid import UUID
+
+    for row in connection.execute("SELECT * FROM setup_draft"):
+        data = SetupData.model_validate_json(row["data"])
+        if (
+            str(UUID(row["id"])) != row["id"]
+            or not row["identity"].strip()
+            or row["saved"] < 0
+            or canonical(data.model_dump()) != row["data"]
+        ):
+            raise AdminError("admin_control_data_invalid", 503)
+        required_audit = (
+            "setup_started"
+            if row["state"] == "started"
+            else "setup_discarded"
+            if row["state"] == "discarded"
+            else "setup_saved"
+        )
+        if not connection.execute(
+            "SELECT 1 FROM audit WHERE reference=? AND action=?", (row["id"], required_audit)
+        ).fetchone():
+            raise AdminError("admin_control_data_invalid", 503)
+        if row["state"] == "started":
+            data.ready()
+            plan = SetupPlan.model_validate_json(row["plan"])
+            if canonical(plan.model_dump()) != row["plan"]:
+                raise AdminError("admin_control_data_invalid", 503)
+            operation = connection.execute(
+                "SELECT payload FROM operation WHERE id=?", (row["operation_id"],)
+            ).fetchone()
+            setup = json.loads(operation[0]).get("setup", {}) if operation else {}
+            if setup != {
+                "draft_id": row["id"],
+                "data": data.model_dump(),
+                "plan": json.loads(row["plan"]),
+            }:
+                raise AdminError("admin_control_data_invalid", 503)
 
 
 def snapshot_control(store):
