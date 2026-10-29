@@ -534,7 +534,8 @@ class Seeder:
         )
 
 
-def prepare(args):
+def prepare(args, *, workspace_id=None):
+    """Journal seed intent before initialization, optionally using a reserved identity."""
     root = args.workspace.expanduser().resolve()
     runtime = root.parent / f"{root.name}-demo-runtime"
     runtime.mkdir(parents=True, exist_ok=True)
@@ -547,14 +548,21 @@ def prepare(args):
             "Destination is populated without a demo journal; choose an empty folder."
         )
     service = WorkspaceService.from_local_config(config)
-    service.initialize()
+    if service.paths.root.resolve() != root:
+        raise RuntimeError("Demo configuration points to a different destination.")
     metadata = runtime / "seed-metadata.json"
     if metadata.exists():
-        as_of = date.fromisoformat(json.loads(metadata.read_text())["asOf"])
+        retained = json.loads(metadata.read_text())
+        if workspace_id is not None and retained.get("workspaceId") != workspace_id:
+            raise RuntimeError("Demo seed identity differs from its reservation.")
+        as_of = date.fromisoformat(retained["asOf"])
     else:
         as_of = args.as_of or datetime.now(ZoneInfo(TIMEZONE)).date()
-        save_json(metadata, {"asOf": as_of.isoformat(), "datasetVersion": 1})
+        identity = {"workspaceId": workspace_id} if workspace_id is not None else {}
+        save_json(metadata, {"asOf": as_of.isoformat(), "datasetVersion": 1, **identity})
+    if not journal.exists():
         save_json(journal, {})
+    service.initialize(workspace_id=workspace_id)
     return service, config, journal, runtime, as_of
 
 

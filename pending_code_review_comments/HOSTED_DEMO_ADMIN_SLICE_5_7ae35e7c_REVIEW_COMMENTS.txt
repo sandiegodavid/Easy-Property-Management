@@ -1,0 +1,26 @@
+Review: commit 7ae35e7c against HOSTED_DEMO_ADMIN_DESIGN.md, Slice 5
+Review date: 2026-10-29
+Status: Reported finding resolved on 2026-10-29. The original review was partial; unreviewed paths have not been assessed here.
+
+SPECIFICATION — Fresh synthetic workspace provisioning
+
+1. [P1] Coordinate reserved workspace initialization with the demo seeder.
+Status: resolved (2026-10-29)
+File: application/apps/server/app/modules/hosted_admin/infrastructure/prepare_workspace.py:17-29
+Related: application/demo/seed.py:545-548
+
+prepare() initializes the reserved workspace before calling the existing demo seed prepare(). The initializer populates the destination but does not create the seed journal. The seeder then rejects that destination with RuntimeError: "Destination is populated without a demo journal; choose an empty folder." This occurs for every fresh default synthetic setup, so provisioning cannot complete the workspace step or reach provider verification and invitation.
+
+Recommendation: coordinate fresh initialization and journal creation through an explicit seed entry point that preserves the reserved workspace UUID and safely resumes partial seeds. Retain the rejection of unrelated populated destinations. Add a focused test invoking the actual preparation helper and installed seed script, including retry, rather than mocking the runuser result.
+
+Evidence: reproduced with prepare() and application/demo/seed.py in a fresh temporary directory, without mocking either initializer. The focused setup, Linux setup, provisioning and pre-enrollment suites passed (34 tests), demonstrating that the current simulated effects do not cover this integration failure.
+
+Resolution: The hosted helper now delegates synthetic initialization to the installed seeder with an explicit reserved workspace UUID. The seeder persists its scenario metadata and journal before initialization, checks reserved identity and configuration consistency on retry, and retains the populated-without-journal rejection. Empty-template initialization remains direct. Five integration regressions exercise the real helper, a copied installed seed script, workspace initialization and domain API writes; they cover interrupted initialization, a lost committed-write response, completed retry identity stability, foreign populated destinations and empty-template retries.
+
+STANDARDS
+No additional confirmed actionable findings before the pause.
+
+Validation checkpoint
+34 focused Python tests passed. Admin Playwright suite was started but stopped before completion to honor the usage threshold; do not treat it as passed. Review of remaining Slice 5 failure/recovery paths is incomplete. No live host operations were performed.
+
+Fix validation (2026-10-29): 39 focused setup/Linux/provisioning/pre-enrollment/preparation tests passed, plus the existing seeded A/B encrypted backup/restore integration test (1 passed). Changed Python Ruff check and format check passed. No frontend code changed or browser suite rerun; no live host operations performed.

@@ -149,6 +149,8 @@ Dates age normally. To refresh an interactive demo, generate into a new empty di
 
 Rerun the same seed command with the same workspace path to resume an interrupted run. Original keyed requests are journaled before submission, and completed steps reuse their recorded results without creating duplicate records.
 
+Seed preparation saves its scenario date and journal before initializing the workspace, so an interruption immediately after initialization can also resume. Hosted Admin passes its reserved workspace UUID through this preparation entry point; the seed metadata and workspace must agree with that reservation on every retry.
+
 The generator refuses a populated destination without its own journal and does not reset or delete a workspace. Keep the sibling runtime directory with its workspace so the journal and scenario catalog remain available. After changing `dataset.json`, use a new empty destination; an existing journal retains its original records.
 
 Use `--local-config` to keep another demo or test fixture's launcher configuration separate:

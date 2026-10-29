@@ -15,7 +15,6 @@ def prepare(config, identifier, template, seed_path=None):
     if os.geteuid() == 0:
         raise ValueError("Workspace preparation must run as its service identity.")
     service = WorkspaceService.from_local_config(config)
-    service.initialize(workspace_id=identifier)
     if template == "synthetic":
         from app.platform.testing_client import LocalApiClient
         from app.bootstrap.api import create_app
@@ -26,7 +25,8 @@ def prepare(config, identifier, template, seed_path=None):
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         _, seed_config, journal, runtime, as_of = module.prepare(
-            SimpleNamespace(workspace=service.paths.root, as_of=date.today())
+            SimpleNamespace(workspace=service.paths.root, as_of=date.today()),
+            workspace_id=identifier,
         )
         plan = json.loads((seed_path.parent / "dataset.json").read_text())
         with LocalApiClient(create_app(seed_config)) as client:
@@ -42,6 +42,8 @@ def prepare(config, identifier, template, seed_path=None):
             seed.inspection()
             seed.rent_follow_up()
             module.save_json(runtime / "catalog.json", {"asOf": as_of.isoformat(), **seed.catalog})
+    else:
+        service.initialize(workspace_id=identifier)
     return service.open(integrity_check=True).workspace_id
 
 

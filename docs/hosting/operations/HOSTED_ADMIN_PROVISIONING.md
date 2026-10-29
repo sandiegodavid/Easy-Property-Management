@@ -90,7 +90,7 @@ The result is **Identity approved · Recovery verification pending · Business a
 | --- | --- |
 | Happy paths | Acknowledged three-step setup; immutable allocation; simulated manual gate/resume; invitation and identity-only approval; private encrypted remote verification |
 | Invalid combinations | Unqualified capacity/release/template/quota, duplicate email, stale assignment/revision, unsafe paths/ownership, wrong provider policy/audience, forged/foreign recovery proof |
-| Retry/idempotency | Original create key/result, lost browser response lookup, preserved input, cross-session draft read, owned-effect retries without reformatting |
+| Retry/idempotency | Original create key/result, lost browser response lookup, preserved input, cross-session draft read, owned-effect retries without reformatting; real installed-seed preparation preserves the reserved workspace UUID and journal across initialization interruptions, lost writes and completed retries |
 | Transaction/rollback | Host reads outside control transaction; admission rechecks revision/authority; operation/draft/reservations roll back together; stop/revocation contains target-only access |
 | Persistence/schema | Exact current setup/plan contracts, retained audit/canonical data, generated private schemas; no compatibility migration |
 | Backup/restore | Actual encrypted remote bytes decrypted and validated; wrong workspace/hash denied; restored control operations stay fenced and credentials are excluded |
