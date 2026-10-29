@@ -6,7 +6,7 @@ SPECIFICATION — Qualification cleanup and retirement
 1. [P2] Permit verified retirement after the qualification test window expires.
 Status: still open
 File: application/apps/server/app/modules/hosted_admin/infrastructure/qualification.py:130-134
-Related: application/apps/server/app/modules/hosted_admin/infrastructure/qualification.py:222-228, 281-288
+Related: application/apps/server/app/modules/hosted_admin/infrastructure/qualification.py:214-219, 275-281
 Design: docs/hosting/design/HOSTED_DEMO_ADMIN_DESIGN.md:317-320
 
 All evidence, including retirement/restoration evidence, must expire no later than plan.expires. Retirement then requires evidence that is still unexpired. Once the test window ends, previously registered cleanup evidence cannot authorize retirement and fresh cleanup evidence cannot be registered. Aborting does not escape this state: aborted plans retain their budget and block conflicting qualifications/promotion. Thus a test that overruns its window or needs recovery afterward cannot be closed through the supported commands, even after independently verified cleanup and A/B restoration.
