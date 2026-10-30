@@ -2,6 +2,8 @@
 
 import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -12,6 +14,7 @@ import pytest
 from scripts.host_admin import HostPaths, protected, read_json
 from app.modules.hosted_admin.application.contracts import AdminError
 from app.modules.hosted_admin.infrastructure import linux_provisioning as linux
+from app.modules.workspace.application.service import WorkspaceService
 
 
 @pytest.fixture
@@ -45,6 +48,7 @@ def platform(tmp_path, monkeypatch):
     monkeypatch.setattr(linux.os, "chown", lambda *_: None)
     monkeypatch.setattr(linux.os, "fchown", lambda *_: None)
     monkeypatch.setattr(linux, "WORKSPACE_BYTES", 4096)
+    monkeypatch.setattr(linux, "validate_root_reserve", lambda _volume: None)
 
     def allocate(fd, _offset, size):
         os.write(fd, b"\0" * size)
@@ -112,6 +116,11 @@ def test_allocate_workspace_and_retries_reuse_owned_resources_without_reformat(p
     assert adapter.inspect(payload, "workspace", config).state == "verified"
     assert sum(argv[0].endswith("useradd") for argv in calls) == 1
     assert sum(argv[0].endswith("mkfs.ext4") for argv in calls) == 1
+    formatter = next(argv for argv in calls if argv[0].endswith("mkfs.ext4"))
+    assert formatter[formatter.index("-m") + 1] == "10"
+    assert (
+        formatter[formatter.index("-E") + 1] == "nodiscard,lazy_itable_init=0,lazy_journal_init=0"
+    )
     assert adapter.h.paths.fstab.read_text().startswith("# preserve existing mounts\n")
     assert all("epm-a" not in " ".join(argv) and "epm-b" not in " ".join(argv) for argv in calls)
 
@@ -168,3 +177,66 @@ def test_containment_uses_owning_disable_before_a_later_restart(platform):
     adapter.h.source._transport.side_effect = transport
     assert adapter.contain(payload)
     assert ["/usr/bin/systemctl", "stop", "epm-hosted@d-test.service"] in calls
+
+
+def test_post_format_sparse_image_and_insufficient_mounted_reserve_fail_closed(
+    platform, monkeypatch
+):
+    adapter, payload, calls, _ = platform
+    original = adapter.run
+
+    def sparse_formatter(argv, **kwargs):
+        result = original(argv, **kwargs)
+        if argv[0].endswith("mkfs.ext4"):
+            with Path(argv[-1]).open("wb") as stream:
+                stream.truncate(linux.WORKSPACE_BYTES)
+        return result
+
+    adapter.run = sparse_formatter
+    with pytest.raises(AdminError, match="allocation_incomplete"):
+        adapter.apply(payload, "allocate", None)
+    # Resume must allocate the missing physical bytes without formatting again.
+    adapter.run = original
+
+    def no_reserve(_volume):
+        raise linux.HostedConfigurationError("insufficient root reserve")
+
+    monkeypatch.setattr(linux, "validate_root_reserve", no_reserve)
+    with pytest.raises(AdminError, match="reserve_incomplete"):
+        adapter.apply(payload, "allocate", None)
+    assert sum(argv[0].endswith("mkfs.ext4") for argv in calls) == 1
+
+
+def test_offline_backup_child_initializes_tempfile_in_pinned_volume(platform):
+    adapter, payload, _, _ = platform
+    adapter.apply(payload, "allocate", None)
+    paths = adapter.paths_for(payload["target"])
+    WorkspaceService.from_local_config(paths["local"]).initialize(
+        workspace_id=payload["setup"]["plan"]["workspace_id"]
+    )
+    original = adapter.run
+
+    def child(argv, **kwargs):
+        if "app.modules.hosted_admin.infrastructure.pre_enrollment_source" not in argv:
+            return original(argv, **kwargs)
+        # Execute the real source entry point in a fresh interpreter with the
+        # adapter's exact environment. Only archive production is replaced;
+        # workspace opening, helper arguments and tempfile initialization are real.
+        program = """
+import os, sys, tempfile
+from pathlib import Path
+from app.modules.hosted_admin.infrastructure import pre_enrollment_source as source
+assert Path(tempfile.gettempdir()) == Path(os.environ['TMPDIR'])
+assert Path(os.environ['TMPDIR']) == Path(sys.argv[2]).parent / 'volume/tmp'
+def backup(deployment, backups, output, phrase):
+    assert phrase == 'synthetic backup phrase'
+    output.write_text('simulated encrypted archive')
+source.create_hosted_backup = backup
+source.main()
+"""
+        return subprocess.run(
+            [sys.executable, "-I", "-c", program, *argv[argv.index("-m") + 2 :]], **kwargs
+        )
+
+    adapter.run = child
+    assert adapter.backup(payload, "synthetic backup phrase").is_file()

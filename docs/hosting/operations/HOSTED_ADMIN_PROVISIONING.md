@@ -100,3 +100,20 @@ The result is **Identity approved · Recovery verification pending · Business a
 Run only the focused `hosted_admin`, source-command, offline-backup/publication and release-tool tests; `npm run test:admin`; changed-file Ruff; frontend lint/format/typecheck and reproducible contract checks. These tests use isolated roots and simulated Linux/provider effects. Actual Linux ownership/mount/systemd behavior, provider setup, load/isolation/reboot/recovery and a live third invitation still require the explicit installation and Slice 7 host qualification. No live acceptance is inferred from these tests.
 
 Validation on October 29, 2026: **243 focused Python tests and 19 Admin Playwright tests passed**. The focused Python set was rerun after resuming the saved implementation (243 passed). Changed Python Ruff checks, frontend lint/format/typecheck, deterministic contract checks and release-script syntax validation passed in the implementation continuation. The final continuation changed documentation only. Linux/provider effects were simulated; no live installation, invitation, activation or capacity promotion was performed.
+
+## Storage and broker regression qualification
+
+New owned ext4 images use the deployment recipe's 10% root reserve with discard and deferred initialization disabled. Provisioning checks physical allocation after formatting and checks the mounted reserve with the same minimum-16-MiB rule as hosted startup. Workspace verification repeats these checks; retries retain the existing filesystem UUID and never reformat it. The private offline backup child receives the pinned `volume/tmp` as `TMPDIR` before Python starts.
+
+The broker accepts at most 16 concurrent connections, with at most four ordinary external effects and two urgent disable/revoke/stop effects. Short status reads and administrator fences do not wait for ordinary effect slots. Saturation returns `admin_broker_busy` (503); check the original operation before retrying a write. SQLite serialization, per-operation worker locks, peer/session authorization and post-effect containment still apply.
+
+The actual ext4/loop-mount regression is deliberately opt-in. On an approved disposable root Linux qualification host with loop-mount capability, e2fsprogs and the test environment installed, run from `application/`:
+
+```bash
+sudo env EPM_RUN_LINUX_VOLUME_QUALIFICATION=1 .venv/bin/python -m pytest \
+  apps/server/app/modules/hosted_admin/tests/test_linux_volume_qualification.py -q
+```
+
+This allocates one disposable 250 MiB image under `/var/lib`, formats and mounts it with the qualified options, runs the complete hosted storage validator as an unprivileged UID, and unmounts/removes its resources. It does not touch inventory, systemd, fstab or providers. It is skipped on macOS and in ordinary runs without explicit opt-in; a skipped run is not Linux qualification evidence.
+
+Review follow-up validation, October 29, 2026: **185 focused Python tests passed; one opt-in Linux qualification test skipped on macOS**. This includes real Unix RPC tests of status, authority revocation and urgent disable during blocked effects, plus a fresh-interpreter test of the offline backup helper environment. Changed Python Ruff check/format and diff whitespace validation passed. No frontend changes or live host operations occurred.

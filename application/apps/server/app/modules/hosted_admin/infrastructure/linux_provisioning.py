@@ -19,6 +19,8 @@ from app.modules.hosted_access.application.admin_commands import (
     AccessStatus,
     AccessResult,
 )
+from app.modules.hosted_access.application.configuration import HostedConfigurationError
+from app.modules.hosted_access.infrastructure.storage_budget import validate_root_reserve
 
 WORKSPACE_BYTES = 250 * 1024 * 1024
 
@@ -201,6 +203,10 @@ class LinuxProvisioning:
         if info.st_size != WORKSPACE_BYTES or info.st_blocks * 512 < WORKSPACE_BYTES:
             raise AdminError("admin_volume_allocation_incomplete", 409)
         self.h.discovery._mount(paths["volume"], paths["image"])
+        try:
+            validate_root_reserve(paths["volume"])
+        except HostedConfigurationError as error:
+            raise AdminError("admin_volume_reserve_incomplete", 409) from error
         self.h.protected(paths["volume"] / "tmp", self.h.paths, identity.pw_uid, regular=False)
 
     def apply(self, payload, step, config):
@@ -285,9 +291,24 @@ class LinuxProvisioning:
             check=False,
         )
         if result.returncode == 2 and not result.stdout.strip():
-            self.call(["/usr/sbin/mkfs.ext4", "-q", "-U", desired, str(image)])
+            self.call(
+                [
+                    "/usr/sbin/mkfs.ext4",
+                    "-q",
+                    "-m",
+                    "10",
+                    "-E",
+                    "nodiscard,lazy_itable_init=0,lazy_journal_init=0",
+                    "-U",
+                    desired,
+                    str(image),
+                ]
+            )
         elif result.returncode or result.stdout.strip() != desired:
             raise AdminError("admin_volume_identity_conflict", 409)
+        info = image.stat()
+        if info.st_size != WORKSPACE_BYTES or info.st_blocks * 512 < WORKSPACE_BYTES:
+            raise AdminError("admin_volume_allocation_incomplete", 409)
 
     def mount(self, payload):
         paths = self.paths_for(payload["target"])
@@ -452,7 +473,12 @@ class LinuxProvisioning:
             capture_output=True,
             timeout=180,
             check=False,
-            env={"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "PYTHONDONTWRITEBYTECODE": "1"},
+            env={
+                "PATH": "/usr/bin:/bin",
+                "LANG": "C.UTF-8",
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "TMPDIR": str(paths["volume"] / "tmp"),
+            },
             cwd="/",
         )
         if (

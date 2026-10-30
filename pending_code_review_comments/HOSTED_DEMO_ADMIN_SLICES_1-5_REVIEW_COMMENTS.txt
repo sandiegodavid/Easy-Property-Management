@@ -22,7 +22,7 @@ Resolution: The hosted helper now delegates synthetic initialization to the inst
 SPECIFICATION — Linux storage provisioning
 
 2. [P1] Use the qualified ext4 formatting options for newly allocated images.
-Status: still open
+Status: resolved (2026-10-29)
 File: /Users/dcai/Desktop/My Apps/Easy-Property-Management/application/apps/server/app/modules/hosted_admin/infrastructure/linux_provisioning.py:287-288
 Related: /Users/dcai/Desktop/My Apps/Easy-Property-Management/application/apps/server/app/modules/hosted_access/infrastructure/storage_budget.py:109-112
 Existing required recipe: /Users/dcai/Desktop/My Apps/Easy-Property-Management/docs/hosting/deployment/GOOGLE_CLOUD_DEMO_DEPLOYMENT.md:244-253
@@ -31,10 +31,12 @@ image() invokes mkfs.ext4 without the existing qualified -m 10 -E nodiscard,lazy
 
 Reuse the qualified formatting recipe for new owned images and verify physical allocation and root reserve after formatting and mounting. Preserve filesystem UUID/ownership checks and never reformat an existing filesystem during retry. Add Linux qualification coverage that exercises the actual formatter and hosted storage validator.
 
+Resolution (2026-10-29): Newly owned images use -m 10 -E nodiscard,lazy_itable_init=0,lazy_journal_init=0. Physical allocation is checked immediately after formatting; allocation/workspace verification checks the mounted reserve through the same 16 MiB validator used by hosted startup. Existing UUID/ownership and no-reformat behavior remain. Regressions cover exact arguments, sparse formatting, insufficient reserve, and retry without reformatting. An opt-in root Linux test exercises the actual formatter, loop mount and complete unprivileged hosted storage validator; it is skipped on this Mac, so live Linux qualification is not claimed.
+
 SPECIFICATION — Pre-enrollment recovery
 
 3. [P1] Give the offline backup subprocess the pinned instance TMPDIR.
-Status: still open
+Status: resolved (2026-10-29)
 File: /Users/dcai/Desktop/My Apps/Easy-Property-Management/application/apps/server/app/modules/hosted_admin/infrastructure/linux_provisioning.py:450-455
 Related: /Users/dcai/Desktop/My Apps/Easy-Property-Management/application/apps/server/app/modules/hosted_admin/infrastructure/pre_enrollment_source.py:38
 Related: /Users/dcai/Desktop/My Apps/Easy-Property-Management/application/apps/server/app/modules/hosted_access/infrastructure/operations.py:32
@@ -44,10 +46,12 @@ backup() replaces the child environment with PATH, LANG and PYTHONDONTWRITEBYTEC
 
 Include the server-owned instance volume/tmp in the child environment and verify it reaches the source process before tempfile initializes. Add a regression at this subprocess/source-helper boundary; the current pre-enrollment tests substitute platform.backup() and miss the required environment.
 
+Resolution (2026-10-29): The backup subprocess environment now includes the server-owned volume/tmp TMPDIR before interpreter startup. A fresh isolated interpreter executes the real pre-enrollment source entry point and workspace validation using the adapter environment, asserting both TMPDIR and tempfile.gettempdir(); only archive production is substituted.
+
 SPECIFICATION — Broker responsiveness and authority fencing
 
 4. [P1] Keep status and urgent authority fences available during slow commands.
-Status: still open
+Status: resolved (2026-10-29)
 File: /Users/dcai/Desktop/My Apps/Easy-Property-Management/application/apps/server/app/modules/hosted_admin/infrastructure/broker.py:146-154
 Related: /Users/dcai/Desktop/My Apps/Easy-Property-Management/application/apps/server/app/modules/hosted_admin/infrastructure/authority.py:386-387
 Requirement: /Users/dcai/Desktop/My Apps/Easy-Property-Management/docs/hosting/design/HOSTED_DEMO_ADMIN_DESIGN.md:263-265
@@ -58,8 +62,13 @@ A transport-level reproduction used the real Broker.serve, AuthorityStore, Priva
 
 Use bounded concurrent handling or a separate admission/control lane so slow effects do not occupy the only RPC accept loop. Preserve database serialization, worker locking and current fencing checks. Add a Unix-socket regression that holds a source effect open while status and revocation/disable are serviced, then verifies containment before a fenced grant can be reported successful.
 
+Resolution (2026-10-29): The Unix server now bounds concurrent connections to 16, ordinary external effects to 4, and urgent disable/revoke/stop effects to 2. Known short status/authority fences bypass effect limits; saturation rejects with a safe 503 rather than queuing behind slow effects. Authentication, SQLite transactions, per-operation locks and source fences are unchanged. Real Broker.serve Unix-socket regressions hold source effects open (including a full ordinary lane), service status/revocation and urgent disable, and prove the older approval is contained with no successful result.
+
 STANDARDS
 No separate actionable documented-standard or code-smell findings were established. The Linux integration defects discovered during that check are reported above against the actual storage/recovery contracts.
 
 VALIDATION
 373 focused Python tests passed: 235 hosted_admin/launcher/inventory/helper tests and 138 source-command/lifecycle/storage/release/reset/cleanup tests. All 19 Admin Playwright tests passed, including the Slice 4 stalled-read regressions. The browser fixtures simulate provisioning effects; the Linux reserve and backup environment gaps are established from the installed command/environment and owning runtime validators, not from a live Linux run. No implementation changes or live VM/provider operations were performed. Earlier resolved Slice 1–4 findings retain their dated resolution records in their existing review files; they are not repeated as open findings here. This file consolidates the still-open Slice 5 finding and the new findings from this broader review.
+
+FIX VALIDATION — 2026-10-29, findings 2–4 only
+185 focused Python tests passed (182 Admin/storage/offline-backup/launcher tests plus 3 real Unix-socket concurrency tests). One explicit root Linux formatter/mount qualification test was skipped on macOS; run it on the approved disposable Linux qualification host before claiming Linux proof. All seven changed Python files passed Ruff check and Ruff format --check; git diff --check passed. No frontend code changed, so no browser suite was rerun. No production host, provider or registered-instance operations were performed.

@@ -20,6 +20,7 @@ from app.modules.hosted_access.domain.models import HostedAccessError
 from app.modules.hosted_access.infrastructure.storage_budget import (
     build_storage_budget,
     _mount_identity,
+    validate_root_reserve,
 )
 
 
@@ -27,6 +28,22 @@ def facts(**changes):
     return replace(
         StorageFacts(WORKSPACE_BYTES, 220 * MIB, 30 * 1024 * MIB, 20 * 1024 * MIB, 10000), **changes
     )
+
+
+@pytest.mark.parametrize("reserve_mib", [15, 16, 25])
+def test_runtime_and_provisioning_share_the_minimum_root_reserve(monkeypatch, reserve_mib):
+    from app.modules.hosted_access.infrastructure import storage_budget
+
+    monkeypatch.setattr(
+        storage_budget.os,
+        "statvfs",
+        lambda _: Mock(f_bfree=100 * 1024, f_bavail=(100 - reserve_mib) * 1024, f_frsize=1024),
+    )
+    if reserve_mib < 16:
+        with pytest.raises(HostedConfigurationError, match="reserve at least 16 MiB"):
+            validate_root_reserve(Path("/disposable-volume"))
+    else:
+        validate_root_reserve(Path("/disposable-volume"))
 
 
 def test_reserves_all_three_copies_and_serializes_concurrent_capacity():

@@ -17,6 +17,15 @@ from app.modules.hosted_access.application.configuration import (
 from app.modules.hosted_access.application.storage_budget import HostedStorageBudget, StorageFacts
 
 SECTOR_BYTES = 512
+MIN_ROOT_RESERVE_BYTES = 16 * 1024 * 1024
+
+
+def validate_root_reserve(volume):
+    usage = os.statvfs(volume)
+    if (usage.f_bfree - usage.f_bavail) * usage.f_frsize < MIN_ROOT_RESERVE_BYTES:
+        raise HostedConfigurationError(
+            "The volume must reserve at least 16 MiB for root-only recovery."
+        )
 
 
 def _unescape(value):
@@ -106,11 +115,7 @@ def validate_storage_volume(deployment, workspace_root):
         raise HostedConfigurationError(
             "Administrative recovery state must remain outside the quota volume."
         )
-    usage = os.statvfs(volume)
-    if (usage.f_bfree - usage.f_bavail) * usage.f_frsize < 16 * 1024 * 1024:
-        raise HostedConfigurationError(
-            "The volume must reserve at least 16 MiB for root-only recovery."
-        )
+    validate_root_reserve(volume)
     return volume, image
 
 
