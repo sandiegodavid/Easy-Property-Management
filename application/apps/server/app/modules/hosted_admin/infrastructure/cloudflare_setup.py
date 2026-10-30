@@ -86,3 +86,32 @@ class CloudflareSetup:
         ):
             raise AdminError("admin_provider_enforcement_unverified", 409)
         return {"application": app["id"], "audience": app["aud"]}
+
+    def verify_denial(self, hostname, audience):
+        """Verify a manual deny-all policy, retaining the protected application.
+
+        Deleting the Access application is not denial: it could expose the
+        tunnel origin. No write credential or browser assertion is accepted.
+        """
+        apps = self.api("?" + urlencode({"domain": hostname, "per_page": 100}))
+        exact = [item for item in apps if item.get("domain") == hostname]
+        if len(exact) != 1 or exact[0].get("type") != "self_hosted":
+            raise AdminError("admin_provider_denial_unverified", 409)
+        app = exact[0]
+        import re
+
+        if app.get("aud") != audience or not re.fullmatch(r"[a-f0-9-]{36}", app.get("id", "")):
+            raise AdminError("admin_provider_denial_unverified", 409)
+        policies = self.api(f"/{app['id']}/policies?per_page=100")
+        if (
+            len(policies) != 1
+            or policies[0].get("decision") != "deny"
+            or policies[0].get("include") != [{"everyone": {}}]
+            or policies[0].get("exclude")
+            or policies[0].get("require")
+        ):
+            raise AdminError("admin_provider_denial_unverified", 409)
+        status, headers, _ = self.request(f"https://{hostname}/", {})
+        if status != 403 or not headers.get("cf-ray", headers.get("CF-Ray")):
+            raise AdminError("admin_provider_denial_unverified", 409)
+        return {"application": app["id"], "audience": audience}

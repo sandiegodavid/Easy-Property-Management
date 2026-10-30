@@ -7,7 +7,7 @@ import math
 import re
 from uuid import uuid4
 
-from sqlalchemy import MetaData, Table, select, update
+from sqlalchemy import MetaData, Table, select, update, func
 
 from app.modules.hosted_access.application.admin_commands import (
     MAX_ENROLLMENTS,
@@ -49,7 +49,16 @@ class AccessCommands:
 
     def administrative_status(self) -> AccessStatus:
         with self.store.engine.connect() as connection:
-            row = connection.execute(select(self.store.operator)).mappings().one()
+            approval = (
+                select(func.max(self.audit.c.recorded_at))
+                .where(self.audit.c.action.in_(("approve", "rebind", "renew")))
+                .scalar_subquery()
+            )
+            row = (
+                connection.execute(select(self.store.operator, approval.label("approved_at")))
+                .mappings()
+                .one()
+            )
             candidates = connection.execute(
                 select(self.store.enrollment.c.subject, self.store.enrollment.c.received_at)
                 .order_by(self.store.enrollment.c.received_at, self.store.enrollment.c.subject)
@@ -58,6 +67,8 @@ class AccessCommands:
             return AccessStatus(
                 **state(row),
                 identity_approved=row["subject"] is not None,
+                approved_subject=row["subject"],
+                approved_at=row["approved_at"],
                 binding_matches_configuration=(
                     row["binding_digest"] == deployment_fingerprint(self.store.deployment)
                 ),
@@ -104,9 +115,20 @@ class AccessCommands:
                     active=False,
                     binding_revision=row["binding_revision"] + 1,
                 )
-            if command.action == "enable":
+            if command.action in {"enable", "complete_onboarding"}:
                 values["active"] = True
-            if command.action in {"disable", "revoke", "rebind"}:
+            if command.action in {"renew", "replace_email"}:
+                replacement = self.replacement(command)
+                values.update(
+                    active=False,
+                    binding_revision=row["binding_revision"] + 1,
+                    binding_digest=deployment_fingerprint(replacement),
+                    email=replacement.allowed_email,
+                )
+                if command.action == "replace_email":
+                    values["subject"] = None
+                    connection.execute(self.store.enrollment.delete())
+            if command.action in {"disable", "revoke", "rebind", "renew", "replace_email"}:
                 values.update(
                     generation=row["generation"] + 1,
                     not_before=now.timestamp(),
@@ -171,10 +193,21 @@ class AccessCommands:
         if command.action in {"disable", "revoke"}:
             return  # Containment remains possible with expired/broken business data.
         deployment = self.store.deployment
-        if not deployment.enabled_at <= now < deployment.expires_at:
+        if (
+            command.action not in {"renew", "replace_email"}
+            and not deployment.enabled_at <= now < deployment.expires_at
+        ):
             raise denied("hosted_admin_window_invalid")
         if row["binding_digest"] != deployment_fingerprint(deployment):
             raise denied("hosted_admin_binding_changed")
+        if command.action in {"renew", "replace_email"}:
+            replacement = self.replacement(command)
+            if replacement.expires_at <= now:
+                raise denied("hosted_admin_window_invalid")
+            if command.action == "replace_email" and (
+                row["active"] or replacement.allowed_email == deployment.allowed_email
+            ):
+                raise denied("hosted_replacement_requires_disabled_access")
         if command.action in {"approve", "rebind"}:
             candidate = (
                 connection.execute(
@@ -195,10 +228,49 @@ class AccessCommands:
                 command.action == "approve" and row["subject"] not in {None, command.subject}
             ):
                 raise denied()
-        if command.action == "enable":
-            if row["subject"] is None or self.activation_check is None:
+        if command.action in {"enable", "complete_onboarding"}:
+            if row["subject"] is None:
                 raise denied("hosted_recovery_required")
-            self.activation_check(connection, row, command, now)
+            if command.activation is not None:
+                self._activation(connection, row, command, now)
+            elif self.activation_check is not None:
+                self.activation_check(connection, row, command, now)
+            else:
+                raise denied("hosted_recovery_required")
+
+    def _activation(self, connection, row, command, now):
+        proof = command.activation
+        approved = connection.scalar(
+            select(func.max(self.audit.c.recorded_at)).where(
+                self.audit.c.action.in_(("approve", "rebind", "renew"))
+            )
+        )
+        if (
+            proof.evidence_id != command.evidence_id
+            or proof.acceptance_id != command.acceptance_id
+            or proof.workspace_id != row["workspace_id"]
+            or proof.binding_revision != row["binding_revision"]
+            or proof.subject != row["subject"]
+            or proof.deployment_digest != row["binding_digest"]
+            or approved is None
+            or proof.verified_at < approved
+            or not 0 <= now.timestamp() - proof.verified_at < 86400
+            or proof.expires <= now.timestamp()
+        ):
+            raise denied("hosted_recovery_required")
+
+    def replacement(self, command):
+        from app.modules.hosted_access.application.configuration import HostedDeployment
+
+        values = self.store.deployment.model_dump(mode="json")
+        if command.action == "renew":
+            values.update(
+                enabled_at=datetime.fromtimestamp(command.starts, UTC).isoformat(),
+                expires_at=datetime.fromtimestamp(command.expires, UTC).isoformat(),
+            )
+        else:
+            values["allowed_email"] = command.replacement_email
+        return HostedDeployment.model_validate(values)
 
     def validate_retained(self):
         """Reconstruct every audited authorization transition and match the retained tip."""
@@ -281,9 +353,22 @@ class AccessCommands:
             }
         ):
             raise ValueError()
-        fenced = action in {"disable", "revoke", "rebind", "restore_reset"}
-        bound = action in {"approve", "rebind", "restore_reset"}
-        active = True if action == "enable" else False if action != "revoke" else before["active"]
+        fenced = action in {
+            "disable",
+            "revoke",
+            "rebind",
+            "restore_reset",
+            "renew",
+            "replace_email",
+        }
+        bound = action in {"approve", "rebind", "restore_reset", "renew", "replace_email"}
+        active = (
+            True
+            if action in {"enable", "complete_onboarding"}
+            else False
+            if action != "revoke"
+            else before["active"]
+        )
         if after != {
             "admin_revision": before["admin_revision"] + 1,
             "binding_revision": before["binding_revision"] + int(bound),

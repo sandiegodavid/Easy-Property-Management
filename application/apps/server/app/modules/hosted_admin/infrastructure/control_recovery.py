@@ -24,6 +24,10 @@ TABLES = (
     "setup_draft",
     "operation_audit",
     "admission",
+    "recovery_handoff",
+    "recovery_report",
+    "onboarding_completion",
+    "recovery_attention",
     "capacity",
     "qualification",
     "qualification_evidence",
@@ -36,6 +40,48 @@ MAX_SNAPSHOT_BYTES = 16 * 1024 * 1024
 def validate_control(connection):
     if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
         raise AdminError("admin_control_data_invalid", 503)
+    from app.modules.hosted_admin.application.recovery import RecoveryBinding, RecoveryReport
+
+    for row in connection.execute("SELECT * FROM recovery_handoff"):
+        binding = RecoveryBinding.model_validate_json(row["binding"])
+        if canonical(binding.model_dump()) != row["binding"] or binding.instance != row["instance"]:
+            raise AdminError("admin_control_data_invalid", 503)
+        if not connection.execute(
+            "SELECT 1 FROM audit WHERE action='recovery_handoff_created' AND reference=?",
+            (row["id"],),
+        ).fetchone():
+            raise AdminError("admin_control_data_invalid", 503)
+    for row in connection.execute(
+        "SELECT r.*,h.binding FROM recovery_report r JOIN recovery_handoff h ON h.id=r.handoff_id"
+    ):
+        report = RecoveryReport.model_validate_json(row["payload"])
+        if (
+            report.id != row["id"]
+            or report.handoff_id != row["handoff_id"]
+            or canonical(report.binding.model_dump()) != row["binding"]
+            or canonical(report.model_dump()) != row["payload"]
+        ):
+            raise AdminError("admin_control_data_invalid", 503)
+        if not connection.execute(
+            "SELECT 1 FROM audit WHERE action='recovery_report_registered' AND reference=?",
+            (row["id"],),
+        ).fetchone():
+            raise AdminError("admin_control_data_invalid", 503)
+    for row in connection.execute(
+        "SELECT c.*,a.payload,r.payload AS evidence FROM onboarding_completion c JOIN admission a ON a.id=c.operation_id JOIN recovery_report r ON r.id=c.report_id"
+    ):
+        command, report = (
+            json.loads(row["payload"]),
+            RecoveryReport.model_validate_json(row["evidence"]),
+        )
+        if (
+            command["action"] != "complete_onboarding"
+            or command["evidence_id"] != row["report_id"]
+            or command["acceptance_id"] != row["report_id"]
+            or report.state != "verified"
+            or report.handoff_id != row["handoff_id"]
+        ):
+            raise AdminError("admin_control_data_invalid", 503)
     for row in connection.execute("SELECT * FROM operation"):
         payload = json.loads(row["payload"])
         if canonical(payload) != row["payload"] or fingerprint(payload) != row["request_hash"]:

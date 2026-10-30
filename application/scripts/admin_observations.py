@@ -14,8 +14,9 @@ from app.modules.hosted_admin.application.console import (
 
 
 class HostConsoleInventory:
-    def __init__(self, source, discovery, reports):
+    def __init__(self, source, discovery, reports, recovery=None):
         self.source, self.discovery, self.reports = source, discovery, reports
+        self.recovery = recovery
 
     def records(self):
         return [
@@ -54,8 +55,8 @@ class HostConsoleInventory:
             return self.access(instance)
         if section == "runtime":
             return self.runtime(instance)
-        # Slice 6 installs the independent recovery-verifier registry. A local
-        # file, an old acceptance doc or a recent upload is not verification.
+        if section == "recovery" and self.recovery is not None:
+            return self.recovery.observation(instance)
         raise AdminError("admin_recovery_observation_unavailable", 503)
 
     def access(self, key):

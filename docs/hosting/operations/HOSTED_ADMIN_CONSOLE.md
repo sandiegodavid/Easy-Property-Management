@@ -66,8 +66,11 @@ reservation headroom, not measured free RAM. Missing measured memory or Access-s
 readings remain unknown. Tunnel process and boot enablement are separate observations
 of `epm-cloudflared.service`; neither proves public Access enforcement or reboot
 acceptance. Local archive, off-host read-back, restore drill and approved-binding
-verification are distinct contracts. Until Slice 6 installs their trusted registry,
-they remain unverified; no file timestamp is promoted into recovery proof.
+verification are distinct contracts. Slice 6 installs their trusted registry and
+exposes policy state and original successful times, including after failed attempts.
+Use **Recovery needs attention** to filter this directory page, then open the
+operator's private checklist. Follow the [lifecycle runbook](HOSTED_ADMIN_LIFECYCLE.md);
+no file timestamp is promoted into recovery proof.
 
 ## Build and installation
 

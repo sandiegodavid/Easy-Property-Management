@@ -28,7 +28,7 @@ MAX_SESSIONS = 32
 
 
 class SQLiteHostedSessionStore:
-    def __init__(self, deployment: HostedDeployment):
+    def __init__(self, deployment: HostedDeployment, *, administration=False):
         self.deployment = deployment
         path = deployment.administration_database
         if not path.is_file() or path.is_symlink():
@@ -60,7 +60,19 @@ class SQLiteHostedSessionStore:
             validate_schema(connection)
             revisions = connection.execute(select(metadata.tables["alembic_version"])).all()
             operator = connection.execute(select(self.operator)).mappings().one_or_none()
-        if revisions != [(REVISION,)] or not self._matches(operator):
+        matches = self._matches(operator)
+        if administration and operator is not None:
+            # The private source runner may reconcile a fenced email cutover
+            # between its atomic access receipt and config-file publication.
+            matches = all(
+                operator[key] == value
+                for key, value in {
+                    "id": str(deployment.operator_id),
+                    "workspace_id": str(deployment.workspace_id),
+                    "issuer": deployment.identity_issuer,
+                }.items()
+            )
+        if revisions != [(REVISION,)] or not matches:
             raise HostedAccessError(
                 "hosted_store_invalid", "Hosted access binding is invalid.", 503
             )

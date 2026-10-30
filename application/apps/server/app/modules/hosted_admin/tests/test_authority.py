@@ -445,3 +445,14 @@ def test_native_rate_limit_and_broker_outage_are_visible_without_private_details
     response = offline.post("/sign-in", data={"credential": "not-logged"}, headers=headers)
     assert response.status_code == 503 and "Private administration is unavailable" in response.text
     assert "private socket path" not in response.text and "not-logged" not in response.text
+
+
+def test_root_assisted_command_admission_requires_exact_grant_and_preserves_retry(authority):
+    store, _ = authority
+    cmd = command()
+    with pytest.raises(AdminError, match="grant_invalid"):
+        store.private_admit(cmd, "not-a-grant", lambda _key: {})
+    original = store.private_admit(cmd, store.issue(cmd.fingerprint()), lambda _key: {})
+    assert store.private_admit(cmd, "consumed", lambda _key: {}) == original
+    with pytest.raises(AdminError, match="command_conflict"):
+        store.private_admit(cmd.model_copy(update={"reason": "changed"}), "", lambda _key: {})

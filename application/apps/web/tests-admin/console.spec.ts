@@ -40,7 +40,7 @@ test("overview and operator details show independent facts without granting new 
   await expect(page.getByText("Remaining Access seats: Unknown.", { exact: false })).toBeVisible();
   await expect(
     page.getByRole("region", { name: "Recovery availability", exact: true }),
-  ).toContainText("Not verified");
+  ).toContainText("Last verified off-host read-back: Not verified");
   await page.screenshot({ path: test.info().outputPath("overview.png"), fullPage: true });
   await page.getByRole("link", { name: "Operator A", exact: true }).click();
   await expect(page).toHaveURL(`${origin}/operators/a`);
@@ -61,6 +61,70 @@ test("overview and operator details show independent facts without granting new 
   expect(await page.evaluate(() => Object.keys(localStorage))).toEqual([]);
   expect(await page.evaluate(() => Object.keys(sessionStorage))).toEqual([]);
   expect(writes).toEqual(["/sign-in"]);
+});
+
+test("recovery attention includes enabled operators and retains successful point history", async ({
+  page,
+  request,
+}) => {
+  await page.route("**/admin-api/operators/page/0", async (route) => {
+    const response = await route.fetch();
+    const data = (await response.json()) as { items: { key: string; recovery: object }[] };
+    for (const item of data.items) {
+      item.recovery = {
+        state: "available",
+        data: {
+          policy_state: item.key === "a" ? "failed" : "verified",
+          off_host_readback: 1793322000,
+          acknowledged: false,
+        },
+      };
+    }
+    await route.fulfill({ json: data });
+  });
+  await signIn(page, request);
+  const summary = page.getByRole("region", { name: "Recovery availability", exact: true });
+  await expect(summary).toContainText("Operator A: Failed");
+  await expect(summary).not.toContainText("Not verified");
+  await page.getByLabel("Show operators on this page").selectOption("recovery");
+  const directory = page.getByRole("region", { name: "Operator directory", exact: true });
+  await expect(directory.getByRole("link", { name: "Operator A", exact: true })).toBeVisible();
+  await expect(directory.getByRole("link", { name: "Operator B", exact: true })).toHaveCount(0);
+  await expect(directory).toContainText("Access enabled");
+  await directory.getByRole("link", { name: "Operator A", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Operator A", exact: true })).toBeVisible();
+});
+
+test("pending disable explains the independently verified private edge step", async ({
+  page,
+  request,
+}) => {
+  const id = "00000000-0000-4000-8000-000000000009";
+  await page.route(`**/admin-api/operation-details/${id}`, (route) =>
+    route.fulfill({
+      json: {
+        id,
+        kind: "source",
+        target: "a",
+        state: "waiting",
+        actor: "administrator",
+        reason: "Disable access",
+        created: 1793322000,
+        updated: 1793322000,
+        error: "admin_external_setup_required",
+        steps: [],
+        events: [],
+      },
+    }),
+  );
+  await signIn(page, request, `/operations/${id}`);
+  const panel = page.getByRole("region", { name: "Operation", exact: true });
+  await expect(panel).toContainText(
+    "Disable is awaiting independently verified manual Cloudflare denial",
+  );
+  await expect(panel.locator("pre")).toContainText(`verify-edge-denial --operation ${id}`);
+  await expect(panel).toContainText("Resume this original operation");
+  await expect(panel.getByRole("button", { name: /verify|complete/i })).toHaveCount(0);
 });
 
 test("discrepancy and qualification pages keep unregistered C unqualified and never adopt it", async ({

@@ -172,6 +172,8 @@ class SetupEnrollment(BaseModel):
     issuer: str
     email: str
     status: AccessStatus
+    starts: float | None = None
+    expires: float | None = None
 
 
 class SetupView(BaseModel):
@@ -193,11 +195,12 @@ class SetupView(BaseModel):
             "waiting_for_sign_in",
             "identity_approved_recovery_pending",
             "expired",
+            "active_onboarding_complete",
         ]
         | None
     ) = None
     invitation: str | None = None
-    ready_instructions: None = None
+    ready_instructions: str | None = None
     review_hash: str | None = None
 
 

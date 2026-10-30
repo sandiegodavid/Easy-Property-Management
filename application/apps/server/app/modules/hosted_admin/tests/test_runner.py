@@ -312,3 +312,51 @@ def test_source_reconciliation_never_reads_another_operator_allocation(runner, m
             source.reconcile(payload)
     finally:
         os.close(write_end)
+
+
+@pytest.mark.parametrize("phase", ["receipt", "write", "config"])
+def test_urgent_disable_contains_broken_source_without_claiming_a_receipt(
+    runner, monkeypatch, phase
+):
+    source, inventory, config = runner
+    cmd = command()
+    reference = source.prepare("c")
+    if phase == "config":
+        config.unlink()
+        reference = source.prepare_command(cmd)
+        assert reference["containment"]
+    payload = cmd.model_dump() | {
+        "source_reference": reference,
+        "authority_reference": "owner:1",
+    }
+    source.emergency_contain = Mock(return_value=True)
+    source._transport = Mock(side_effect=AdminError("admin_source_command_failed", 503))
+    if phase == "write":
+        source._transport.side_effect = None
+        source._transport.return_value = {"found": False}
+        source._run = Mock(side_effect=AdminError("admin_source_command_failed", 503))
+        database = sqlite3.connect(":memory:")
+        database.execute("CREATE TABLE maintenance (state TEXT)")
+
+        @contextmanager
+        def connection():
+            yield database
+
+        inventory.connection = connection
+
+    def lock(_inventory):
+        return os.open(os.devnull, os.O_RDONLY)
+
+    monkeypatch.setattr(admin_console, "lock_host", lock)
+    with pytest.raises(AdminError, match="containment_pending"):
+        source.reconcile(payload) if phase == "receipt" else source(payload)
+    source.emergency_contain.assert_called_once_with(payload)
+    if phase == "write":
+        database.close()
+
+
+def test_broken_config_cannot_prepare_a_grant(runner):
+    source, _, config = runner
+    config.unlink()
+    with pytest.raises(OSError):
+        source.prepare_command(command(action="enable"))

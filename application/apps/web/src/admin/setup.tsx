@@ -688,12 +688,14 @@ function Approval({ value, unavailable }: { value: Setup; unavailable: boolean }
   if (value.enrollment?.approved)
     return (
       <section className="panel">
-        <h2>Identity approved</h2>
+        <h2>{value.ready_instructions ? "Onboarding complete" : "Identity approved"}</h2>
         <p>
-          Recovery verification pending · Business access blocked. Complete the persistent recovery
-          checklist after the Slice 6 recovery tooling is installed. No ready-to-use message is
-          available yet.
+          {value.ready_instructions ??
+            "Recovery verification pending · Business access blocked. Open the persistent recovery checklist to verify the current binding and explicitly complete onboarding."}
         </p>
+        <a className="button" href={`/operators/${value.instance}`}>
+          Open access and recovery checklist
+        </a>
       </section>
     );
   if (!status) return null;

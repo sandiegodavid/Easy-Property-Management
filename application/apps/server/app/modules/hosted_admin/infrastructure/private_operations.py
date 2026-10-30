@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.modules.hosted_admin.application.contracts import AdminError
+from app.modules.hosted_admin.application.contracts import AdminError, CommandRequest
 from app.modules.hosted_admin.application.qualification import (
     QualificationCommand,
     QualificationPlan,
@@ -27,6 +27,8 @@ class PrivateOperationRequest(BaseModel):
         "operation-stop",
         "operation-status",
         "resume-grant",
+        "recovery-register",
+        "access-admit",
     ]
     plan: QualificationPlan | None = None
     command: QualificationCommand | None = None
@@ -34,6 +36,8 @@ class PrivateOperationRequest(BaseModel):
     credential: str = Field(default="", max_length=128)
     ceiling: int | None = Field(default=None, ge=0, le=2)
     expected_revision: int | None = Field(default=None, ge=1)
+    report_id: str | None = Field(default=None, pattern=UUID_PATTERN)
+    source_command: CommandRequest | None = None
 
     @model_validator(mode="after")
     def coherent(self):
@@ -50,6 +54,7 @@ class PrivateOperationRequest(BaseModel):
             "operation-stop",
             "operation-status",
             "resume-grant",
+            "recovery-register",
         }
         if uses_identifier != (self.identifier is not None):
             raise ValueError("Only identified operations accept a selector.")
@@ -57,8 +62,12 @@ class PrivateOperationRequest(BaseModel):
             raise ValueError("Only initial installation accepts a ceiling.")
         if (self.action == "operation-stop") != (self.expected_revision is not None):
             raise ValueError("Stopping an operation requires its reviewed revision.")
-        if self.credential and self.action != "qualification-command":
+        if self.credential and self.action not in {"qualification-command", "access-admit"}:
             raise ValueError("Only the exact qualification command consumes a credential.")
+        if (self.action == "recovery-register") != (self.report_id is not None):
+            raise ValueError("Recovery registration requires a protected report identity.")
+        if (self.action == "access-admit") != (self.source_command is not None):
+            raise ValueError("Access admission requires its exact source command.")
         return self
 
 
@@ -91,8 +100,19 @@ class PrivateOperations:
             ),
             "operation-status": lambda: self.engine.get(request.identifier, identity["id"]),
             "resume-grant": lambda: self.resume_grant(request.identifier),
+            "recovery-register": lambda: self.dispatch.recovery.register(
+                request.identifier, request.report_id
+            ),
+            "access-admit": lambda: self.admit(request),
         }
         return handlers[request.action]()
+
+    def admit(self, request):
+        def prepare(_key):
+            return self.dispatch.prepare_command(request.source_command)
+
+        admitted = self.authority.private_admit(request.source_command, request.credential, prepare)
+        return self.engine.get(admitted["id"])
 
     def initialize(self, ceiling):
         snapshot = self.qualification.snapshot()

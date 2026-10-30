@@ -143,6 +143,17 @@ class FixtureSetup:
         return {"verified": True}
 
 
+class FixtureDispatch:
+    def __init__(self, setup):
+        self.setup = setup
+
+    def __call__(self, payload):
+        return self.setup.dispatch(payload)
+
+    def status(self, key):
+        return self.setup.enrollment(key)["status"]
+
+
 class FixtureInventory:
     def __init__(self, clock):
         self.clock, self.failed = clock, False
@@ -212,7 +223,7 @@ def build_fixture(root, port):
     app = create_admin_app(
         f"http://epm-admin.localhost:{port}",
         lambda value: authority.handle(
-            BrokerRequest.model_validate(value), setup_host.dispatch, console, setup
+            BrokerRequest.model_validate(value), FixtureDispatch(setup_host), console, setup
         ),
         assets=Path(__file__).resolve().parents[1] / "apps/web/dist-admin",
     )

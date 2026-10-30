@@ -49,7 +49,7 @@ def initialize_schema(connection) -> None:
         sa.Column("before_json", sa.Text, nullable=False),
         sa.Column("after_json", sa.Text, nullable=False),
         sa.CheckConstraint(
-            "action IN ('approve','enable','disable','revoke','rebind','restore_reset')"
+            "action IN ('approve','enable','complete_onboarding','disable','revoke','rebind','restore_reset','renew','replace_email')"
         ),
     )
     operations.create_table(

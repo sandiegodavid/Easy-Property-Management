@@ -68,9 +68,20 @@ class StepResult(BaseModel):
     operation_id: str | None = Field(
         default=None, pattern=r"^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$"
     )
-    action: Literal["approve", "enable", "disable", "revoke", "rebind", "restore_reset"] | None = (
-        None
-    )
+    action: (
+        Literal[
+            "approve",
+            "enable",
+            "complete_onboarding",
+            "disable",
+            "revoke",
+            "rebind",
+            "restore_reset",
+            "renew",
+            "replace_email",
+        ]
+        | None
+    ) = None
     revision: int | None = Field(default=None, ge=0)
     binding_revision: int | None = Field(default=None, ge=0)
     fence: int | None = Field(default=None, ge=0)

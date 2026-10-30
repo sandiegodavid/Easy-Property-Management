@@ -210,6 +210,14 @@ def create_admin_app(origin, call, assets=None):
     async def setup_options(request: Request):
         return await forward(request, {"method": "setup_options"})
 
+    @app.get("/admin-api/operators/{instance}/recovery-handoff")
+    async def recovery_handoff(instance: str, request: Request):
+        return await forward(request, {"method": "recovery_handoff", "instance": instance})
+
+    @app.get("/admin-api/operators/{instance}/source-status")
+    async def source_status(instance: str, request: Request):
+        return await forward(request, {"method": "source_status", "instance": instance})
+
     @app.get("/admin-api/setup-drafts")
     async def setup_list(request: Request):
         return await forward(request, {"method": "setup_list"})
@@ -248,6 +256,8 @@ def create_admin_app(origin, call, assets=None):
             "resume": "resume",
             "cancel": "cancel",
             "setup-command": "setup_command",
+            "recovery-check": "recovery_check",
+            "recovery-acknowledge": "recovery_acknowledge",
         }
         if action not in methods or request.headers.get("content-type") != "application/json":
             return admin_problem(400, "admin_request_invalid")
@@ -265,6 +275,7 @@ def create_admin_app(origin, call, assets=None):
                 "instance",
                 "expected_revision",
                 "setup",
+                "recovery",
             }:
                 raise ValueError()
         except ValueError:

@@ -171,6 +171,32 @@
             "title": "Identity Approved",
             "type": "boolean"
           },
+          "approved_subject": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Approved Subject"
+          },
+          "approved_at": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Approved At"
+          },
           "binding_matches_configuration": {
             "title": "Binding Matches Configuration",
             "type": "boolean"
@@ -232,6 +258,30 @@
           },
           "status": {
             "$ref": "#/components/schemas/AccessStatus"
+          },
+          "starts": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Starts"
+          },
+          "expires": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Expires"
           }
         },
         "required": ["approved", "issuer", "email", "status"],
@@ -467,7 +517,8 @@
                   "awaiting_approval",
                   "waiting_for_sign_in",
                   "identity_approved_recovery_pending",
-                  "expired"
+                  "expired",
+                  "active_onboarding_complete"
                 ],
                 "type": "string"
               },
@@ -491,9 +542,16 @@
             "title": "Invitation"
           },
           "ready_instructions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "default": null,
-            "title": "Ready Instructions",
-            "type": "null"
+            "title": "Ready Instructions"
           },
           "review_hash": {
             "anyOf": [
@@ -541,7 +599,17 @@
           "action": {
             "anyOf": [
               {
-                "enum": ["approve", "enable", "disable", "revoke", "rebind", "restore_reset"],
+                "enum": [
+                  "approve",
+                  "enable",
+                  "complete_onboarding",
+                  "disable",
+                  "revoke",
+                  "rebind",
+                  "restore_reset",
+                  "renew",
+                  "replace_email"
+                ],
                 "type": "string"
               },
               {
@@ -725,6 +793,452 @@
         },
         "required": ["releases", "templates", "workspace_mib", "file_mib", "backup_policy"],
         "title": "SetupOptions",
+        "type": "object"
+      },
+      "CommandRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "operation_id": {
+            "maxLength": 36,
+            "minLength": 36,
+            "title": "Operation Id",
+            "type": "string"
+          },
+          "instance": {
+            "pattern": "^[a-z][a-z0-9-]{0,31}$",
+            "title": "Instance",
+            "type": "string"
+          },
+          "action": {
+            "enum": [
+              "approve",
+              "enable",
+              "complete_onboarding",
+              "disable",
+              "revoke",
+              "rebind",
+              "renew",
+              "replace_email"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "expected_revision": {
+            "minimum": 0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "expected_binding_revision": {
+            "minimum": 0,
+            "title": "Expected Binding Revision",
+            "type": "integer"
+          },
+          "fence": {
+            "minimum": 0,
+            "title": "Fence",
+            "type": "integer"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "confirmed": {
+            "const": true,
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subject"
+          },
+          "enrollment_received_at": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Enrollment Received At"
+          },
+          "evidence_id": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Evidence Id"
+          },
+          "acceptance_id": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Acceptance Id"
+          },
+          "starts": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Starts"
+          },
+          "expires": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Expires"
+          },
+          "replacement_email": {
+            "anyOf": [
+              {
+                "maxLength": 254,
+                "minLength": 3,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Replacement Email"
+          }
+        },
+        "required": [
+          "operation_id",
+          "instance",
+          "action",
+          "expected_revision",
+          "expected_binding_revision",
+          "fence",
+          "reason",
+          "confirmed"
+        ],
+        "title": "CommandRequest",
+        "type": "object"
+      },
+      "RecoveryCheck": {
+        "additionalProperties": false,
+        "properties": {
+          "handoff_id": {
+            "pattern": "^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$",
+            "title": "Handoff Id",
+            "type": "string"
+          },
+          "expected_revision": {
+            "minimum": 0,
+            "title": "Expected Revision",
+            "type": "integer"
+          }
+        },
+        "required": ["handoff_id", "expected_revision"],
+        "title": "RecoveryCheck",
+        "type": "object"
+      },
+      "RecoveryBinding": {
+        "additionalProperties": false,
+        "properties": {
+          "instance": {
+            "pattern": "^[a-z0-9][a-z0-9-]{0,31}$",
+            "title": "Instance",
+            "type": "string"
+          },
+          "workspace_id": {
+            "pattern": "^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "binding_revision": {
+            "minimum": 1,
+            "title": "Binding Revision",
+            "type": "integer"
+          },
+          "subject": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Subject",
+            "type": "string"
+          },
+          "configuration_digest": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Configuration Digest",
+            "type": "string"
+          },
+          "approved_at": {
+            "minimum": 0,
+            "title": "Approved At",
+            "type": "number"
+          },
+          "release": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Release",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instance",
+          "workspace_id",
+          "binding_revision",
+          "subject",
+          "configuration_digest",
+          "approved_at",
+          "release"
+        ],
+        "title": "RecoveryBinding",
+        "type": "object"
+      },
+      "RecoveryCompletionTimes": {
+        "additionalProperties": false,
+        "properties": {
+          "archive": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Archive"
+          },
+          "readback": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Readback"
+          },
+          "restore": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Restore"
+          },
+          "approved_binding": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Approved Binding"
+          },
+          "acceptance": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Acceptance"
+          }
+        },
+        "title": "RecoveryCompletionTimes",
+        "type": "object"
+      },
+      "RecoveryReport": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "handoff_id": {
+            "pattern": "^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$",
+            "title": "Handoff Id",
+            "type": "string"
+          },
+          "binding": {
+            "$ref": "#/components/schemas/RecoveryBinding"
+          },
+          "state": {
+            "enum": ["verified", "failed"],
+            "title": "State",
+            "type": "string"
+          },
+          "archive_digest": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Archive Digest"
+          },
+          "binding_digest": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Binding Digest"
+          },
+          "snapshot_marker": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Snapshot Marker"
+          },
+          "archive_reference": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Archive Reference"
+          },
+          "binding_reference": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Binding Reference"
+          },
+          "verifier_digest": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Verifier Digest"
+          },
+          "completed": {
+            "$ref": "#/components/schemas/RecoveryCompletionTimes"
+          },
+          "archive": {
+            "default": false,
+            "title": "Archive",
+            "type": "boolean"
+          },
+          "readback": {
+            "default": false,
+            "title": "Readback",
+            "type": "boolean"
+          },
+          "restore": {
+            "default": false,
+            "title": "Restore",
+            "type": "boolean"
+          },
+          "approved_binding": {
+            "default": false,
+            "title": "Approved Binding",
+            "type": "boolean"
+          },
+          "acceptance": {
+            "default": false,
+            "title": "Acceptance",
+            "type": "boolean"
+          },
+          "observed": {
+            "minimum": 0,
+            "title": "Observed",
+            "type": "number"
+          },
+          "expires": {
+            "minimum": 0,
+            "title": "Expires",
+            "type": "number"
+          }
+        },
+        "required": ["id", "handoff_id", "binding", "state", "observed", "expires"],
+        "title": "RecoveryReport",
         "type": "object"
       }
     }

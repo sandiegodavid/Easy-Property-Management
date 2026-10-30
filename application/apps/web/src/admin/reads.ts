@@ -22,6 +22,9 @@ export type Recovery = {
   off_host_readback: number | null;
   restore_drill: number | null;
   approved_binding: number | null;
+  policy_state?: "unknown" | "failed" | "warning" | "overdue" | "verified" | "stale";
+  attempted?: number | null;
+  acknowledged?: boolean;
 };
 export type Operator = {
   key: string;

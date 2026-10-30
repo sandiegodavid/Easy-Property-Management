@@ -39,6 +39,7 @@ def verify_remote(point, remote, archives, phrase, directory, workspace_id):
             raise AdminError("admin_recovery_readback_invalid", 409)
         if archives.validate_archive(path, phrase).header["sourceWorkspaceId"] != workspace_id:
             raise AdminError("admin_recovery_workspace_conflict", 409)
+        return path
     finally:
         if body is not None:
             body.close()

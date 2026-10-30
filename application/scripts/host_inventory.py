@@ -343,6 +343,52 @@ class HostInventory:
             raise InventoryError("Instance is not registered.")
         return matches[0]
 
+    def record_access_cutover(self, before, after, operation_id):
+        """Source-owned inventory update after an exact fenced access receipt.
+
+        Allocation identities stay fixed; only this explicit workflow may
+        replace the assigned email. The operation retains both configurations.
+        """
+        before.validate()
+        after.validate()
+        allowed = {"email", "config_digest", "baseline_digest", "revision"}
+        if after.revision != before.revision + 1 or any(
+            getattr(before, field) != getattr(after, field)
+            for field in vars(before)
+            if field not in allowed
+        ):
+            raise InventoryError("Access cutover cannot change an allocation.")
+        with self.connection(writable=True) as connection:
+            current = connection.execute(
+                "SELECT * FROM instances WHERE key=?", (before.key,)
+            ).fetchone()
+            if current is None:
+                raise InventoryError("Instance is not registered.")
+            actual = {field: current[field] for field in vars(before)}
+            prior = connection.execute(
+                "SELECT digest FROM inventory_audit WHERE action='access_cutover' AND reference=?",
+                (operation_id,),
+            ).fetchone()
+            desired = digest_json(asdict(after))
+            if prior:
+                if prior[0] != desired or actual != asdict(after):
+                    raise InventoryError("Access cutover identity changed.")
+                return
+            if actual != asdict(before):
+                raise InventoryError("Inventory changed during access cutover.")
+            connection.execute(
+                "UPDATE instances SET email=?,config_digest=?,baseline_digest=?,revision=? "
+                "WHERE key=?",
+                (
+                    after.email,
+                    after.config_digest,
+                    after.baseline_digest,
+                    after.revision,
+                    after.key,
+                ),
+            )
+            self._audit(connection, "access_cutover", operation_id, desired)
+
     @staticmethod
     def _audit(connection, action, reference, digest):
         connection.execute(

@@ -14,6 +14,7 @@ import time
 from app.modules.hosted_admin.application.contracts import AdminError
 from app.modules.hosted_admin.infrastructure.operation_schema import SCHEMA as OPERATION_SCHEMA
 from app.modules.hosted_admin.infrastructure.setup_schema import SCHEMA as SETUP_SCHEMA
+from app.modules.hosted_admin.infrastructure.recovery_schema import SCHEMA as RECOVERY_SCHEMA
 from app.modules.hosted_admin.infrastructure.operations import OperationEngine, enqueue
 from app.modules.hosted_admin.application.operations import Observation
 from app.modules.hosted_admin.infrastructure.control_recovery import validate_control
@@ -47,6 +48,7 @@ PRAGMA user_version=1;
 """
     + OPERATION_SCHEMA
     + SETUP_SCHEMA
+    + RECOVERY_SCHEMA
 )
 
 
@@ -275,37 +277,58 @@ class AuthorityStore:
                     "DELETE FROM authorization WHERE session_hash=? AND request_hash=?",
                     (digest(request.token), fingerprint),
                 )
-            source = prepare(command.instance) if prepare else None
-            payload = command.model_dump() | {
-                "authority_reference": f"{identity['id']}:{identity['generation']}"
-            }
-            if source is not None:
-                payload["source_reference"] = source
+            return self._commit_admission(connection, command, identity, prepare)
+
+    def _commit_admission(self, connection, command, identity, prepare):
+        fingerprint = command.fingerprint()
+        source = prepare(command.instance) if prepare else None
+        payload = command.model_dump() | {
+            "authority_reference": f"{identity['id']}:{identity['generation']}"
+        }
+        if source is not None:
+            payload["source_reference"] = source
+        connection.execute(
+            "INSERT INTO admission VALUES (?,?,?,?,NULL,?)",
+            (
+                command.operation_id,
+                fingerprint,
+                identity["generation"],
+                json.dumps(payload),
+                self.clock(),
+            ),
+        )
+        enqueue(
+            connection,
+            self,
+            identifier=command.operation_id,
+            identity=identity,
+            kind="source",
+            target=command.instance,
+            payload=payload,
+        )
+        self._audit(connection, "command_admitted", command.operation_id)
+        return dict(
             connection.execute(
-                "INSERT INTO admission VALUES (?,?,?,?,NULL,?)",
-                (
-                    command.operation_id,
-                    fingerprint,
-                    identity["generation"],
-                    json.dumps(payload),
-                    self.clock(),
-                ),
-            )
-            enqueue(
-                connection,
-                self,
-                identifier=command.operation_id,
-                identity=identity,
-                kind="source",
-                target=command.instance,
-                payload=payload,
-            )
-            self._audit(connection, "command_admitted", command.operation_id)
-            return dict(
-                connection.execute(
-                    "SELECT * FROM admission WHERE id=?", (command.operation_id,)
-                ).fetchone()
-            )
+                "SELECT * FROM admission WHERE id=?", (command.operation_id,)
+            ).fetchone()
+        )
+
+    def private_admit(self, command, credential, prepare):
+        """Root broker peer plus exact single-use action grant; no HTTP session fabrication."""
+        with self.transaction() as connection:
+            identity = self._identity(connection)
+            prior = connection.execute(
+                "SELECT * FROM admission WHERE id=?", (command.operation_id,)
+            ).fetchone()
+            if prior:
+                if (
+                    prior["request_hash"] != command.fingerprint()
+                    or prior["generation"] != identity["generation"]
+                ):
+                    raise AdminError("admin_command_conflict", 409)
+                return dict(prior)
+            self._consume(connection, credential, "action", command.fingerprint())
+            return self._commit_admission(connection, command, identity, prepare)
 
     def execute(self, admission, dispatch):
         # The source owns its immutable receipt. No authority-store write lock
@@ -329,6 +352,17 @@ class AuthorityStore:
             self._audit(connection, "identity_restored", "administrator")
 
     def handle(self, request, dispatch, console=None, setup=None):
+        if request.method.startswith("recovery_"):
+            with self.transaction() as connection:
+                identity = dict(self.session(connection, request.token, request.csrf))
+            recovery = getattr(dispatch, "recovery", None)
+            if recovery is None:
+                raise AdminError("admin_recovery_unavailable", 503)
+            if request.method == "recovery_handoff":
+                return recovery.handoff(request.instance, identity)
+            if request.method == "recovery_acknowledge":
+                return recovery.acknowledge(request.recovery)
+            return recovery.check(request.recovery)
         if request.method.startswith("setup_"):
             from app.modules.hosted_admin.application.setup import (
                 SetupView,
@@ -354,7 +388,13 @@ class AuthorityStore:
         if request.method == "reauthenticate":
             return self.reauthenticate(request)
         if request.method == "command":
-            return self.execute(self.admit(request, getattr(dispatch, "prepare", None)), dispatch)
+            prepare = getattr(dispatch, "prepare", None)
+            if hasattr(dispatch, "prepare_command"):
+
+                def prepare(_key):
+                    return dispatch.prepare_command(request.command)
+
+            return self.execute(self.admit(request, prepare), dispatch)
         if request.method.startswith("console_"):
             with self.transaction() as connection:
                 identity = dict(self.session(connection, request.token, request.csrf))
@@ -424,6 +464,13 @@ class SourceEffect:
             # In-process application adapters may return an already verified
             # receipt; production uses SourceRunner.reconcile on every retry.
             result = self.result
+        if (
+            result is not None
+            and payload["action"] == "disable"
+            and hasattr(self.dispatch, "edge_denial")
+            and not self.dispatch.edge_denial.confirmed(payload)
+        ):
+            return Observation("waiting")
         return (
             Observation("verified", result, payload["operation_id"])
             if result is not None

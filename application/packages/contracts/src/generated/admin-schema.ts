@@ -104,6 +104,16 @@ export interface components {
              * @default false
              */
             identity_approved: boolean;
+            /**
+             * Approved Subject
+             * @default null
+             */
+            approved_subject: string | null;
+            /**
+             * Approved At
+             * @default null
+             */
+            approved_at: number | null;
             /** Binding Matches Configuration */
             binding_matches_configuration: boolean;
             /** Enrollments */
@@ -125,6 +135,16 @@ export interface components {
             /** Email */
             email: string;
             status: components["schemas"]["AccessStatus"];
+            /**
+             * Starts
+             * @default null
+             */
+            starts: number | null;
+            /**
+             * Expires
+             * @default null
+             */
+            expires: number | null;
         };
         /** SetupOperation */
         SetupOperation: {
@@ -206,7 +226,7 @@ export interface components {
              * Lifecycle
              * @default null
              */
-            lifecycle: ("scheduled" | "awaiting_approval" | "waiting_for_sign_in" | "identity_approved_recovery_pending" | "expired") | null;
+            lifecycle: ("scheduled" | "awaiting_approval" | "waiting_for_sign_in" | "identity_approved_recovery_pending" | "expired" | "active_onboarding_complete") | null;
             /**
              * Invitation
              * @default null
@@ -216,7 +236,7 @@ export interface components {
              * Ready Instructions
              * @default null
              */
-            ready_instructions: null;
+            ready_instructions: string | null;
             /**
              * Review Hash
              * @default null
@@ -237,7 +257,7 @@ export interface components {
              * Action
              * @default null
              */
-            action: ("approve" | "enable" | "disable" | "revoke" | "rebind" | "restore_reset") | null;
+            action: ("approve" | "enable" | "complete_onboarding" | "disable" | "revoke" | "rebind" | "restore_reset" | "renew" | "replace_email") | null;
             /**
              * Revision
              * @default null
@@ -307,6 +327,191 @@ export interface components {
             file_mib: 50;
             /** Backup Policy */
             backup_policy: string;
+        };
+        /** CommandRequest */
+        CommandRequest: {
+            /** Operation Id */
+            operation_id: string;
+            /** Instance */
+            instance: string;
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "approve" | "enable" | "complete_onboarding" | "disable" | "revoke" | "rebind" | "renew" | "replace_email";
+            /** Expected Revision */
+            expected_revision: number;
+            /** Expected Binding Revision */
+            expected_binding_revision: number;
+            /** Fence */
+            fence: number;
+            /** Reason */
+            reason: string;
+            /**
+             * Confirmed
+             * @constant
+             */
+            confirmed: true;
+            /**
+             * Subject
+             * @default null
+             */
+            subject: string | null;
+            /**
+             * Enrollment Received At
+             * @default null
+             */
+            enrollment_received_at: number | null;
+            /**
+             * Evidence Id
+             * @default null
+             */
+            evidence_id: string | null;
+            /**
+             * Acceptance Id
+             * @default null
+             */
+            acceptance_id: string | null;
+            /**
+             * Starts
+             * @default null
+             */
+            starts: number | null;
+            /**
+             * Expires
+             * @default null
+             */
+            expires: number | null;
+            /**
+             * Replacement Email
+             * @default null
+             */
+            replacement_email: string | null;
+        };
+        /** RecoveryCheck */
+        RecoveryCheck: {
+            /** Handoff Id */
+            handoff_id: string;
+            /** Expected Revision */
+            expected_revision: number;
+        };
+        /** RecoveryBinding */
+        RecoveryBinding: {
+            /** Instance */
+            instance: string;
+            /** Workspace Id */
+            workspace_id: string;
+            /** Binding Revision */
+            binding_revision: number;
+            /** Subject */
+            subject: string;
+            /** Configuration Digest */
+            configuration_digest: string;
+            /** Approved At */
+            approved_at: number;
+            /** Release */
+            release: string;
+        };
+        /** RecoveryCompletionTimes */
+        RecoveryCompletionTimes: {
+            /**
+             * Archive
+             * @default null
+             */
+            archive: number | null;
+            /**
+             * Readback
+             * @default null
+             */
+            readback: number | null;
+            /**
+             * Restore
+             * @default null
+             */
+            restore: number | null;
+            /**
+             * Approved Binding
+             * @default null
+             */
+            approved_binding: number | null;
+            /**
+             * Acceptance
+             * @default null
+             */
+            acceptance: number | null;
+        };
+        /** RecoveryReport */
+        RecoveryReport: {
+            /** Id */
+            id: string;
+            /** Handoff Id */
+            handoff_id: string;
+            binding: components["schemas"]["RecoveryBinding"];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "verified" | "failed";
+            /**
+             * Archive Digest
+             * @default null
+             */
+            archive_digest: string | null;
+            /**
+             * Binding Digest
+             * @default null
+             */
+            binding_digest: string | null;
+            /**
+             * Snapshot Marker
+             * @default null
+             */
+            snapshot_marker: string | null;
+            /**
+             * Archive Reference
+             * @default null
+             */
+            archive_reference: string | null;
+            /**
+             * Binding Reference
+             * @default null
+             */
+            binding_reference: string | null;
+            /**
+             * Verifier Digest
+             * @default null
+             */
+            verifier_digest: string | null;
+            completed?: components["schemas"]["RecoveryCompletionTimes"];
+            /**
+             * Archive
+             * @default false
+             */
+            archive: boolean;
+            /**
+             * Readback
+             * @default false
+             */
+            readback: boolean;
+            /**
+             * Restore
+             * @default false
+             */
+            restore: boolean;
+            /**
+             * Approved Binding
+             * @default false
+             */
+            approved_binding: boolean;
+            /**
+             * Acceptance
+             * @default false
+             */
+            acceptance: boolean;
+            /** Observed */
+            observed: number;
+            /** Expires */
+            expires: number;
         };
     };
     responses: never;

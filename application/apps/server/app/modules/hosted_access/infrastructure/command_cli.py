@@ -30,7 +30,9 @@ def invoke(store, raw, local_config):
     if command.action not in {"disable", "revoke"}:
         # Run validation under the target UID, outside the root broker/HTTP process.
         validate_workspace_binding(
-            store.deployment, WorkspaceService.from_local_config(local_config)
+            store.deployment,
+            WorkspaceService.from_local_config(local_config),
+            require_unexpired=command.action not in {"renew", "replace_email"},
         )
     return commands.execute(command).model_dump()
 
@@ -44,7 +46,7 @@ def main():
         if len(raw) > 16384:
             raise ValueError()
         deployment = load_hosted_deployment(Path(sys.argv[1]))
-        store = SQLiteHostedSessionStore(deployment)
+        store = SQLiteHostedSessionStore(deployment, administration=True)
         print(json.dumps(invoke(store, json.loads(raw), Path(sys.argv[2]))))
     except HostedAccessError as error:
         print(json.dumps({"error": error.code, "status": error.status}))

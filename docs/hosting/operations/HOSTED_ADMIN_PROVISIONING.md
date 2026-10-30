@@ -82,7 +82,7 @@ Successful provisioning shows **Scheduled** before the start, **Waiting for sign
 
 Review the verified issuer, email, exact subject and received time. Obtain the displayed action-bound credential through the existing private `action-grant` procedure, authorize the reviewed action, then explicitly select **Approve identity — keep access blocked**. The source-owned revision/fence/enrollment checks and atomic audit/receipt remain authoritative. A lost approval response is looked up using the original operation; it is not blindly repeated.
 
-The result is **Identity approved · Recovery verification pending · Business access blocked**. Approved-binding recovery, the persistent completion checklist and explicit activation belong to Slice 6. Ready-to-use instructions must remain unavailable until that completion is verified; do not replace them with an assertion or an emergency activation override.
+The result is **Identity approved · Recovery verification pending · Business access blocked**. Continue through the [Slice 6 lifecycle checklist](HOSTED_ADMIN_LIFECYCLE.md#complete-onboarding) for approved-binding recovery and explicit activation. Ready-to-use instructions remain unavailable until that completion is verified; do not replace it with an assertion or an emergency activation override.
 
 ## Focused verification matrix
 

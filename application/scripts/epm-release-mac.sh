@@ -298,6 +298,7 @@ main() {
   mkdir "$bundle/admin-tools"
   cp -X "$application/scripts/host_admin.py" "$application/scripts/host_inventory.py" \
     "$application/scripts/admin_console.py" "$application/scripts/admin_observations.py" \
+    "$application/scripts/admin_lifecycle.py" \
     "$application/scripts/release_cleanup.py" "$application/scripts/epm-release-vm.sh" \
     "$application/scripts/epm-release-cleanup-vm.sh" "$bundle/admin-tools/"
   printf '%s\n' "$source_commit" > "$bundle/SOURCE_COMMIT.txt"

@@ -288,10 +288,6 @@ class ProvisioningHost:
 
     def enrollment(self, instance):
         deployment, status = self.d.source.access_snapshot(instance)
-        if status["active"]:
-            # Slice 5 must not reinterpret an externally enabled instance as a
-            # completed onboarding operation.
-            raise AdminError("admin_onboarding_reconciliation_required", 409)
         self.d.discovery.source_command_ready(self.d.source.inventory.get(instance))
         if not status["binding_matches_configuration"]:
             raise AdminError("admin_source_binding_changed", 409)
@@ -300,6 +296,12 @@ class ProvisioningHost:
             "status": status,
             "issuer": deployment["identity_issuer"],
             "email": deployment["allowed_email"],
+            "starts": datetime.fromisoformat(
+                deployment["enabled_at"].replace("Z", "+00:00")
+            ).timestamp(),
+            "expires": datetime.fromisoformat(
+                deployment["expires_at"].replace("Z", "+00:00")
+            ).timestamp(),
         }
 
     def check_grant(self, instance):

@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.modules.hosted_access.application.admin_commands import AccessCommand
 from app.modules.hosted_admin.application.console import HostSection, InstanceSection
 from app.modules.hosted_admin.application.setup import SetupCommand
+from app.modules.hosted_admin.application.recovery import RecoveryCheck
 
 
 class AdminError(ValueError):
@@ -22,7 +23,16 @@ class CommandRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
     operation_id: str = Field(min_length=36, max_length=36)
     instance: str = Field(pattern=r"^[a-z][a-z0-9-]{0,31}$")
-    action: Literal["approve", "enable", "disable", "revoke", "rebind"]
+    action: Literal[
+        "approve",
+        "enable",
+        "complete_onboarding",
+        "disable",
+        "revoke",
+        "rebind",
+        "renew",
+        "replace_email",
+    ]
     expected_revision: int = Field(ge=0)
     expected_binding_revision: int = Field(ge=0)
     fence: int = Field(ge=0)
@@ -30,6 +40,15 @@ class CommandRequest(BaseModel):
     confirmed: Literal[True]
     subject: str | None = Field(default=None, min_length=1, max_length=255)
     enrollment_received_at: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    evidence_id: str | None = Field(
+        default=None, pattern=r"^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$"
+    )
+    acceptance_id: str | None = Field(
+        default=None, pattern=r"^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$"
+    )
+    starts: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    expires: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    replacement_email: str | None = Field(default=None, min_length=3, max_length=254)
 
     @model_validator(mode="after")
     def identity(self):
@@ -73,6 +92,9 @@ class BrokerRequest(BaseModel):
         "setup_get",
         "setup_status",
         "setup_command",
+        "recovery_handoff",
+        "recovery_check",
+        "recovery_acknowledge",
     ]
     token: str = Field(default="", max_length=128)
     csrf: str = Field(default="", max_length=128)
@@ -84,12 +106,17 @@ class BrokerRequest(BaseModel):
     offset: int = Field(default=0, ge=0, le=950, multiple_of=50)
     section: HostSection | InstanceSection | None = None
     setup: SetupCommand | None = None
+    recovery: RecoveryCheck | None = None
     draft_id: str | None = Field(
         default=None, pattern=r"^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$"
     )
 
     @model_validator(mode="after")
     def coherent(self):
+        if (self.method in {"recovery_check", "recovery_acknowledge"}) != (
+            self.recovery is not None
+        ):
+            raise ValueError("Recovery checks accept only a registered handoff and revision.")
         if (self.method == "setup_command") != (self.setup is not None):
             raise ValueError("Only setup commands accept setup changes.")
         if (self.method in {"setup_get", "setup_status"}) != (self.draft_id is not None):
@@ -105,7 +132,7 @@ class BrokerRequest(BaseModel):
         if self.operation_id is not None and str(UUID(self.operation_id)) != self.operation_id:
             raise ValueError("Canonical lookup identity required.")
         if (
-            self.method in {"source_status", "console_record"}
+            self.method in {"source_status", "console_record", "recovery_handoff"}
             or (
                 self.method == "console_observation"
                 and self.section in {"access", "runtime", "recovery"}

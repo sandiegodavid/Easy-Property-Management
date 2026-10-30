@@ -46,6 +46,12 @@ class RecoveryObservation(ConsoleRecord):
     off_host_readback: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     restore_drill: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     approved_binding: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    policy_state: Literal["unknown", "failed", "warning", "overdue", "verified", "stale"] = (
+        "unknown"
+    )
+    snapshot_marker: str | None = Field(default=None, max_length=128)
+    attempted: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    acknowledged: bool = False
 
 
 class TunnelObservation(ConsoleRecord):

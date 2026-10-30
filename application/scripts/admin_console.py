@@ -38,8 +38,12 @@ from app.modules.hosted_admin.infrastructure.provisioning import (
 )
 from app.modules.hosted_admin.infrastructure.linux_provisioning import LinuxProvisioning
 from app.modules.hosted_admin.infrastructure.pre_enrollment import PreEnrollmentRecovery
+from app.modules.hosted_admin.infrastructure.onboarding import OnboardingRecovery
+from app.modules.hosted_admin.infrastructure.onboarding_verifier import OnboardingVerifier
+from app.modules.hosted_admin.infrastructure.edge_denial import EdgeDenial
 
 if __package__:
+    from .admin_lifecycle import AccessCutover
     from .admin_observations import HostConsoleInventory
     from .host_admin import (
         HostPaths,
@@ -58,6 +62,7 @@ else:
         directory / "host_admin.py",
         directory / "host_inventory.py",
         directory / "admin_observations.py",
+        directory / "admin_lifecycle.py",
     ):
         info = item.lstat()
         if info.st_uid != 0 or info.st_mode & 0o022 or stat.S_ISLNK(info.st_mode):
@@ -73,6 +78,7 @@ else:
     )
     from host_inventory import HostInventory, InventoryError, Instance
     from admin_observations import HostConsoleInventory
+    from admin_lifecycle import AccessCutover
 
 
 def source_process(argv, **options):
@@ -124,7 +130,16 @@ class SourceRunner:
             "instance": asdict(instance),
             "deployment_digest": hashlib.sha256(config.read_bytes()).hexdigest(),
             "local_digest": hashlib.sha256(json.dumps(local, sort_keys=True).encode()).hexdigest(),
+            "deployment": deployment,
         }
+
+    def prepare_command(self, command):
+        try:
+            return self.prepare(command.instance)
+        except OSError, ValueError, KeyError:
+            if command.action not in {"disable", "revoke"}:
+                raise
+            return {"instance": asdict(self.inventory.get(command.instance)), "containment": True}
 
     def status(self, key):
         return self.access_snapshot(key)[1]
@@ -142,6 +157,41 @@ class SourceRunner:
             os.close(descriptor)
 
     def __call__(self, payload):
+        if payload.get("source_reference", {}).get("containment"):
+            self.emergency_contain(payload)
+            # Service denial is observed, but a missing source receipt or edge
+            # fence is not success. Keep the durable job pending remediation.
+            raise AdminError("admin_containment_pending", 503)
+        if payload["action"] in {"renew", "replace_email"}:
+            return self.cutover(payload)
+        activation = None
+        if payload["action"] in {"enable", "complete_onboarding"} and hasattr(self, "recovery"):
+            # Receipt lookup comes first: a lost response must reconcile even
+            # after the evidence expires or a later binding is installed.
+            prior = self.reconcile(payload)
+            if prior is not None:
+                self.recovery.completed(payload, prior)
+                return prior
+            activation = self.recovery.activation(payload)
+        try:
+            return self.execute_source(payload, activation)
+        except (OSError, ValueError) as error:
+            self.contain_unavailable(payload, error)
+            raise
+
+    def contain_unavailable(self, payload, error):
+        if payload["action"] not in {"disable", "revoke"} or (
+            isinstance(error, AdminError)
+            and error.code
+            not in {"admin_source_command_failed", "admin_source_command_unavailable"}
+        ):
+            return
+        # A stopped unit is containment, not a source receipt. Keep the durable
+        # operation pending until the private administrator repairs/reconciles it.
+        self.emergency_contain(payload)
+        raise AdminError("admin_containment_pending", 503) from error
+
+    def execute_source(self, payload, activation=None):
         descriptor = lock_host(self.inventory)
         try:
             reference = self.checked_reference(payload)
@@ -164,7 +214,17 @@ class SourceRunner:
                 HostDiscovery(self.paths).source_command_ready(
                     self.inventory.get(payload["instance"])
                 )
-            return self._run(payload, reference["instance"])
+            if activation is not None:
+                result = AccessResult.model_validate(
+                    self._transport(
+                        reference["instance"], command.model_dump() | {"activation": activation}
+                    )
+                ).model_dump()
+            else:
+                result = self._run(payload, reference["instance"])
+            if hasattr(self, "recovery"):
+                self.recovery.completed(payload, result)
+            return result
         finally:
             os.close(descriptor)
 
@@ -185,6 +245,17 @@ class SourceRunner:
 
     def reconcile(self, payload):
         """Read the exact original receipt, even after later source revisions."""
+        try:
+            return self.reconcile_source(payload)
+        except (OSError, ValueError) as error:
+            self.contain_unavailable(payload, error)
+            raise
+
+    def reconcile_source(self, payload):
+        if payload.get("source_reference", {}).get("containment"):
+            return None
+        if payload["action"] in {"renew", "replace_email"}:
+            return self.cutover.lookup(payload)
         descriptor = lock_host(self.inventory)
         try:
             current = self.checked_reference(payload)
@@ -192,16 +263,21 @@ class SourceRunner:
                 current["instance"],
                 {"query": "receipt", "command": self._command(payload).model_dump()},
             )
-            return (
+            result = (
                 AccessResult.model_validate(receipt["result"]).model_dump()
                 if receipt.get("found")
                 else None
             )
+            if result is not None and hasattr(self, "recovery"):
+                self.recovery.completed(payload, result)
+            return result
         finally:
             os.close(descriptor)
 
     def contain(self, payload):
         """A stale in-flight grant is contained through the owning access command."""
+        if payload.get("source_reference", {}).get("containment"):
+            return self.emergency_contain(payload)
         descriptor = lock_host(self.inventory)
         try:
             current = self.checked_reference(payload)
@@ -291,9 +367,12 @@ def parser():
             "restore-identity",
             "operations",
             "verify-pre-enrollment",
+            "verify-onboarding",
+            "verify-edge-denial",
         ),
     )
     value.add_argument("--operation")
+    value.add_argument("--handoff")
     value.add_argument("--identity")
     value.add_argument("--port", type=int)
     return value
@@ -348,6 +427,20 @@ def compose(authority, paths, inventory):
         ),
         source_process,
     )
+    dispatch.cutover = AccessCutover(dispatch, platform)
+
+    def emergency_contain(payload):
+        item = inventory.get(payload["instance"])
+        original = payload["source_reference"]["instance"]
+        if any(
+            getattr(item, name) != original[name]
+            for name in ("instance_id", "allocation_id", "port", "user")
+        ):
+            raise AdminError("admin_source_binding_changed", 409)
+        platform.call(["/usr/bin/systemctl", "stop", f"epm-hosted@{item.key}.service"])
+        return platform.service_state(item.key) in {"inactive", "failed"}
+
+    dispatch.emergency_contain = emergency_contain
     provisioning = ProvisioningHost(
         ProvisioningDependencies(
             authority,
@@ -359,10 +452,16 @@ def compose(authority, paths, inventory):
         )
     )
     setup = SetupService(authority, provisioning)
+    recovery = OnboardingRecovery(authority, dispatch, reports)
+    dispatch.recovery = recovery
+    setup.recovery = recovery
     dispatch.grant_check = provisioning.check_grant
+    dispatch.edge_denial = EdgeDenial(
+        authority, dispatch, reports, lambda: setup.host.provider(setup.host.config())
+    )
     worker = SetupWorker(setup)
     operations = PrivateOperations(authority, qualification, dispatch, provisioning)
-    console = ConsoleReads(authority, HostConsoleInventory(dispatch, discovery, reports))
+    console = ConsoleReads(authority, HostConsoleInventory(dispatch, discovery, reports, recovery))
     return SimpleNamespace(
         setup=setup,
         reports=reports,
@@ -371,6 +470,7 @@ def compose(authority, paths, inventory):
         worker=worker,
         operations=operations,
         console=console,
+        recovery=recovery,
     )
 
 
@@ -380,6 +480,46 @@ def verify_pre_enrollment(services, operation):
     return PreEnrollmentRecovery(services.setup, services.reports, services.platform).verify(
         operation, getpass("Pre-enrollment recovery passphrase: ")
     )
+
+
+def verify_onboarding(services, handoff, path):
+    if not handoff or str(UUID(handoff)) != handoff:
+        raise AdminError("admin_recovery_handoff_required", 422)
+
+    def acceptance(key):
+        services.dispatch.grant_check(key)
+        item = services.dispatch.inventory.get(key)
+        services.platform.h.discovery.observe(key)
+        provider = services.setup.host.provider(services.setup.host.config())
+        if provider.verify(item.hostname, item.email) is None:
+            raise AdminError("admin_provider_enforcement_unverified", 409)
+        services.platform.verify_ingress({"hostname": item.hostname, "port": item.port})
+
+    return OnboardingVerifier(services.recovery, services.platform, acceptance).verify(
+        handoff,
+        getpass("Approved-binding recovery passphrase: "),
+        lambda handoff, report: rpc(
+            path,
+            {
+                "method": "private_operations",
+                "request": {
+                    "action": "recovery-register",
+                    "identifier": handoff,
+                    "report_id": report,
+                },
+            },
+        ),
+    )
+
+
+def verify_private(args, services, path):
+    if args.action == "verify-edge-denial":
+        if not args.operation or str(UUID(args.operation)) != args.operation:
+            raise AdminError("admin_operation_identity_required", 422)
+        return services.dispatch.edge_denial.verify(args.operation)
+    if args.action == "verify-pre-enrollment":
+        return verify_pre_enrollment(services, args.operation)
+    return verify_onboarding(services, args.handoff, path)
 
 
 def main():
@@ -412,9 +552,8 @@ def main():
     if any(pwd.getpwnam(instance.user).pw_uid == http.pw_uid for instance in inventory.list()):
         raise AdminError("admin_http_identity_not_isolated", 503)
     services = compose(authority, paths, inventory)
-    if args.action == "verify-pre-enrollment":
-        result = verify_pre_enrollment(services, args.operation)
-        print(json.dumps(result))
+    if args.action in {"verify-pre-enrollment", "verify-onboarding", "verify-edge-denial"}:
+        print(json.dumps(verify_private(args, services, path)))
         services.console.close()
         return
     worker = services.worker

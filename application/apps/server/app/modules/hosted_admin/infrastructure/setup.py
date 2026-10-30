@@ -223,13 +223,30 @@ class SetupService:
             if enrollment["status"].get("enrollments")
             else "waiting_for_sign_in"
         )
-        if self.store.clock() >= value["data"]["expires"]:
+        expires = enrollment.get("expires", value["data"]["expires"])
+        if self.store.clock() >= expires:
             value["lifecycle"] = "expired"
         if value["lifecycle"] != "expired":
             value["invitation"] = invitation(value["data"], value["hostname"])
         # Slice 6 alone may issue ready-to-use instructions after verified
         # completion. Identity-only approval cannot produce those instructions.
         value["ready_instructions"] = None
+        if enrollment["status"].get("active") and value["lifecycle"] != "expired":
+            with self.store.transaction() as connection:
+                completed = connection.execute(
+                    "SELECT 1 FROM onboarding_completion c JOIN recovery_handoff h ON h.id=c.handoff_id WHERE h.instance=? AND json_extract(h.binding,'$.binding_revision')=? LIMIT 1",
+                    (value["instance"], enrollment["status"]["binding_revision"]),
+                ).fetchone()
+            if completed:
+                value["lifecycle"] = "active_onboarding_complete"
+                stamp = datetime.fromtimestamp(
+                    expires, ZoneInfo(value["data"]["timezone"])
+                ).strftime("%b %d, %Y %H:%M %Z (UTC%z)")
+                value["ready_instructions"] = (
+                    f"Your demo is ready. Return to https://{value['hostname']}, sign in with "
+                    f"{enrollment['email']} if prompted, and select Continue to workspace. "
+                    f"Access expires {stamp} · {value['data']['timezone']}. Use synthetic data only."
+                )
         return value
 
 
@@ -259,6 +276,7 @@ class SetupWorker:
 
     def __init__(self, service):
         self.service, self.stopping = service, threading.Event()
+        self.next_recovery_check = 0
         self.thread = threading.Thread(target=self.loop, name="admin-setup", daemon=True)
 
     def start(self):
@@ -269,6 +287,10 @@ class SetupWorker:
         self.thread.join(timeout=30)
 
     def tick(self):
+        recovery = getattr(self.service, "recovery", None)
+        if recovery is not None and self.service.store.clock() >= self.next_recovery_check:
+            self.next_recovery_check = self.service.store.clock() + 60
+            recovery.observe_all()
         with self.service.store.transaction() as connection:
             rows = connection.execute(
                 "SELECT o.id,o.cancel_requested FROM operation o JOIN setup_draft d ON d.operation_id=o.id WHERE o.state IN ('queued','running') OR (o.cancel_requested=1 AND o.state='paused') ORDER BY o.created LIMIT 10"

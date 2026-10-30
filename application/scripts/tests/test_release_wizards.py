@@ -262,6 +262,32 @@ def test_wizard_libraries_remain_identical():
     assert mac == vm
 
 
+def test_admin_bundle_contains_lifecycle_coordinator_and_no_browser_fixture(tmp_path):
+    script = (SCRIPTS / "epm-release-mac.sh").read_text()
+    copy = script.split('  mkdir "$bundle/admin-tools"', 1)[1].split("  printf '%s\\n'", 1)[0]
+    target = tmp_path / "bundle"
+    target.mkdir(mode=0o700)
+    (target / "admin-tools").mkdir()
+    # Drop only macOS's no-sidecar flag for portability; execute the actual
+    # release copy list without building a wheel or contacting any host.
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            f"application={shlex.quote(str(SCRIPTS.parent))}\n"
+            f"bundle={shlex.quote(str(target))}\n"
+            'cp() { [[ "$1" == -X ]] || return 99; shift; command cp "$@"; }\n' + copy,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    for name in ("admin_console.py", "admin_observations.py", "admin_lifecycle.py"):
+        assert (target / "admin-tools" / name).read_bytes() == (SCRIPTS / name).read_bytes()
+    assert not (target / "admin-tools/admin_browser_server.py").exists()
+
+
 @pytest.mark.parametrize("corrupt", [False, True])
 def test_install_checksum_enters_private_release_as_root(tmp_path, corrupt):
     release = tmp_path / "private release"

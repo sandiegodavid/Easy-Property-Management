@@ -275,7 +275,9 @@ def test_lost_control_result_replays_actual_source_receipt_without_second_mutati
     request = BrokerRequest(
         method="command",
         command=CommandRequest(
-            **command().model_dump(exclude={"authority_reference"}), instance="c", confirmed=True
+            **command().model_dump(exclude={"authority_reference", "activation"}),
+            instance="c",
+            confirmed=True,
         ),
         **credentials,
     )
@@ -343,3 +345,119 @@ def test_administrative_status_has_a_fixed_query_budget(source):
         assert sum(sql.lstrip().upper().startswith("SELECT") for sql in observed) == 2
     finally:
         event.remove(store.engine, "before_cursor_execute", statement)
+
+
+def approved_source(source):
+    store, commands = source
+    now = datetime.now(UTC)
+    with immediate_transaction(store.engine) as connection:
+        connection.execute(
+            store.enrollment.insert().values(
+                subject="verified-current",
+                email=store.deployment.allowed_email,
+                received_at=now.timestamp(),
+            )
+        )
+    commands.execute(
+        command(
+            action="approve", subject="verified-current", enrollment_received_at=now.timestamp()
+        ),
+        now,
+    )
+    return store, commands, now
+
+
+def activation(source, **changes):
+    from app.modules.hosted_access.application.admin_commands import deployment_fingerprint
+
+    store, commands, now = approved_source(source)
+    identifier = str(uuid4())
+    proof = {
+        "evidence_id": identifier,
+        "acceptance_id": identifier,
+        "workspace_id": str(store.deployment.workspace_id),
+        "binding_revision": 1,
+        "subject": "verified-current",
+        "deployment_digest": deployment_fingerprint(store.deployment),
+        "verified_at": now.timestamp(),
+        "expires": now.timestamp() + 86400,
+    } | changes
+    return (
+        commands,
+        now,
+        command(
+            action="complete_onboarding",
+            expected_revision=1,
+            expected_binding_revision=1,
+            evidence_id=identifier,
+            acceptance_id=identifier,
+            activation=proof,
+        ),
+    )
+
+
+def test_completion_atomically_audits_and_reconciles_original_after_evidence_expires(source):
+    commands, now, cmd = activation(source)
+    result = commands.execute(cmd, now)
+    assert result.active and result.action == "complete_onboarding"
+    assert (
+        commands.execute(cmd.model_copy(update={"activation": None}), now + timedelta(days=2))
+        == result
+    )
+    commands.validate_retained()
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"subject": "old-subject"},
+        {"binding_revision": 2},
+        {"workspace_id": "00000000-0000-4000-8000-000000000001"},
+        {"deployment_digest": "0" * 64},
+        {"verified_at": 0.0},
+        {"expires": 0.0},
+        {"acceptance_id": "00000000-0000-4000-8000-000000000002"},
+    ],
+)
+def test_completion_rejects_stale_or_foreign_proof_without_mutation(source, changes):
+    commands, now, cmd = activation(source, **changes)
+    with pytest.raises(HostedAccessError):
+        commands.execute(cmd, now)
+    assert not commands.status()["active"] and commands.status()["admin_revision"] == 1
+
+
+def test_disable_wins_before_atomic_completion(source):
+    commands, now, cmd = activation(source)
+    commands.execute(command(expected_revision=1, expected_binding_revision=1), now)
+    with pytest.raises(HostedAccessError):
+        commands.execute(cmd, now)
+    assert not commands.status()["active"]
+
+
+@pytest.mark.parametrize("action", ["renew", "replace_email"])
+def test_configuration_cutover_fences_preserves_history_and_requires_new_recovery(source, action):
+    from app.modules.hosted_access.application.admin_commands import deployment_fingerprint
+
+    store, commands, now = approved_source(source)
+    values = (
+        {"starts": now.timestamp() + 86400, "expires": now.timestamp() + 15 * 86400}
+        if action == "renew"
+        else {"replacement_email": "replacement@example.test"}
+    )
+    cmd = command(action=action, expected_revision=1, expected_binding_revision=1, **values)
+    result = commands.execute(cmd, now)
+    assert not result.active and result.binding_revision == 2 and result.fence == 1
+    assert result.generation == 1
+    assert commands.execute(cmd, now) == result
+    replacement = commands.replacement(cmd)
+    with store.engine.connect() as connection:
+        row = connection.execute(select(store.operator)).mappings().one()
+    assert row["binding_digest"] == deployment_fingerprint(replacement)
+    assert row["subject"] == ("verified-current" if action == "renew" else None)
+    store.deployment = replacement
+    with pytest.raises(HostedAccessError):
+        commands.execute(
+            command(action="enable", expected_revision=2, expected_binding_revision=2, fence=1),
+            now + timedelta(days=1),
+        )
+    commands.validate_retained()

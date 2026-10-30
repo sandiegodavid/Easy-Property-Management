@@ -19,6 +19,7 @@ import {
 } from "./reads";
 import "./style.css";
 import { SetupPage } from "./setup";
+import { Lifecycle } from "./lifecycle";
 
 function ReadState({ read }: { read: Read<unknown> }) {
   if (read.expired)
@@ -110,7 +111,7 @@ function QualificationPlans() {
     </>
   );
 }
-function HostSummary() {
+function HostSummary({ directory }: { directory: Directory | undefined }) {
   const capacity = useRead<Observation<Capacity>>("/admin-api/observations/capacity", 5000);
   const tunnel = useRead<Observation<{ service: string; startup: string }>>(
     "/admin-api/observations/tunnel",
@@ -161,11 +162,15 @@ function HostSummary() {
         <p>Running now does not prove reboot recovery or public Access enforcement.</p>
       </Panel>
       <Panel title="Recovery availability">
-        <p className="state">Unknown</p>
-        <p>Oldest verified off-host recovery point: Not verified.</p>
+        {!directory && <p>Recovery observations are unavailable.</p>}
+        {directory?.items.map((item) => (
+          <p key={item.key}>
+            <strong>{item.name}</strong>: {recoveryState(item.recovery)} · Last verified off-host
+            read-back: {time(item.recovery.data?.off_host_readback)}
+          </p>
+        ))}
         <p>
-          Onboarding verification remains blocked until independently verified recovery evidence is
-          installed.
+          Showing this directory page only. Open an operator for its private recovery checklist.
         </p>
         <p>
           Recovery age warns after 20 hours and is overdue after 24 hours; it does not automatically
@@ -175,12 +180,18 @@ function HostSummary() {
     </div>
   );
 }
+function recoveryState(recovery: Observation<Recovery>) {
+  return words(
+    recovery.state === "available" ? (recovery.data?.policy_state ?? "unknown") : recovery.state,
+  );
+}
 function DirectoryPage() {
   const [offset, setOffset] = useState(0),
     [filter, setFilter] = useState("all");
   const read = useRead<Directory>(`/admin-api/operators/page/${offset}`);
   const items = read.data?.items.filter((item) => {
     const status = lifecycle(item.access.state === "available" ? item.access.data : null);
+    if (filter === "recovery") return recoveryState(item.recovery) !== "Verified";
     return (
       filter === "all" ||
       (filter === "enabled" ? status === "Access enabled" : status !== "Access enabled")
@@ -198,7 +209,7 @@ function DirectoryPage() {
         Save an operator setup while capacity is unresolved. Creating an instance requires fresh
         qualification, resource and Access-seat checks.
       </p>
-      <HostSummary />
+      <HostSummary directory={read.failed || read.expired ? undefined : read.data} />
       <Panel title="Qualification">
         <QualificationPlans />
       </Panel>
@@ -209,6 +220,7 @@ function DirectoryPage() {
           <option value="all">All</option>
           <option value="enabled">Access enabled</option>
           <option value="review">Needs review or unknown</option>
+          <option value="recovery">Recovery needs attention</option>
         </select>
         <p>
           Access counts are unknown until current source observations are available. Registration
@@ -244,7 +256,7 @@ function DirectoryPage() {
                     : words(item.runtime.state)}
                 </dd>
                 <dt>Recovery</dt>
-                <dd>{words(item.recovery.state)}</dd>
+                <dd>{recoveryState(item.recovery)}</dd>
               </dl>
             </article>
           ))}
@@ -305,9 +317,17 @@ function OperatorDetails({ instance }: { instance: string }) {
         </p>
       ) : (
         <p className="notice">
-          Read-only observations. Enrollment approval, invitation, renewal and activation are not
-          enabled here. Access enabled is not an onboarding acceptance claim.
+          Existing allocation. Recovery verification and explicit access changes are available
+          below; registration alone is not onboarding acceptance.
         </p>
+      )}
+      {item && (
+        <Lifecycle
+          instance={instance}
+          hostname={item.hostname}
+          email={item.email}
+          expires={access.data?.data?.expires}
+        />
       )}
       <div className="grid">
         <Panel title="Access">
@@ -370,6 +390,13 @@ function OperatorDetails({ instance }: { instance: string }) {
                 <dd>{time(r.restore_drill)}</dd>
                 <dt>Approved binding verification</dt>
                 <dd>{time(r.approved_binding)}</dd>
+                <dt>Recovery follow-up</dt>
+                <dd>
+                  {words(r.policy_state ?? "unknown")} ·{" "}
+                  {r.acknowledged ? "Acknowledged" : "Not acknowledged"}
+                </dd>
+                <dt>Last attempt</dt>
+                <dd>{time(r.attempted)}</dd>
               </dl>
             )}
           </Observed>
@@ -453,6 +480,19 @@ function OperationDetails({ id }: { id: string }) {
                 This operation needs private review. Inspect the original operation with the
                 installed launcher; do not submit another job.
               </p>
+            )}
+            {read.data.kind === "source" && read.data.state === "waiting" && (
+              <div className="notice">
+                <p>
+                  App access is fenced. Disable is awaiting independently verified manual Cloudflare
+                  denial. Keep the Access application protected; privately replace its allowance
+                  with Block everyone, then run:
+                </p>
+                <pre>{`sudo /opt/epm/admin/venv/bin/python -I /opt/epm/admin/admin_console.py verify-edge-denial --operation ${read.data.id}`}</pre>
+                <p>
+                  Resume this original operation after verification; do not submit another disable.
+                </p>
+              </div>
             )}
             <p>
               This page is read-only. Safe stop retains resources; resuming requires private
