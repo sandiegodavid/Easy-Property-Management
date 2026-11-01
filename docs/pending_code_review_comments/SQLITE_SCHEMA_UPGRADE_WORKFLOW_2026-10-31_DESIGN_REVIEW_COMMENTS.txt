@@ -1,0 +1,60 @@
+SQLite schema upgrade workflow design review
+Re-reviewed November 25, 2026. All eight findings remain open.
+
+Scope and schema identity
+
+1. [P1] [still open] Define when the baseline freezes and what history is supported.
+   References: docs/hosting/research/SQLITE_SCHEMA_UPGRADE_WORKFLOW_2026-10-31.md:16-18, :32-34, :50-56, :80
+   References: AGENTS.md:65-69; docs/hosting/design/mvp/implementation-contracts.md:42-48; docs/hosting/design/mvp/releases.md:147-153
+   Freezing every dist build would capture conflicting greenfield variants of the same revision. An unchanged Alembic stamp cannot distinguish them, so a validator keyed by the stamp alone cannot make the original C6 failure impossible. A no-op revision would not repair the shape mismatch either. Backup and restore is also recovery of a compatible state, as the local restore currently requires exact head after extraction (application/apps/server/app/modules/workspace/application/backup_service.py:173-177).
+   Recommendation: Keep the current greenfield baseline until the applicable release policy authorizes forward evolution. Name the exact first protected artifact and schema digest in the owning H10 design, and distinguish admitted versions from disposable test artifacts. Inventory any persisted variant before promising support. If an admitted variant shares a stamp, require an explicitly qualified source fingerprint and reviewed forward path. Reject ambiguous shapes without stamping. Freeze migration resources against a manifest from an independently retained qualified artifact, including dependencies that can change migration behavior. Use C6 as a synthetic regression fixture and pick the first real migration from an actual required change.
+
+2. [P2] [still open] Classify revision and structure independently and define the rollback compatibility matrix.
+   References: docs/hosting/research/SQLITE_SCHEMA_UPGRADE_WORKFLOW_2026-10-31.md:32, :40-42, :61, :69
+   References: application/apps/server/app/platform/product_migrations.py:101-107, :224-235; docs/hosting/design/mvp/releases.md:81-86, :132-137
+   At-head cannot mean skip structural validation. Revision IDs are graph identifiers, so an unknown stamp cannot generally be classified as newer. The rule that a new binary supports head and head minus one only establishes backward compatibility for that binary. It does not establish that the previous binary can consume a store or values written by the new binary. The current validator rejects any other exact revision and checks application structure and data.
+   Recommendation: Separate known supported ancestor, exact supported schema, proven newer, unknown or divergent, and missing or mismatched structure. Use packaged lineage and trusted release evidence to classify revisions. Declare separate per-artifact read, write, migrate and restore ranges, including API and data semantics. Explicitly qualify old binary/new data before allowing binary rollback. Maintain a supported upgrade path from each admitted starting version even if only adjacent versions coexist at runtime.
+
+Hosted execution and recovery
+
+3. [P1] [still open] Route all hosted upgrades through the fenced release operation and measure progress per assignment.
+   References: docs/hosting/research/SQLITE_SCHEMA_UPGRADE_WORKFLOW_2026-10-31.md:32, :36, :44, :64, :79
+   References: docs/hosting/design/mvp/releases.md:81-104, :128-137; docs/hosting/design/mvp/delivery-plan.md:95
+   Open-time DDL can bypass the approved window, command drain, unfinished-form preservation and single-writer gate. Zero behind fleet-wide also conflicts with bounded canaries, operator deferrals and sleeping workspaces on eligible pinned releases. An unavailable workspace could hold an unrelated rollout open indefinitely.
+   Recommendation: Ordinary opening checks readiness. An independently authorized, durable H10 operation owns maintenance, drain and reconciliation, final recovery-point verification, migration, pinned-image startup, and reopening. A wake may resume that operation before serving traffic. Use a read-only census against each workspace's verified assignment, with current, deferred, in progress, failed and unknown states. Require compatibility for every served workspace. For contract steps, require evidence that affected readers, writers and deferred members are upgraded or safely fenced. Keep local opening read-only and specify ownership, exclusive access and recovery prerequisites separately before enabling local upgrades.
+
+4. [P1] [still open] Bind the recovery point and rollback decision to the final drained state and existing restore authority.
+   References: docs/hosting/research/SQLITE_SCHEMA_UPGRADE_WORKFLOW_2026-10-31.md:36, :70, :78
+   References: docs/hosting/design/mvp/recovery.md:28-50, :67-89, :105-115; docs/hosting/design/mvp/releases.md:99-103, :132-137
+   A verified night-before or pre-drain snapshot can omit acknowledged writes and retained files. The proposal also leaves unclear who can restore older customer data and how a new release validates a source-version archive. Local passphrase archives and hosted off-host recovery points have different boundaries. Normal hosted restore requires operator authorization, while H10 allows automatic recovery only under a pre-write fence.
+   Recommendation: Reuse each mode's existing recovery machinery. Bind the upgrade receipt to the exact drained business revision, retained-file generation, incarnation, store revisions and qualified source artifact. Pin that recovery point and validator through verification and the recovery window, independent of routine rotation. Qualify capture, decryption and staged restore with source-compatible tooling. Prefer retaining the original validated binding where practical. Define narrow operation-bound authority for automatic pre-write recovery through the owning service. If that authority is unavailable, keep the gate closed and use authenticated recovery. Once writes reopen, preserve them and require a forward fix or separately authorized recovery. Keep sessions and entitlements outside business-data rollback.
+
+5. [P1] [still open] Define interruption recovery across steps and independently owned stores.
+   References: docs/hosting/research/SQLITE_SCHEMA_UPGRADE_WORKFLOW_2026-10-31.md:32, :38, :62, :72, :76
+   References: docs/database/schema-resources.md:16-28, :55-69; docs/hosting/design/mvp/implementation-contracts.md:11-39
+   A transaction per step can roll back the current step, but earlier committed steps stay applied. The stamp cannot prove whether backup, deployment switch, smoke checks or reopening completed. Hosted uses six separate stores and no transaction spans them. A worker crash can leave an intermediate combination even if every individual migration is atomic.
+   Recommendation: Scope the business migrator to its own store. For a release touching multiple stores, pin the dependency order and admitted combinations, and have each owner perform its own step. Store release progress outside any data being replaced. Record request identity, expected source and target, current step, recovery point, fence and observed effect. Reconcile restart from receipts plus validated on-disk state, keep intermediate combinations fenced, and define when to resume, recover, or escalate. Preserve the latest-format initializer's fail-closed contract. Promise the last committed logical state, not byte-identical SQLite files across crashes.
+
+SQLite and payload integrity
+
+6. [P1] [still open] Qualify the real transaction path and preserve audit constraints and triggers.
+   References: docs/hosting/research/SQLITE_SCHEMA_UPGRADE_WORKFLOW_2026-10-31.md:38-40, :50, :76
+   References: application/database/sqlite-migrations/env.py:17-32; application/apps/server/app/platform/product_migrations.py:85-98; application/apps/server/app/platform/sqlite_engine.py:24-45; application/database/sqlite-migrations/versions/0001_initial_schema.py:183-198; application/apps/server/app/modules/audit/infrastructure/schema_validation.py:59-85
+   The supported initializer already uses an explicit write transaction and passes its connection into Alembic. The fallback env.py connection is a different path. Neither establishes per-step upgrade behavior automatically. The sample rebuild recreates indexes but omits both append-only audit triggers. Validating only after commit would discover that defect after the step and revision are already durable.
+   Recommendation: Specify a private owning runner with one explicit transaction per revision, DDL and stamp on the same connection, and target structural and relevant data validation before commit. Define any rebuild-specific foreign-key handling before BEGIN on an isolated connection, check foreign-key integrity before commit and restore normal enforcement. Recreate dependent indexes, triggers and views and verify that audit updates and deletes still fail. Preflight tightened constraints against copied rows and stop on an unhandled conflict. Budget temporary storage for rebuilds and backups. Follow SQLite's documented rebuild order and qualify the exact packaged driver path.
+   References: https://www.sqlite.org/lang_altertable.html#making_other_kinds_of_table_schema_changes
+               https://docs.python.org/3/library/sqlite3.html#transaction-control
+
+7. [P2] [still open] Specify payload decoding and preserve retained evidence.
+   References: docs/hosting/research/SQLITE_SCHEMA_UPGRADE_WORKFLOW_2026-10-31.md:46, :71
+   References: application/apps/server/app/platform/product_migrations.py:257-269; docs/hosting/design/mvp/releases.md:149-153
+   Lazy upgrade is ambiguous about whether a read writes back or changes the bytes used for digests, provenance and replay. Adding a field to a strict payload can itself break an older reader.
+   Recommendation: Default to a pure, versioned read projection. Preserve original hashed or immutable evidence, and define missing-version handling, fail-closed behavior for unknown versions, and accepted read/write versions per payload type. Persist converted mutable payloads only through an explicit owning operation or qualified migration when needed. Check schema validators, evidence identity and downgrade semantics for each affected contract.
+
+Qualification
+
+8. [P2] [still open] Extend the release checklist from migration scripts to the full recovery lifecycle.
+   References: docs/hosting/research/SQLITE_SCHEMA_UPGRADE_WORKFLOW_2026-10-31.md:58-65, :74-80
+   References: docs/hosting/design/mvp/implementation-contracts.md:37-48; docs/hosting/design/mvp/delivery-plan.md:95
+   Golden upgrades and a single process-kill test do not qualify skipped releases, mixed artifacts, or failures between durable effects.
+   Recommendation: Keep sanitized golden fixtures with each qualified source artifact and test the exact candidate release. Require fresh and multi-hop upgrades, same-stamp wrong shape and unknown revision rejection, constraint and trigger preservation, interruption before and after each step's commit, lost acknowledgment, repeated requests and conflicting restore/update/wake operations. Exercise unavailable recovery keys or storage, full disk, post-start smoke failure, old-point staged restore, and the rule against automatic data rollback after reopened writes. Test an active, deferred and sleeping workspace in one rollout. Measure scan, temporary disk, validation and downtime budgets at realistic workspace sizes and verify census work stays bounded.

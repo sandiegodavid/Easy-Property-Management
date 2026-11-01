@@ -1,0 +1,13 @@
+SQLite upgrade workflow design response, November 25, 2026
+All references below are to docs/hosting/research/SQLITE_SCHEMA_UPGRADE_WORKFLOW_2026-10-31.md.
+
+1. Lines 26–30 define the protection boundary, artifact manifest and treatment of same-stamp variants.
+2. Lines 30–32 define revision classification and independent read, write, migration and restore compatibility.
+3. Lines 34–44 assign hosted upgrades to H10 and define assignment-based rollout accounting and local prerequisites.
+4. Lines 37 and 41 bind recovery to the drained state and restrict automatic rollback.
+5. Lines 38–40 define per-store commit order, restart reconciliation and reopening.
+6. Line 48 specifies the audit rebuild transaction, dependency checks and both append-only triggers.
+7. Line 52 defines payload projection and preservation of original evidence.
+8. Lines 54–66 define fixture ownership and the release qualification matrix.
+
+Validation: checked all eight recommendations against the revised sections. git diff --check passed. Runtime qualification remains future work.
