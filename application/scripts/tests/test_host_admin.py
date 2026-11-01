@@ -680,3 +680,23 @@ def test_maintenance_cli_forwards_the_reviewed_selection(host, monkeypatch):
     with pytest.raises(SystemExit) as caught:
         admin.maintenance_command(arguments, store, discovery)
     assert caught.value.code == 0
+
+
+def test_upgrade_reservation_protects_target_and_rollback_release_without_holding_host_lock(host):
+    _, _, discovery, store = host
+    add_instance(host, "a")
+    original = admin.adopt(store, discovery, "a", discovery.observe("a")["digest"])
+    identifier = str(uuid4())
+    target = "release-20261031-01"
+    descriptor = admin.lock_host(store)
+    try:
+        store.reserve_upgrade(identifier, original, target)
+    finally:
+        os.close(descriptor)
+    # A durable reservation does not keep the process-wide flock held through
+    # backups or provider calls. Other operators' urgent containment can still
+    # acquire it; ordinary maintenance admission remains blocked durably.
+    descriptor = admin.lock_host(store)
+    os.close(descriptor)
+    assert admin.protected_releases(store) == sorted([original.release, target])
+    assert store.get("a") == original

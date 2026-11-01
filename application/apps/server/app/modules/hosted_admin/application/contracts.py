@@ -10,6 +10,8 @@ from app.modules.hosted_access.application.admin_commands import AccessCommand
 from app.modules.hosted_admin.application.console import HostSection, InstanceSection
 from app.modules.hosted_admin.application.setup import SetupCommand
 from app.modules.hosted_admin.application.recovery import RecoveryCheck
+from app.modules.hosted_admin.application.upgrades import UpgradeCommand
+from app.modules.hosted_admin.application.upgrade_batches import BatchCommand
 
 
 class AdminError(ValueError):
@@ -95,6 +97,14 @@ class BrokerRequest(BaseModel):
         "recovery_handoff",
         "recovery_check",
         "recovery_acknowledge",
+        "upgrade_options",
+        "upgrade_command",
+        "upgrade_view",
+        "upgrade_lookup",
+        "batch_command",
+        "batch_view",
+        "batch_lookup",
+        "batch_list",
     ]
     token: str = Field(default="", max_length=128)
     csrf: str = Field(default="", max_length=128)
@@ -107,12 +117,25 @@ class BrokerRequest(BaseModel):
     section: HostSection | InstanceSection | None = None
     setup: SetupCommand | None = None
     recovery: RecoveryCheck | None = None
+    upgrade: UpgradeCommand | None = None
+    batch: BatchCommand | None = None
+    batch_offset: int = Field(default=0, ge=0, le=49)
+    batch_limit: int = Field(default=10, ge=1, le=50)
+    batch_page: int = Field(default=0, ge=0, le=990, multiple_of=10)
     draft_id: str | None = Field(
         default=None, pattern=r"^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$"
     )
 
     @model_validator(mode="after")
     def coherent(self):
+        if self.method != "batch_list" and self.batch_page:
+            raise ValueError("Only batch history accepts directory pagination.")
+        if (self.method == "batch_command") != (self.batch is not None):
+            raise ValueError("Batch commands require their exact reviewed intent.")
+        if self.method != "batch_view" and (self.batch_offset or self.batch_limit != 10):
+            raise ValueError("Only batch progress accepts member pagination.")
+        if (self.method == "upgrade_command") != (self.upgrade is not None):
+            raise ValueError("Upgrade commands require their exact typed intent.")
         if (self.method in {"recovery_check", "recovery_acknowledge"}) != (
             self.recovery is not None
         ):
@@ -123,16 +146,28 @@ class BrokerRequest(BaseModel):
             raise ValueError("Select exactly one saved setup.")
         if (self.method in {"command", "reauthenticate"}) != (self.command is not None):
             raise ValueError("This operation requires exactly its registered command.")
-        if (self.method in {"lookup", "operation", "resume", "cancel", "console_operation"}) != (
-            self.operation_id is not None
-        ):
+        if (
+            self.method
+            in {
+                "lookup",
+                "operation",
+                "resume",
+                "cancel",
+                "console_operation",
+                "upgrade_view",
+                "upgrade_lookup",
+                "batch_view",
+                "batch_lookup",
+            }
+        ) != (self.operation_id is not None):
             raise ValueError("Only lookup accepts an operation identity.")
         if (self.method in {"resume", "cancel"}) != (self.expected_revision is not None):
             raise ValueError("Operation controls require the reviewed revision.")
         if self.operation_id is not None and str(UUID(self.operation_id)) != self.operation_id:
             raise ValueError("Canonical lookup identity required.")
         if (
-            self.method in {"source_status", "console_record", "recovery_handoff"}
+            self.method
+            in {"source_status", "console_record", "recovery_handoff", "upgrade_options"}
             or (
                 self.method == "console_observation"
                 and self.section in {"access", "runtime", "recovery"}

@@ -30,6 +30,11 @@ class OnboardingRecovery:
 
     def handoff(self, instance, identity):
         binding, status = self.binding(instance)
+        identifier = self.ensure(binding, identity)
+        return self.view(identifier, status["admin_revision"], binding)
+
+    def ensure(self, binding, identity):
+        instance = binding.instance
         encoded = canonical(binding.model_dump())
         with self.store.transaction() as connection:
             current = self.store._identity(connection)
@@ -55,7 +60,7 @@ class OnboardingRecovery:
                 self.store._audit(connection, "recovery_handoff_created", identifier)
             else:
                 identifier = row["id"]
-        return self.view(identifier, status["admin_revision"], binding)
+        return identifier
 
     def _get(self, connection, identifier):
         row = connection.execute(
@@ -158,6 +163,11 @@ class OnboardingRecovery:
                 "SELECT operation_id FROM onboarding_completion WHERE handoff_id=? ORDER BY completed DESC LIMIT 1",
                 (identifier,),
             ).fetchone()
+            if completed is None:
+                completed = connection.execute(
+                    "SELECT l.operation_id FROM upgrade_onboarding l JOIN operation o ON o.id=l.operation_id WHERE l.handoff_id=? AND o.state='succeeded' ORDER BY l.rowid DESC LIMIT 1",
+                    (identifier,),
+                ).fetchone()
         return {
             "id": identifier,
             "instance": row["instance"],

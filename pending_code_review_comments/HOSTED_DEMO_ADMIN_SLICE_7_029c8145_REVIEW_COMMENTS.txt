@@ -1,0 +1,29 @@
+Review: commit 029c8145, HOSTED_DEMO_ADMIN_DESIGN.md Slice 7
+Date: 2026-11-01
+
+RESOLVED FINDINGS — 2026-11-01
+
+HOSTED SESSION / BROWSER
+
+1. [P1] resolved (2026-11-01) — Fresh sign-in loops after a completed upgrade.
+File: application/apps/web/src/app/hosted-session.tsx:49-52
+Related: application/apps/server/app/modules/hosted_access/api/middleware.py:280-282; application/apps/server/app/platform/web_delivery.py:224.
+After an upgrade records a release identity, public /sign-in HTML still has no epm-release metadata because it skips authentication. A successful sign-in followed by the session GET therefore sees releaseIdentity != loadedRelease() (null), returning before navigation to the authenticated destination. Reload to continue reloads /sign-in with missing metadata again. Navigate to the authenticated entry after sign-in before comparing application release, or provide trustworthy current release metadata independently of session authentication. Add a fresh-login test after upgrade, including revoke-on-upgrade.
+Resolution: A validated sign-in navigates to the protected destination before comparing the authenticated shell release. Real packaged-browser tests cover fresh sign-in after both preserved-session and revoke-session upgrades, with one explicit admission and no business-command replay.
+
+2. [P2] resolved (2026-11-01) — Expired or revoked sessions remain trapped in the maintenance screen.
+File: application/apps/web/src/app/hosted-session.tsx:230-243
+Related: application/apps/web/src/app/hosted-session.tsx:72-98.
+After hosted_upgrade_in_progress sets upgrade to paused, a subsequent session GET returning 401 never clears that state. Check upgrade status remains the only action and the normal session-issuing sign-in action is hidden. This occurs when maintenance outlasts session expiry or revocation was selected. Transition definitive session-invalid responses to normal sign-in while preserving recoverable forms; test both expiry and revocation after maintenance.
+Resolution: Definitive HTTP 401 responses clear the upgrade presentation and restore explicit sign-in while retaining mounted, inert editors. Real expiry and revocation tests verify saved input survives and no Task command is automatically submitted.
+
+UPGRADE / ROLLBACK
+
+3. [P1] resolved (2026-11-01) — Rollback rejects the inventory state produced by interrupted acceptance.
+File: application/apps/server/app/modules/hosted_admin/infrastructure/upgrade_deployment.py:60-68
+Related: application/apps/server/app/modules/hosted_admin/infrastructure/upgrade_deployment.py:366; application/apps/server/app/modules/hosted_admin/infrastructure/upgrade_deployment.py:399-401.
+Acceptance reconciles inventory to revision+1 and the target release before source resume can fail, for example due to concurrent disablement. Rollback changes the expected release to the original, so its first stop inspection rejects this already-reconciled target state with admin_upgrade_inventory_changed. The operator remains paused and the offered rollback cannot recover. Permit the pinned reconciled-target state during rollback and reconcile it back through a new expected-revision transition; the existing early return for an already-reconciled reservation must not skip this update. A focused real-fixture reproduction confirmed the rejection.
+
+Resolution: Rollback accepts the pinned reconciled target. If forward acceptance already reconciled inventory, rollback creates its own expected-revision reservation and reconciliation back to the original release; it preserves the forward receipt and concurrent disablement. Tests cover lost replies after finish/reconcile, idempotent acceptance, unrelated-revision rejection, and isolation of another operator.
+
+Implementation validation (2026-11-01): 87 focused backend tests passed (upgrade deployment, upgrade service and host inventory); 23 packaged hosted-session Playwright tests passed. Ruff check/format for all 3 changed Python files, frontend lint/format/typecheck (207 source files), deterministic contracts check, packaged web build and diff whitespace check passed. No full application suite or live host deployment performed.

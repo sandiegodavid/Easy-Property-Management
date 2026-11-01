@@ -58,6 +58,9 @@ def initialize_schema(connection) -> None:
         sa.Column("email", sa.String, nullable=False),
         sa.Column("received_at", sa.Float, nullable=False),
     )
+    from app.modules.hosted_access.infrastructure.maintenance import initialize_maintenance
+
+    initialize_maintenance(operations, connection)
     operations.create_table(
         "hosted_session",
         sa.Column("token_hash", sa.String(64), primary_key=True),

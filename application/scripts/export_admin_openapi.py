@@ -1,6 +1,11 @@
 """Deterministic private setup schemas, without a workspace or installed host."""
 
 import json
+from app.modules.hosted_admin.application.upgrade_batches import (
+    BatchCommand,
+    BatchView,
+    BatchDirectory,
+)
 
 from app.modules.hosted_admin.application.setup import (
     SetupCommand,
@@ -11,6 +16,11 @@ from app.modules.hosted_admin.application.setup import (
 from app.modules.hosted_admin.application.contracts import CommandRequest
 from app.modules.hosted_admin.application.recovery import RecoveryCheck, RecoveryReport
 from app.modules.hosted_access.application.admin_commands import AccessStatus
+from app.modules.hosted_admin.application.upgrades import (
+    UpgradeCommand,
+    UpgradeView,
+    InstalledRelease,
+)
 
 
 def specification():
@@ -24,6 +34,12 @@ def specification():
         RecoveryCheck,
         RecoveryReport,
         AccessStatus,
+        UpgradeCommand,
+        UpgradeView,
+        InstalledRelease,
+        BatchCommand,
+        BatchView,
+        BatchDirectory,
     ):
         value = model.model_json_schema(ref_template="#/components/schemas/{model}")
         schemas.update(value.pop("$defs", {}))

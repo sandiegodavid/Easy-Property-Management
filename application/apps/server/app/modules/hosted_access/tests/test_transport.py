@@ -381,3 +381,52 @@ def test_late_storage_error_does_not_start_a_second_response():
     with pytest.raises(HostedAccessError):
         asyncio.run(middleware({"type": "http"}, None, send))
     assert len(messages) == 1
+
+
+def test_maintenance_blocks_dispatch_and_stale_clients_cannot_write_after_acceptance(transport):
+    from uuid import uuid4
+    from app.modules.hosted_access.application.maintenance import MaintenanceCommand
+    from app.modules.hosted_access.infrastructure.source_commands import AccessCommands
+
+    client, store, calls, _ready = transport
+    sign_in(transport)
+    source = AccessCommands(store).status()
+    command = MaintenanceCommand(
+        id=str(uuid4()),
+        owner=str(uuid4()),
+        action="pause",
+        expected_revision=0,
+        expected_admin_revision=source["admin_revision"],
+        expected_binding_revision=source["binding_revision"],
+        expected_fence=source["admin_fence"],
+        authority_reference="admin:1",
+        reason="Upgrade",
+        release="a" * 64,
+    )
+    store.maintenance.execute(command)
+    for path, method in (
+        ("/api/tasks", "GET"),
+        ("/api/tasks", "POST"),
+        ("/api/hosted/session", "POST"),
+    ):
+        result = client.request(method, path)
+        assert result.status_code == 503
+        assert result.json()["detail"]["code"] == "hosted_upgrade_in_progress"
+    assert not calls
+    accepted = command.model_copy(
+        update={
+            "id": str(uuid4()),
+            "action": "resume",
+            "expected_revision": 1,
+            "release": "b" * 64,
+            "restore_access": True,
+        }
+    )
+    store.maintenance.execute(accepted)
+    assert client.get("/api/hosted/session").json()["releaseIdentity"] == "b" * 64
+    stale = client.post("/api/tasks")
+    assert stale.status_code == 409
+    assert stale.json()["detail"]["code"] == "hosted_release_reload_required"
+    assert not calls
+    assert client.post("/api/tasks", headers={"x-epm-release": "b" * 64}).status_code == 200
+    assert len(calls) == 1

@@ -7,7 +7,7 @@ CREATE TABLE operation_target (
 ) STRICT;
 CREATE TABLE operation (
  id TEXT PRIMARY KEY, identity TEXT NOT NULL, generation INTEGER NOT NULL CHECK(generation>0),
- kind TEXT NOT NULL CHECK(kind IN ('source','provision','qualification_test')),
+ kind TEXT NOT NULL CHECK(kind IN ('source','provision','qualification_test','upgrade_check','upgrade','upgrade_rollback')),
  target TEXT NOT NULL REFERENCES operation_target(target),
  request_hash TEXT NOT NULL, payload TEXT NOT NULL, target_fence INTEGER NOT NULL,
  revision INTEGER NOT NULL CHECK(revision>0),

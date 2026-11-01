@@ -28,6 +28,7 @@ export type Recovery = {
 };
 export type Operator = {
   key: string;
+  registered_revision: number;
   name: string;
   email: string;
   hostname: string;

@@ -154,7 +154,9 @@ The broker reads only the fixed root-private directory
 private collector and protect its signing key. There is deliberately no Admin
 HTTP/CLI command to sign an administrator's declaration or manufacture evidence.
 Without approved collector output, capacity/qualification commands fail closed.
-Executing and registering real Linux/Cloudflare acceptance is Slice 7 work.
+The [Slice 7 upgrade adapters](HOSTED_ADMIN_UPGRADES.md) execute and register
+Linux/Cloudflare acceptance using this trusted input. Real host qualification
+and ceiling promotion remain separate Slice 8 work.
 
 The collector publishes:
 

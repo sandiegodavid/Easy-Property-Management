@@ -513,6 +513,418 @@ export interface components {
             /** Expires */
             expires: number;
         };
+        /** UpgradeCommand */
+        UpgradeCommand: {
+            /** Id */
+            id: string;
+            /** Instance */
+            instance: string;
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "check" | "start" | "accept" | "rollback";
+            /** Expected Revision */
+            expected_revision: number;
+            /**
+             * Release
+             * @default null
+             */
+            release: string | null;
+            /**
+             * Operation
+             * @default null
+             */
+            operation: string | null;
+            /**
+             * Session Handling
+             * @default null
+             */
+            session_handling: ("preserve" | "revoke") | null;
+            /**
+             * Restore Access
+             * @default null
+             */
+            restore_access: boolean | null;
+            /**
+             * Confirmed
+             * @default false
+             */
+            confirmed: boolean;
+            /** Reason */
+            reason: string;
+        };
+        /** InstalledRelease */
+        InstalledRelease: {
+            /** Release */
+            release: string;
+            /** Digest */
+            digest: string;
+            /** Installed */
+            installed: number;
+            /**
+             * Notes
+             * @default
+             */
+            notes: string;
+            /** Eligible */
+            eligible: boolean;
+            /** Blockers */
+            blockers: string[];
+            /** Preserve Sessions */
+            preserve_sessions: boolean;
+            /** Compatibility Digest */
+            compatibility_digest: string;
+        };
+        /**
+         * UpgradeEvidence
+         * @description Safe proof of a particular paused allocation, artifact and recovery chain.
+         */
+        UpgradeEvidence: {
+            /** Id */
+            id: string;
+            /** Operation */
+            operation: string;
+            /** Owner */
+            owner: string;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "recovery" | "target" | "rollback";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "verified" | "failed";
+            /** Instance */
+            instance: string;
+            /** Workspace Id */
+            workspace_id: string;
+            /** Release Digest */
+            release_digest: string;
+            /** Binding Digest */
+            binding_digest: string;
+            /**
+             * Archive Digest
+             * @default null
+             */
+            archive_digest: string | null;
+            /**
+             * Archive Reference
+             * @default null
+             */
+            archive_reference: string | null;
+            /**
+             * Binding Reference
+             * @default null
+             */
+            binding_reference: string | null;
+            /**
+             * Encrypted Binding Digest
+             * @default null
+             */
+            encrypted_binding_digest: string | null;
+            /**
+             * Snapshot Marker
+             * @default null
+             */
+            snapshot_marker: string | null;
+            /**
+             * Archive
+             * @default false
+             */
+            archive: boolean;
+            /**
+             * Readback
+             * @default false
+             */
+            readback: boolean;
+            /**
+             * Restore
+             * @default false
+             */
+            restore: boolean;
+            /**
+             * Approved Binding
+             * @default false
+             */
+            approved_binding: boolean;
+            /**
+             * Runtime
+             * @default false
+             */
+            runtime: boolean;
+            /**
+             * Protected Routing
+             * @default false
+             */
+            protected_routing: boolean;
+            completed?: components["schemas"]["RecoveryCompletionTimes"];
+            /** Observed */
+            observed: number;
+            /** Expires */
+            expires: number;
+        };
+        /** UpgradeOperation */
+        UpgradeOperation: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "upgrade_check" | "upgrade" | "upgrade_rollback";
+            /** Target */
+            target: string;
+            /** Revision */
+            revision: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "queued" | "running" | "waiting" | "unknown" | "failed" | "paused" | "cancelled" | "succeeded";
+            /** Cancel Requested */
+            cancel_requested: number;
+            /**
+             * Error
+             * @default null
+             */
+            error: string | null;
+            /** Created */
+            created: number;
+            /** Updated */
+            updated: number;
+            /** Steps */
+            steps: components["schemas"]["UpgradeStep"][];
+            /**
+             * Result
+             * @default null
+             */
+            result: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** UpgradeStep */
+        UpgradeStep: {
+            /** Sequence */
+            sequence: number;
+            /** Kind */
+            kind: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "pending" | "intent" | "verified";
+            /**
+             * Reference
+             * @default null
+             */
+            reference: string | null;
+            /**
+             * Checked
+             * @default null
+             */
+            checked: number | null;
+        };
+        /** UpgradeView */
+        UpgradeView: {
+            operation: components["schemas"]["UpgradeOperation"];
+            /**
+             * Original Release
+             * @default null
+             */
+            original_release: string | null;
+            /** @default null */
+            target: components["schemas"]["InstalledRelease"] | null;
+            /**
+             * Workspace Id
+             * @default null
+             */
+            workspace_id: string | null;
+            /**
+             * Session Handling
+             * @default null
+             */
+            session_handling: ("preserve" | "revoke") | null;
+            /** Evidence */
+            evidence?: components["schemas"]["UpgradeEvidence"][];
+            /**
+             * Batch
+             * @default null
+             */
+            batch: string | null;
+        };
+        /** BatchSelection */
+        BatchSelection: {
+            /** Instance */
+            instance: string;
+            /** Expected Revision */
+            expected_revision: number;
+        };
+        /** BatchSessions */
+        BatchSessions: {
+            /** Instance */
+            instance: string;
+            /**
+             * Handling
+             * @enum {string}
+             */
+            handling: "preserve" | "revoke";
+        };
+        /** BatchCommand */
+        BatchCommand: {
+            /** Id */
+            id: string;
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "check" | "recheck" | "start" | "pause" | "cancel" | "resume" | "skip";
+            /**
+             * Batch
+             * @default null
+             */
+            batch: string | null;
+            /**
+             * Expected Revision
+             * @default null
+             */
+            expected_revision: number | null;
+            /** Members */
+            members?: components["schemas"]["BatchSelection"][];
+            /**
+             * Release
+             * @default null
+             */
+            release: string | null;
+            /** Sessions */
+            sessions?: components["schemas"]["BatchSessions"][];
+            /**
+             * Window Start
+             * @default null
+             */
+            window_start: number | null;
+            /**
+             * Window End
+             * @default null
+             */
+            window_end: number | null;
+            /**
+             * Instance
+             * @default null
+             */
+            instance: string | null;
+            /**
+             * Confirmed
+             * @default false
+             */
+            confirmed: boolean;
+            /** Reason */
+            reason: string;
+        };
+        /** BatchMemberView */
+        BatchMemberView: {
+            /** Sequence */
+            sequence: number;
+            /** Instance */
+            instance: string;
+            /** Name */
+            name: string;
+            /** Expected Revision */
+            expected_revision: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "containing" | "skipped" | "rolled_back" | "accepted_restored" | "accepted_disabled" | "failed" | "awaiting_acceptance" | "upgrading" | "blocked" | "queued" | "checking_readiness";
+            /** Operation */
+            operation: string | null;
+            /** Rollback */
+            rollback: string | null;
+            /** Operation Revision */
+            operation_revision: number | null;
+            /** Observed */
+            observed: number | null;
+            /** Original Release */
+            original_release: string | null;
+            /** Target Digest */
+            target_digest: string | null;
+            /** Preserve Sessions */
+            preserve_sessions: boolean;
+            /** Session Handling */
+            session_handling: ("preserve" | "revoke") | null;
+            /** Access Active */
+            access_active: boolean | null;
+            /** Error */
+            error: string | null;
+            /** Can Skip */
+            can_skip: boolean;
+        };
+        /** BatchView */
+        BatchView: {
+            /** Id */
+            id: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "checking" | "ready" | "blocked" | "running" | "paused" | "cancelled" | "completed" | "mixed";
+            /** Revision */
+            revision: number;
+            /** Release */
+            release: string;
+            /** Error */
+            error: string | null;
+            /** Total */
+            total: number;
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /** Window Start */
+            window_start: number | null;
+            /** Window End */
+            window_end: number | null;
+            /** Items */
+            items: components["schemas"]["BatchMemberView"][];
+            /** Offset */
+            offset: number;
+            /** Next Offset */
+            next_offset: number | null;
+        };
+        /** BatchDirectoryEntry */
+        BatchDirectoryEntry: {
+            /** Id */
+            id: string;
+            /** State */
+            state: string;
+            /** Revision */
+            revision: number;
+            /** Created */
+            created: number;
+            /** Updated */
+            updated: number;
+            /** Release */
+            release: string;
+            /** Total */
+            total: number;
+            /** Accepted */
+            accepted: number;
+            /** Skipped */
+            skipped: number;
+        };
+        /** BatchDirectory */
+        BatchDirectory: {
+            /** Items */
+            items: components["schemas"]["BatchDirectoryEntry"][];
+            /** Total */
+            total: number;
+            /** Offset */
+            offset: number;
+            /** Next Offset */
+            next_offset: number | null;
+        };
     };
     responses: never;
     parameters: never;

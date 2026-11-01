@@ -293,6 +293,9 @@ class SetupWorker:
         self.thread.join(timeout=30)
 
     def tick(self):
+        upgrades = getattr(self.service, "upgrades", None)
+        if upgrades is not None:
+            upgrades.tick()
         recovery = getattr(self.service, "recovery", None)
         if recovery is not None and self.service.store.clock() >= self.next_recovery_check:
             self.next_recovery_check = self.service.store.clock() + 60

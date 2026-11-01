@@ -365,7 +365,7 @@ class LinuxProvisioning:
         ]
         return json.loads(self.call(argv, timeout=180))
 
-    def verify_ingress(self, plan):
+    def verify_ingress(self, plan, *, upgrading=None):
         # The first installation uses a protected JSON-formatted cloudflared
         # config (also valid YAML), qualified with the existing local tunnel.
         path = self.h.paths.configs / "cloudflared-admin.json"
@@ -384,7 +384,8 @@ class LinuxProvisioning:
             retained = {"hostname": item.hostname, "service": f"http://127.0.0.1:{item.port}"}
             if [route for route in routes if route.get("hostname") == item.hostname] != [retained]:
                 raise AdminError("admin_existing_route_changed", 409)
-            self.h.discovery.source_command_ready(item)
+            if item.key != upgrading:
+                self.h.discovery.source_command_ready(item)
         self.call(["/usr/bin/cloudflared", "--config", str(path), "tunnel", "ingress", "validate"])
         effective = self.h.discovery.systemctl(
             "show", "epm-cloudflared.service", "--property=ExecStart", "--value"

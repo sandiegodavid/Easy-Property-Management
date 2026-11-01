@@ -658,7 +658,7 @@ def publish_baseline(store, observation):
 
 def protected_releases(store):
     registered = store.list()
-    releases = {item.release for item in registered}
+    releases = {item.release for item in registered} | set(store.upgrade_releases())
     expected = {item.baseline_digest for item in registered}
     found = set()
     directory = store.path.parent / "baselines"

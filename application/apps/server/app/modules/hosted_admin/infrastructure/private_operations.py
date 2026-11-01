@@ -11,6 +11,9 @@ from app.modules.hosted_admin.application.qualification import (
     UUID_PATTERN,
 )
 from app.modules.hosted_admin.infrastructure.authority import SourceEffect
+from app.modules.hosted_admin.application.upgrades import UpgradeCommand
+from app.modules.hosted_admin.application.upgrade_batches import BatchCommand
+from app.modules.hosted_admin.infrastructure.upgrades import UpgradeEffects
 from app.modules.hosted_admin.infrastructure.operations import OperationEngine
 
 
@@ -29,6 +32,13 @@ class PrivateOperationRequest(BaseModel):
         "resume-grant",
         "recovery-register",
         "access-admit",
+        "upgrade-grant",
+        "upgrade-admit",
+        "batch-grant",
+        "batch-admit",
+        "batch-status",
+        "batch-list",
+        "batch-run",
     ]
     plan: QualificationPlan | None = None
     command: QualificationCommand | None = None
@@ -38,9 +48,18 @@ class PrivateOperationRequest(BaseModel):
     expected_revision: int | None = Field(default=None, ge=1)
     report_id: str | None = Field(default=None, pattern=UUID_PATTERN)
     source_command: CommandRequest | None = None
+    upgrade: UpgradeCommand | None = None
+    batch: BatchCommand | None = None
+    page: int = Field(default=0, ge=0, le=990, multiple_of=10)
 
     @model_validator(mode="after")
     def coherent(self):
+        if self.action != "batch-list" and self.page:
+            raise ValueError("Only batch history accepts pagination.")
+        if (self.action in {"batch-grant", "batch-admit"}) != (self.batch is not None):
+            raise ValueError("Select the exact batch intent.")
+        if (self.action in {"upgrade-grant", "upgrade-admit"}) != (self.upgrade is not None):
+            raise ValueError("Select the exact upgrade command.")
         if (self.action == "qualification-create") != (self.plan is not None):
             raise ValueError("Only qualification creation accepts a plan.")
         if (self.action in {"qualification-command", "qualification-grant"}) != (
@@ -55,6 +74,8 @@ class PrivateOperationRequest(BaseModel):
             "operation-status",
             "resume-grant",
             "recovery-register",
+            "batch-status",
+            "batch-run",
         }
         if uses_identifier != (self.identifier is not None):
             raise ValueError("Only identified operations accept a selector.")
@@ -62,7 +83,12 @@ class PrivateOperationRequest(BaseModel):
             raise ValueError("Only initial installation accepts a ceiling.")
         if (self.action == "operation-stop") != (self.expected_revision is not None):
             raise ValueError("Stopping an operation requires its reviewed revision.")
-        if self.credential and self.action not in {"qualification-command", "access-admit"}:
+        if self.credential and self.action not in {
+            "qualification-command",
+            "access-admit",
+            "upgrade-admit",
+            "batch-admit",
+        }:
             raise ValueError("Only the exact qualification command consumes a credential.")
         if (self.action == "recovery-register") != (self.report_id is not None):
             raise ValueError("Recovery registration requires a protected report identity.")
@@ -104,8 +130,31 @@ class PrivateOperations:
                 request.identifier, request.report_id
             ),
             "access-admit": lambda: self.admit(request),
+            "upgrade-grant": lambda: {
+                "credential": self.authority.issue(request.upgrade.fingerprint())
+            },
+            "upgrade-admit": lambda: self.dispatch.upgrades.command(
+                request.upgrade, identity, request.credential
+            ),
+            "batch-grant": lambda: {
+                "credential": self.authority.issue(request.batch.fingerprint())
+            },
+            "batch-admit": lambda: self.dispatch.upgrades.batches.command(
+                request.batch, identity, request.credential
+            ),
+            "batch-status": lambda: self.dispatch.upgrades.batches.view(
+                request.identifier, identity, limit=50
+            ),
+            "batch-list": lambda: self.dispatch.upgrades.batches.directory(identity, request.page),
+            "batch-run": lambda: self.batch_run(request.identifier, identity),
         }
         return handlers[request.action]()
+
+    def batch_run(self, identifier, identity):
+        batches = self.dispatch.upgrades.batches
+        view = batches.view(identifier, identity)
+        batches.tick(view["id"])
+        return batches.view(view["id"], identity)
 
     def admit(self, request):
         def prepare(_key):
@@ -120,13 +169,21 @@ class PrivateOperations:
         self.qualification.initialize_capacity(ceiling, snapshot)
         return {"initialized": True, "ceiling": ceiling}
 
+    def adapter(self, operation):
+        if operation["kind"].startswith("upgrade"):
+            upgrades = getattr(self.dispatch, "upgrades", None)
+            if upgrades is None:
+                raise AdminError("admin_upgrade_unavailable", 503)
+            return UpgradeEffects(upgrades)
+        return SourceEffect(self.dispatch) if operation["kind"] == "source" else self.provisioning
+
     def run(self, identifier):
         operation = self.engine.get(identifier)
         if operation["kind"] != "source" and self.provisioning is None:
             raise AdminError("admin_effect_adapter_not_installed", 409)
         self.engine.run(
             identifier,
-            SourceEffect(self.dispatch) if operation["kind"] == "source" else self.provisioning,
+            self.adapter(operation),
         )
         return self.engine.get(identifier)
 
@@ -137,7 +194,7 @@ class PrivateOperations:
         self.engine.cancel(identifier, expected_revision, identity)
         self.engine.finish_cancel(
             identifier,
-            SourceEffect(self.dispatch) if operation["kind"] == "source" else self.provisioning,
+            self.adapter(operation),
         )
         return self.engine.get(identifier)
 

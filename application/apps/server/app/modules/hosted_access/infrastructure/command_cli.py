@@ -16,6 +16,25 @@ from app.modules.workspace.application.service import WorkspaceService
 
 
 def invoke(store, raw, local_config):
+    if "maintenance_receipt" in raw:
+        from app.modules.hosted_access.application.maintenance import MaintenanceCommand
+
+        if set(raw) != {"maintenance_receipt"}:
+            raise ValueError("Invalid maintenance receipt envelope.")
+        command = MaintenanceCommand.model_validate(raw["maintenance_receipt"])
+        with store.engine.connect() as connection:
+            result = store.maintenance.receipt(command, connection)
+        return {"found": result is not None, "result": result.model_dump() if result else None}
+    if "maintenance" in raw:
+        from app.modules.hosted_access.application.maintenance import MaintenanceCommand
+
+        if set(raw) != {"maintenance"}:
+            raise ValueError("Invalid maintenance envelope.")
+        if raw["maintenance"] == "status":
+            return store.maintenance.current().model_dump()
+        return store.maintenance.execute(
+            MaintenanceCommand.model_validate(raw["maintenance"])
+        ).model_dump()
     commands = AccessCommands(store)
     if "query" in raw:
         query = AccessQuery.model_validate(raw)

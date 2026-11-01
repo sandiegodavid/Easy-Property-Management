@@ -90,6 +90,7 @@ SENSITIVE_HEADERS = {
     "cf-access-jwt-assertion",
     "x-epm-csrf",
     "x-epm-draft-lease",
+    "x-epm-release",
     "content-length",
 }
 
@@ -292,6 +293,19 @@ class HostedTransportMiddleware:
                     csrf=headers.get("x-epm-csrf", "") if method not in SAFE_METHODS else None,
                 )
                 scope["state"]["hosted_actor"] = actor
+                scope["state"]["hosted_release"] = actor.release
+                if (
+                    actor.release is not None
+                    and method not in SAFE_METHODS
+                    and path.startswith("/api/")
+                    and not path.startswith("/api/hosted/session")
+                    and headers.get("x-epm-release") != actor.release
+                ):
+                    raise HostedAccessError(
+                        "hosted_release_reload_required",
+                        "A new version is ready—reload to continue. Your unfinished work is preserved.",
+                        409,
+                    )
                 self._capability(path, method)
                 if (
                     headers.get("content-type", "").startswith("multipart/")

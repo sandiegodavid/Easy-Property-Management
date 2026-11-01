@@ -34,6 +34,7 @@ product scope; no additional data-residency requirement is imposed.
 | [Additional operators and Admin console proposal](design/HOSTED_DEMO_ADMIN_DESIGN.md) | Proposed expansion beyond A/B: capacity qualification, private Admin workflow/UI, provisioning, access lifecycle and backend/tooling changes; not deployed |
 | [Registered instance tooling](operations/HOSTED_INSTANCE_TOOLING.md) | Slice 1 private installation/adoption, checked discovery, shared maintenance admission, recovery backup, resume/reconciliation and focused validation; live installation/qualification is separate |
 | [Private Admin authority](operations/HOSTED_ADMIN_AUTHORITY.md) | Slice 2 separate listener/session/broker, source command receipts, launcher, installation inputs and focused tests; no live installation claim |
+| [Admin release upgrades](operations/HOSTED_ADMIN_UPGRADES.md) | Slice 7 single/bulk release upgrades are repository delivered: bounded serial batches, verified recovery, explicit acceptance/rollback, queue controls and focused proof; live qualification remains separate |
 | [Deployment guide](deployment/GOOGLE_CLOUD_DEMO_DEPLOYMENT.md) | Google VM/IAP, reproducible release, volumes, Cloudflare and enrollment setup; new-resource commands |
 | [Configuration contract](deployment/HOSTED_DEMO_CONFIGURATION.md) | JSON fields, route/capability inventory, owner CLI, session and edit-lease rules |
 | [Administrator runbook](operations/HOSTED_DEMO_OPERATIONS.md) | Daily inspection/backups, credentials, disable/renew/reset, host-loss recovery and rollback |

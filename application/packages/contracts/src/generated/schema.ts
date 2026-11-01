@@ -16401,6 +16401,8 @@ export interface components {
              * Format: uuid
              */
             operatorId: string;
+            /** Releaseidentity */
+            releaseIdentity?: string | null;
             /**
              * Workspaceid
              * Format: uuid

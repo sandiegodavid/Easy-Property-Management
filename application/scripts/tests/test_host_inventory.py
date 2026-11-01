@@ -346,3 +346,56 @@ def test_host_wide_release_work_cannot_reconcile_instance_changes(inventory, kin
     with pytest.raises(InventoryError, match="outside the maintenance target"):
         inventory.reconcile(identifier, [(item, replace(item, revision=2))], "b" * 64)
     assert inventory.get("a") == item
+
+
+def test_upgrade_reservation_survives_restart_blocks_private_maintenance_and_protects_releases(
+    inventory,
+):
+    original = instance("a")
+    inventory.register(original)
+    identifier = str(uuid4())
+    target = "release-20261031-01"
+    assert inventory.reserve_upgrade(identifier, original, target) == identifier
+    reopened = HostInventory(inventory.path, owner_uid=os.getuid())
+    assert reopened.reserve_upgrade(identifier, original, target) == identifier
+    assert reopened.upgrade_releases() == sorted([original.release, target])
+    with pytest.raises(InventoryError, match="identity changed"):
+        reopened.reserve_upgrade(identifier, original, "release-20261101-01")
+    with pytest.raises(InventoryError, match="Unfinished maintenance"):
+        reopened.reserve_upgrade(str(uuid4()), original, target)
+    with pytest.raises(InventoryError, match="explicit resume"):
+        reopened.begin_maintenance("release", "backup", "a" * 64, MaintenanceRequest(key="a"))
+    with pytest.raises(InventoryError, match="explicit resume"):
+        reopened.begin_maintenance(
+            "release",
+            "resume",
+            "a" * 64,
+            MaintenanceRequest(key="a", release=target, resume=identifier),
+        )
+    assert len(reopened.maintenance_history()) == 1
+
+
+def test_upgrade_reconciliation_changes_only_target_and_keeps_rollback_protected(inventory):
+    original, other = instance("a"), instance("b")
+    inventory.register(original)
+    inventory.register(other)
+    identifier = str(uuid4())
+    target = "release-20261031-01"
+    inventory.reserve_upgrade(identifier, original, target)
+    inventory.finish_maintenance(identifier, 0)
+    replacement = replace(original, release=target, baseline_digest="d" * 64, revision=2)
+    inventory.reconcile(identifier, [(original, replacement)], "e" * 64)
+    assert inventory.get("a") == replacement and inventory.get("b") == other
+    assert inventory.upgrade_releases() == sorted([original.release, target])
+    assert inventory.maintenance(identifier)["state"] == "reconciled"
+
+
+def test_upgrade_admission_rejects_stale_inventory_without_reservation(inventory):
+    original = instance("a")
+    inventory.register(original)
+    with pytest.raises(InventoryError, match="changed before"):
+        inventory.reserve_upgrade(
+            str(uuid4()), replace(original, revision=2), "release-20261031-01"
+        )
+    assert not inventory.maintenance_history()
+    assert not inventory.upgrade_releases()

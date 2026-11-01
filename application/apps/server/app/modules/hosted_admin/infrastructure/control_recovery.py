@@ -33,6 +33,18 @@ TABLES = (
     "qualification_evidence",
     "qualification_receipt",
     "audit",
+    "upgrade_plan",
+    "upgrade_command",
+    "upgrade_decision",
+    "upgrade_evidence",
+    "upgrade_onboarding",
+    "upgrade_batch",
+    "upgrade_batch_member",
+    "upgrade_batch_command",
+    "upgrade_batch_readiness",
+    "upgrade_batch_child",
+    "upgrade_batch_skip",
+    "upgrade_batch_event",
 )
 MAX_SNAPSHOT_BYTES = 16 * 1024 * 1024
 
@@ -41,6 +53,12 @@ def validate_control(connection):
     if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
         raise AdminError("admin_control_data_invalid", 503)
     from app.modules.hosted_admin.application.recovery import RecoveryBinding, RecoveryReport
+    from app.modules.hosted_admin.infrastructure.upgrades import validate_upgrades
+
+    validate_upgrades(connection)
+    from app.modules.hosted_admin.infrastructure.upgrade_batches import validate_batches
+
+    validate_batches(connection)
 
     for row in connection.execute("SELECT * FROM recovery_handoff"):
         binding = RecoveryBinding.model_validate_json(row["binding"])
@@ -104,6 +122,9 @@ def validate_control(connection):
                 "SELECT result FROM admission WHERE id=?", (row["id"],)
             ).fetchone()
             if receipt is None or receipt[0] != row["result"]:
+                raise AdminError("admin_control_data_invalid", 503)
+        elif row["kind"].startswith("upgrade"):
+            if payload.get("operation_id") != row["id"] or payload.get("instance") != row["target"]:
                 raise AdminError("admin_control_data_invalid", 503)
         else:
             intent = OperationIntent.model_validate(
@@ -265,6 +286,15 @@ def restore_control(store, encoded):
         connection.execute(
             "UPDATE administrator SET generation=?,enabled=0", (value["generation"] + 1,)
         )
+        connection.execute(
+            "UPDATE upgrade_batch SET state='paused',error='admin_restore_review_required',revision=revision+1 WHERE state NOT IN ('completed','mixed','cancelled')"
+        )
+        from app.modules.hosted_admin.infrastructure.batch_history import record_event
+
+        for row in connection.execute(
+            "SELECT id FROM upgrade_batch WHERE error='admin_restore_review_required'"
+        ):
+            record_event(connection, store, row[0], "restore_fenced", current["id"])
         connection.execute(
             "UPDATE operation SET state='paused',claim=NULL,claim_until=NULL,error='admin_restore_review_required',revision=revision+1 WHERE state NOT IN ('succeeded','cancelled')"
         )

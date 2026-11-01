@@ -1240,6 +1240,1106 @@
         "required": ["id", "handoff_id", "binding", "state", "observed", "expires"],
         "title": "RecoveryReport",
         "type": "object"
+      },
+      "UpgradeCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "instance": {
+            "pattern": "^[a-z0-9][a-z0-9-]{0,31}$",
+            "title": "Instance",
+            "type": "string"
+          },
+          "action": {
+            "enum": ["check", "start", "accept", "rollback"],
+            "title": "Action",
+            "type": "string"
+          },
+          "expected_revision": {
+            "minimum": 1,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "release": {
+            "anyOf": [
+              {
+                "pattern": "^release-[0-9]{8}-[0-9]{2,}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Release"
+          },
+          "operation": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Operation"
+          },
+          "session_handling": {
+            "anyOf": [
+              {
+                "enum": ["preserve", "revoke"],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Session Handling"
+          },
+          "restore_access": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Restore Access"
+          },
+          "confirmed": {
+            "default": false,
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": ["id", "instance", "action", "expected_revision", "reason"],
+        "title": "UpgradeCommand",
+        "type": "object"
+      },
+      "InstalledRelease": {
+        "additionalProperties": false,
+        "properties": {
+          "release": {
+            "pattern": "^release-[0-9]{8}-[0-9]{2,}$",
+            "title": "Release",
+            "type": "string"
+          },
+          "digest": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Digest",
+            "type": "string"
+          },
+          "installed": {
+            "minimum": 0,
+            "title": "Installed",
+            "type": "number"
+          },
+          "notes": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Notes",
+            "type": "string"
+          },
+          "eligible": {
+            "title": "Eligible",
+            "type": "boolean"
+          },
+          "blockers": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Blockers",
+            "type": "array"
+          },
+          "preserve_sessions": {
+            "title": "Preserve Sessions",
+            "type": "boolean"
+          },
+          "compatibility_digest": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Compatibility Digest",
+            "type": "string"
+          }
+        },
+        "required": [
+          "release",
+          "digest",
+          "installed",
+          "eligible",
+          "blockers",
+          "preserve_sessions",
+          "compatibility_digest"
+        ],
+        "title": "InstalledRelease",
+        "type": "object"
+      },
+      "UpgradeEvidence": {
+        "additionalProperties": false,
+        "description": "Safe proof of a particular paused allocation, artifact and recovery chain.",
+        "properties": {
+          "id": {
+            "pattern": "^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "operation": {
+            "pattern": "^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$",
+            "title": "Operation",
+            "type": "string"
+          },
+          "owner": {
+            "pattern": "^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$",
+            "title": "Owner",
+            "type": "string"
+          },
+          "stage": {
+            "enum": ["recovery", "target", "rollback"],
+            "title": "Stage",
+            "type": "string"
+          },
+          "state": {
+            "enum": ["verified", "failed"],
+            "title": "State",
+            "type": "string"
+          },
+          "instance": {
+            "pattern": "^[a-z0-9][a-z0-9-]{0,31}$",
+            "title": "Instance",
+            "type": "string"
+          },
+          "workspace_id": {
+            "pattern": "^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "release_digest": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Release Digest",
+            "type": "string"
+          },
+          "binding_digest": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Binding Digest",
+            "type": "string"
+          },
+          "archive_digest": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Archive Digest"
+          },
+          "archive_reference": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Archive Reference"
+          },
+          "binding_reference": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Binding Reference"
+          },
+          "encrypted_binding_digest": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Encrypted Binding Digest"
+          },
+          "snapshot_marker": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Snapshot Marker"
+          },
+          "archive": {
+            "default": false,
+            "title": "Archive",
+            "type": "boolean"
+          },
+          "readback": {
+            "default": false,
+            "title": "Readback",
+            "type": "boolean"
+          },
+          "restore": {
+            "default": false,
+            "title": "Restore",
+            "type": "boolean"
+          },
+          "approved_binding": {
+            "default": false,
+            "title": "Approved Binding",
+            "type": "boolean"
+          },
+          "runtime": {
+            "default": false,
+            "title": "Runtime",
+            "type": "boolean"
+          },
+          "protected_routing": {
+            "default": false,
+            "title": "Protected Routing",
+            "type": "boolean"
+          },
+          "completed": {
+            "$ref": "#/components/schemas/RecoveryCompletionTimes"
+          },
+          "observed": {
+            "minimum": 0,
+            "title": "Observed",
+            "type": "number"
+          },
+          "expires": {
+            "minimum": 0,
+            "title": "Expires",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "operation",
+          "owner",
+          "stage",
+          "state",
+          "instance",
+          "workspace_id",
+          "release_digest",
+          "binding_digest",
+          "observed",
+          "expires"
+        ],
+        "title": "UpgradeEvidence",
+        "type": "object"
+      },
+      "UpgradeOperation": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": ["upgrade_check", "upgrade", "upgrade_rollback"],
+            "title": "Kind",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "queued",
+              "running",
+              "waiting",
+              "unknown",
+              "failed",
+              "paused",
+              "cancelled",
+              "succeeded"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "cancel_requested": {
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Cancel Requested",
+            "type": "integer"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error"
+          },
+          "created": {
+            "title": "Created",
+            "type": "number"
+          },
+          "updated": {
+            "title": "Updated",
+            "type": "number"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/UpgradeStep"
+            },
+            "maxItems": 16,
+            "title": "Steps",
+            "type": "array"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Result"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "target",
+          "revision",
+          "state",
+          "cancel_requested",
+          "created",
+          "updated",
+          "steps"
+        ],
+        "title": "UpgradeOperation",
+        "type": "object"
+      },
+      "UpgradeStep": {
+        "additionalProperties": false,
+        "properties": {
+          "sequence": {
+            "minimum": 0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "state": {
+            "enum": ["pending", "intent", "verified"],
+            "title": "State",
+            "type": "string"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reference"
+          },
+          "checked": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Checked"
+          }
+        },
+        "required": ["sequence", "kind", "state"],
+        "title": "UpgradeStep",
+        "type": "object"
+      },
+      "UpgradeView": {
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "$ref": "#/components/schemas/UpgradeOperation"
+          },
+          "original_release": {
+            "anyOf": [
+              {
+                "pattern": "^release-[0-9]{8}-[0-9]{2,}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Original Release"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InstalledRelease"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Workspace Id"
+          },
+          "session_handling": {
+            "anyOf": [
+              {
+                "enum": ["preserve", "revoke"],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Session Handling"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/UpgradeEvidence"
+            },
+            "maxItems": 3,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "batch": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Batch"
+          }
+        },
+        "required": ["operation"],
+        "title": "UpgradeView",
+        "type": "object"
+      },
+      "BatchSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "instance": {
+            "pattern": "^[a-z0-9][a-z0-9-]{0,31}$",
+            "title": "Instance",
+            "type": "string"
+          },
+          "expected_revision": {
+            "minimum": 1,
+            "title": "Expected Revision",
+            "type": "integer"
+          }
+        },
+        "required": ["instance", "expected_revision"],
+        "title": "BatchSelection",
+        "type": "object"
+      },
+      "BatchSessions": {
+        "additionalProperties": false,
+        "properties": {
+          "instance": {
+            "pattern": "^[a-z0-9][a-z0-9-]{0,31}$",
+            "title": "Instance",
+            "type": "string"
+          },
+          "handling": {
+            "enum": ["preserve", "revoke"],
+            "title": "Handling",
+            "type": "string"
+          }
+        },
+        "required": ["instance", "handling"],
+        "title": "BatchSessions",
+        "type": "object"
+      },
+      "BatchCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "action": {
+            "enum": ["check", "recheck", "start", "pause", "cancel", "resume", "skip"],
+            "title": "Action",
+            "type": "string"
+          },
+          "batch": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Batch"
+          },
+          "expected_revision": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Expected Revision"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/BatchSelection"
+            },
+            "maxItems": 50,
+            "title": "Members",
+            "type": "array"
+          },
+          "release": {
+            "anyOf": [
+              {
+                "pattern": "^release-[0-9]{8}-[0-9]{2,}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Release"
+          },
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/BatchSessions"
+            },
+            "maxItems": 50,
+            "title": "Sessions",
+            "type": "array"
+          },
+          "window_start": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Window Start"
+          },
+          "window_end": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Window End"
+          },
+          "instance": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9][a-z0-9-]{0,31}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Instance"
+          },
+          "confirmed": {
+            "default": false,
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": ["id", "action", "reason"],
+        "title": "BatchCommand",
+        "type": "object"
+      },
+      "BatchMemberView": {
+        "additionalProperties": false,
+        "properties": {
+          "sequence": {
+            "maximum": 49,
+            "minimum": 0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "instance": {
+            "pattern": "^[a-z0-9][a-z0-9-]{0,31}$",
+            "title": "Instance",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "expected_revision": {
+            "minimum": 1,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "containing",
+              "skipped",
+              "rolled_back",
+              "accepted_restored",
+              "accepted_disabled",
+              "failed",
+              "awaiting_acceptance",
+              "upgrading",
+              "blocked",
+              "queued",
+              "checking_readiness"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "operation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation"
+          },
+          "rollback": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rollback"
+          },
+          "operation_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation Revision"
+          },
+          "observed": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed"
+          },
+          "original_release": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Release"
+          },
+          "target_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Digest"
+          },
+          "preserve_sessions": {
+            "title": "Preserve Sessions",
+            "type": "boolean"
+          },
+          "session_handling": {
+            "anyOf": [
+              {
+                "enum": ["preserve", "revoke"],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Handling"
+          },
+          "access_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Active"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "can_skip": {
+            "title": "Can Skip",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sequence",
+          "instance",
+          "name",
+          "expected_revision",
+          "status",
+          "operation",
+          "rollback",
+          "operation_revision",
+          "observed",
+          "original_release",
+          "target_digest",
+          "preserve_sessions",
+          "session_handling",
+          "access_active",
+          "error",
+          "can_skip"
+        ],
+        "title": "BatchMemberView",
+        "type": "object"
+      },
+      "BatchView": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "checking",
+              "ready",
+              "blocked",
+              "running",
+              "paused",
+              "cancelled",
+              "completed",
+              "mixed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "release": {
+            "title": "Release",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "total": {
+            "maximum": 50,
+            "minimum": 1,
+            "title": "Total",
+            "type": "integer"
+          },
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "window_start": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window Start"
+          },
+          "window_end": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window End"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BatchMemberView"
+            },
+            "maxItems": 50,
+            "title": "Items",
+            "type": "array"
+          },
+          "offset": {
+            "maximum": 49,
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "next_offset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Offset"
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "revision",
+          "release",
+          "error",
+          "total",
+          "counts",
+          "window_start",
+          "window_end",
+          "items",
+          "offset",
+          "next_offset"
+        ],
+        "title": "BatchView",
+        "type": "object"
+      },
+      "BatchDirectoryEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "created": {
+            "title": "Created",
+            "type": "number"
+          },
+          "updated": {
+            "title": "Updated",
+            "type": "number"
+          },
+          "release": {
+            "title": "Release",
+            "type": "string"
+          },
+          "total": {
+            "maximum": 50,
+            "minimum": 1,
+            "title": "Total",
+            "type": "integer"
+          },
+          "accepted": {
+            "maximum": 50,
+            "minimum": 0,
+            "title": "Accepted",
+            "type": "integer"
+          },
+          "skipped": {
+            "maximum": 50,
+            "minimum": 0,
+            "title": "Skipped",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "revision",
+          "created",
+          "updated",
+          "release",
+          "total",
+          "accepted",
+          "skipped"
+        ],
+        "title": "BatchDirectoryEntry",
+        "type": "object"
+      },
+      "BatchDirectory": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BatchDirectoryEntry"
+            },
+            "maxItems": 10,
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "maximum": 1000,
+            "minimum": 0,
+            "title": "Total",
+            "type": "integer"
+          },
+          "offset": {
+            "maximum": 990,
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "next_offset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Offset"
+          }
+        },
+        "required": ["items", "total", "offset", "next_offset"],
+        "title": "BatchDirectory",
+        "type": "object"
       }
     }
   }

@@ -463,6 +463,76 @@ class HostInventory:
             self._audit(connection, "maintenance_started", identifier, before_digest)
             return identifier
 
+    def reserve_upgrade(self, identifier, before, release):
+        """Own private maintenance durably before pausing access.
+
+        The caller holds the brief shared host lock. The database transaction
+        makes replay/admission atomic; no lock is held over deployment work.
+        This is not a generic wizard action and cannot be resumed by its CLI.
+        """
+        before.validate()
+        if str(UUID(identifier)) != identifier:
+            raise InventoryError("Invalid upgrade operation identity.")
+        request = MaintenanceRequest(key=before.key, release=release)
+        desired = digest_json(asdict(before))
+        with self.connection(writable=True) as connection:
+            prior = connection.execute(
+                "SELECT * FROM maintenance WHERE id=?", (identifier,)
+            ).fetchone()
+            if prior:
+                intent = json.loads(prior["intent_json"])
+                retained = intent.get("sources", {}).get(before.key, {})
+                if (
+                    prior["kind"] != "release"
+                    or prior["action"] != "admin-upgrade"
+                    or prior["before_digest"] != desired
+                    or intent.get("release") != release
+                    or intent.get("key") != before.key
+                    or {field: retained.get(field) for field in asdict(before)} != asdict(before)
+                ):
+                    raise InventoryError("Upgrade reservation identity changed.")
+                return identifier
+            if connection.execute("SELECT 1 FROM maintenance WHERE state!='reconciled'").fetchone():
+                raise InventoryError("Unfinished maintenance blocks this upgrade.")
+            intent = self._new_intent(connection, "release", "admin-upgrade", identifier, request)
+            retained = intent["sources"][before.key]
+            if {field: retained[field] for field in asdict(before)} != asdict(before):
+                raise InventoryError("Inventory changed before upgrade reservation.")
+            connection.execute(
+                "INSERT INTO maintenance "
+                "(id,kind,action,state,started_at,before_digest,intent_json) "
+                "VALUES (?, 'release','admin-upgrade','running',?,?,?)",
+                (
+                    identifier,
+                    datetime.now(UTC).isoformat(),
+                    desired,
+                    json.dumps(intent, sort_keys=True, separators=(",", ":")),
+                ),
+            )
+            self._audit(connection, "upgrade_reserved", identifier, desired)
+        return identifier
+
+    def upgrade_releases(self):
+        """Protect both installed artifacts, including after a crash or rollback.
+
+        Completed upgrade history is retained until an explicit retention policy
+        can retire its recovery chain; ordinary cleanup cannot infer that proof.
+        """
+        with self.connection() as connection:
+            releases = set()
+            for row in connection.execute(
+                "SELECT intent_json FROM maintenance WHERE action='admin-upgrade'"
+            ):
+                intent = json.loads(row[0])
+                original = intent["sources"][intent["key"]]["release"]
+                for release in (original, intent["release"]):
+                    if not isinstance(release, str) or not re.fullmatch(
+                        r"release-[0-9]{8}-[0-9]{2,}", release
+                    ):
+                        raise InventoryError("Retained upgrade release identity is invalid.")
+                    releases.add(release)
+            return sorted(releases)
+
     @staticmethod
     def _new_intent(connection, kind, action, identifier, request):
         key, release = request.key, request.release
@@ -565,7 +635,7 @@ class HostInventory:
                     raise InventoryError("Inventory changed during reconciliation.")
                 if operation["kind"] != "reconciliation":
                     if (
-                        operation["action"] not in {"deploy", "reset-demo"}
+                        operation["action"] not in {"deploy", "reset-demo", "admin-upgrade"}
                         or old.key != intent["key"]
                     ):
                         raise InventoryError("Changes are outside the maintenance target.")

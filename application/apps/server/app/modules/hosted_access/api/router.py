@@ -30,6 +30,7 @@ class SessionResponse(SessionGrantResponse):
     demoExpiresAt: AwareDatetime
     administratorContact: str
     capabilities: list[str]
+    releaseIdentity: str | None = None
 
 
 def build_session_router(service: HostedAccessService | None = None) -> APIRouter:
@@ -71,6 +72,7 @@ def build_session_router(service: HostedAccessService | None = None) -> APIRoute
             "administratorContact": deployment.administrator_contact,
             "capabilities": sorted(deployment.capabilities),
             "csrfToken": session_csrf(request.cookies[SESSION_COOKIE]),
+            "releaseIdentity": actor.release,
         }
 
     @router.delete("/session", operation_id="endHostedSession", status_code=204)

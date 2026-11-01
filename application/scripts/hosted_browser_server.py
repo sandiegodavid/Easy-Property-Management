@@ -26,6 +26,8 @@ import uvicorn
 
 from app.bootstrap.api import create_app
 from app.modules.hosted_access.application.configuration import HostedDeployment
+from app.modules.hosted_access.application.maintenance import MaintenanceCommand
+from app.modules.hosted_access.infrastructure.source_commands import AccessCommands
 from app.modules.hosted_access.application.storage_budget import HostedStorageBudget, StorageFacts
 from app.modules.hosted_access.application.service import HostedAccessService
 from app.modules.hosted_access.infrastructure.cloudflare_identity import CloudflareIdentityVerifier
@@ -174,6 +176,25 @@ def controls(product, store, identity, deployment):
         with immediate_transaction(store.engine) as connection:
             connection.execute(update(store.sessions).values(expires_at=0))
         return {"expired": True}
+
+    @harness.post("/__test__/maintenance")
+    def maintenance(paused: bool, revoke: bool = False):
+        gate, source = store.maintenance.current(), AccessCommands(store).status()
+        command = MaintenanceCommand(
+            id=str(uuid4()),
+            owner=str(uuid4()) if paused else gate.owner,
+            action="pause" if paused else "resume",
+            expected_revision=gate.revision,
+            expected_admin_revision=source["admin_revision"],
+            expected_binding_revision=source["binding_revision"],
+            expected_fence=source["admin_fence"],
+            authority_reference="isolated-browser-harness",
+            reason="Test upgrade maintenance",
+            release="b" * 64,
+            revoke_sessions=paused and revoke,
+            restore_access=not paused,
+        )
+        return store.maintenance.execute(command).model_dump()
 
     @harness.post("/__test__/expire-draft-leases")
     def expire_draft_leases():

@@ -49,6 +49,8 @@ class SQLiteHostedSessionStore:
             "alembic_version",
             "hosted_admin_receipt",
             "hosted_admin_audit",
+            "hosted_maintenance",
+            "hosted_maintenance_receipt",
         }
         if set(metadata.tables) != expected:
             raise HostedAccessError("hosted_store_invalid", "Hosted access schema is invalid.", 503)
@@ -77,6 +79,10 @@ class SQLiteHostedSessionStore:
                 "hosted_store_invalid", "Hosted access binding is invalid.", 503
             )
         AccessCommands(self).validate_retained()
+        from app.modules.hosted_access.infrastructure.maintenance import MaintenanceGate
+
+        self.maintenance = MaintenanceGate(self)
+        self.maintenance.validate_retained()
 
     def _matches(self, operator) -> bool:
         return operator is not None and all(
@@ -211,6 +217,7 @@ class SQLiteHostedSessionStore:
     def begin_session(self, values: Mapping[str, object]) -> None:
         pending = False
         with immediate_transaction(self.engine) as connection:
+            self.maintenance.require_open(connection)
             operator = connection.execute(select(self.operator)).mappings().one()
             if operator["subject"] is None or (
                 not operator["active"] and operator["subject"] != values["subject"]
@@ -302,6 +309,9 @@ class SQLiteHostedSessionStore:
                         self.operator.c.binding_digest,
                         self.operator.c.not_before,
                         self.operator.c.generation.label("current_generation"),
+                        select(self.maintenance.state.c.state)
+                        .scalar_subquery()
+                        .label("maintenance_state"),
                     )
                     .join(self.operator)
                     .where(self.sessions.c.token_hash == token_hash)

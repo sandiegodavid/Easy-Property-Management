@@ -32170,6 +32170,17 @@
             "title": "Operatorid",
             "type": "string"
           },
+          "releaseIdentity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Releaseidentity"
+          },
           "workspaceId": {
             "format": "uuid",
             "title": "Workspaceid",

@@ -2,7 +2,14 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { api } from "@epm/contracts";
 import type { components } from "@epm/contracts/generated";
 import { Page } from "@epm/ui";
-import { admitHostedSession, hostedMode, pauseHostedSession } from "./hosted-session-state";
+import {
+  admitHostedSession,
+  hostedMode,
+  pauseHostedSession,
+  loadedRelease,
+  pauseForUpgrade,
+  reloadForUpgrade,
+} from "./hosted-session-state";
 
 type Session = components["schemas"]["SessionResponse"];
 
@@ -25,6 +32,7 @@ function SessionGate({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [upgrade, setUpgrade] = useState<"paused" | "reload" | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const readSequence = useRef(0);
   const contact = document
@@ -51,12 +59,20 @@ function SessionGate({ children }: { children: ReactNode }) {
           throw new Error("The session response could not be verified.");
         }
         if (window.location.pathname === "/sign-in") {
-          window.history.replaceState({}, "", destination());
+          // Public sign-in HTML has no authenticated release metadata. Load the
+          // protected shell before comparing its release with the session.
+          window.location.replace(destination());
+          return;
+        }
+        if (data.releaseIdentity && data.releaseIdentity !== loadedRelease()) {
+          pauseForUpgrade(true);
+          return;
         }
         admitHostedSession(data.csrfToken);
         setSession(data);
         setReady(true);
         setMessage("");
+        setUpgrade(null);
       })
       .catch((error: unknown) => {
         if (signal?.aborted || sequence !== readSequence.current) return;
@@ -78,12 +94,18 @@ function SessionGate({ children }: { children: ReactNode }) {
       );
     };
     window.addEventListener("epm-session-paused", pause);
+    const onUpgrade = (event: Event) => {
+      const value: unknown = (event as CustomEvent<unknown>).detail;
+      if (value === null || value === "paused" || value === "reload") setUpgrade(value);
+    };
+    window.addEventListener("epm-upgrade", onUpgrade);
     const clearRuntime = () => setSession(null);
     window.addEventListener("epm-runtime-changed", clearRuntime);
     void read(controller.signal);
     return () => {
       controller.abort();
       window.removeEventListener("epm-session-paused", pause);
+      window.removeEventListener("epm-upgrade", onUpgrade);
       window.removeEventListener("epm-runtime-changed", clearRuntime);
     };
   }, [read]);
@@ -98,6 +120,7 @@ function SessionGate({ children }: { children: ReactNode }) {
     const timeout = window.setTimeout(
       () => {
         pauseHostedSession();
+        setUpgrade(null);
         setMessage("Your session expired. Editing is paused; sign in explicitly to continue.");
       },
       Math.max(0, Date.parse(session.expiresAt) - Date.now()),
@@ -194,22 +217,36 @@ function SessionGate({ children }: { children: ReactNode }) {
       {!ready && (
         <Page title="Easy Property Management">
           <h2 ref={heading} tabIndex={-1}>
-            Sign in to your demo workspace
+            {upgrade
+              ? upgrade === "paused"
+                ? "Upgrade in progress"
+                : "A new version is ready"
+              : "Sign in to your demo workspace"}
           </h2>
-          <p>
-            Use the Cloudflare email sign-in for your assigned link. This demo accepts synthetic
-            data only.
-          </p>
+          {!upgrade && (
+            <p>
+              Use the Cloudflare email sign-in for your assigned link. This demo accepts synthetic
+              data only.
+            </p>
+          )}
           <p>Editing is paused. Nothing is automatically resubmitted after sign-in.</p>
           {message && <p role="alert">{message}</p>}
-          <button disabled={busy} onClick={() => void signIn()}>
-            {busy ? "Checking sign-in…" : "Continue to workspace"}
-          </button>
-          <p>
-            <a href="/cdn-cgi/access/logout">
-              Renew Cloudflare sign-in (signs out broader Access sessions)
-            </a>
-          </p>
+          {upgrade ? (
+            <button onClick={() => (upgrade === "reload" ? reloadForUpgrade() : void read())}>
+              {upgrade === "reload" ? "Reload to continue" : "Check upgrade status"}
+            </button>
+          ) : (
+            <button disabled={busy} onClick={() => void signIn()}>
+              {busy ? "Checking sign-in…" : "Continue to workspace"}
+            </button>
+          )}
+          {!upgrade && (
+            <p>
+              <a href="/cdn-cgi/access/logout">
+                Renew Cloudflare sign-in (signs out broader Access sessions)
+              </a>
+            </p>
+          )}
           {contact && (
             <p>
               Contact the administrator: <a href={`mailto:${contact}`}>{contact}</a>

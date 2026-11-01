@@ -743,3 +743,144 @@ for (const takeover of [false, true]) {
     await expect(title).toHaveValue(`Retained return ${takeover}`);
   });
 }
+
+test("maintenance preserves the unfinished form and valid session but requires a release reload", async ({
+  page,
+}) => {
+  await signIn(page);
+  const title = page.getByLabel("Title (required)", { exact: true });
+  const text = `Upgrade draft ${crypto.randomUUID()}`;
+  await title.fill(text);
+  await page.getByRole("button", { name: /Save unfinished form|Saved/, exact: true }).click();
+  const before = await page.evaluate(
+    async () =>
+      (await fetch("/api/hosted/session")).json() as Promise<{
+        csrfToken: string;
+        expiresAt: string;
+      }>,
+  );
+  await control(page.context(), "maintenance?paused=true");
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(
+    page.getByRole("heading", { name: "Upgrade in progress", exact: true }),
+  ).toBeVisible();
+  await expect(title).toBeHidden();
+  await expect(page.getByRole("button", { name: "Continue to workspace" })).toHaveCount(0);
+  await control(page.context(), "maintenance?paused=false");
+  await page.getByRole("button", { name: "Check upgrade status" }).click();
+  await expect(
+    page.getByRole("heading", { name: "A new version is ready", exact: true }),
+  ).toBeVisible();
+  const stale = await page.evaluate(async (csrf: string) => {
+    const response = await fetch("/api/tasks", {
+      method: "POST",
+      headers: { "X-EPM-CSRF": csrf, "Content-Type": "application/json" },
+      body: "{}",
+    });
+    return {
+      status: response.status,
+      body: (await response.json()) as { detail: { code: string } },
+    };
+  }, before.csrfToken);
+  expect(stale.status).toBe(409);
+  expect(stale.body.detail.code).toBe("hosted_release_reload_required");
+  await expect(title).toHaveValue(text);
+  await page.getByRole("button", { name: "Reload to continue" }).click();
+  await expect(page.getByLabel("Title (required)", { exact: true })).toHaveValue(text);
+  const after = await page.evaluate(
+    async () =>
+      (await fetch("/api/hosted/session")).json() as Promise<{
+        expiresAt: string;
+        releaseIdentity: string;
+      }>,
+  );
+  expect(after.expiresAt).toBe(before.expiresAt);
+  expect(after.releaseIdentity).toBe("b".repeat(64));
+});
+
+for (const revoke of [false, true]) {
+  test(`fresh sign-in loads the authenticated release after upgrade with ${revoke ? "revoked" : "preserved"} sessions`, async ({
+    page,
+  }) => {
+    await signIn(page);
+    await control(page.context(), `maintenance?paused=true&revoke=${revoke}`);
+    await control(page.context(), "maintenance?paused=false");
+    await page.context().clearCookies();
+    await proof(page.context());
+    await page.goto("/sign-in?next=%2Ftasks%3Fworkflow%3Dtask.create");
+    await expect(
+      page.getByRole("heading", { name: "Sign in to your demo workspace" }),
+    ).toBeVisible();
+    expect(await page.locator('meta[name="epm-release"]').count()).toBe(0);
+    let admissions = 0;
+    let commands = 0;
+    page.on("request", (request) => {
+      if (request.method() !== "POST") return;
+      const path = new URL(request.url()).pathname;
+      if (path === "/api/hosted/session") admissions++;
+      if (path === "/api/tasks") commands++;
+    });
+    await page.getByRole("button", { name: "Continue to workspace" }).click();
+    await expect(page).toHaveURL(/\/tasks\?workflow=task.create$/);
+    await expect(page.getByLabel("Title (required)", { exact: true })).toBeVisible();
+    await expect(page.locator('meta[name="epm-release"]')).toHaveAttribute(
+      "content",
+      "b".repeat(64),
+    );
+    await expect(page.getByRole("button", { name: "Reload to continue" })).toHaveCount(0);
+    expect(admissions).toBe(1);
+    expect(commands).toBe(0);
+  });
+}
+
+for (const invalidation of ["expiry", "revocation"] as const) {
+  test(`${invalidation} during maintenance returns to explicit sign-in with the unfinished form intact`, async ({
+    page,
+  }) => {
+    await signIn(page);
+    const title = page.getByLabel("Title (required)", { exact: true });
+    const text = `Preserved through ${invalidation} ${crypto.randomUUID()}`;
+    await title.fill(text);
+    await page.getByRole("button", { name: /Save unfinished form|Saved/, exact: true }).click();
+    await expect(page.getByRole("button", { name: "Saved", exact: true })).toBeVisible();
+    await control(
+      page.context(),
+      `maintenance?paused=true&revoke=${invalidation === "revocation"}`,
+    );
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(
+      page.getByRole("heading", { name: "Upgrade in progress", exact: true }),
+    ).toBeVisible();
+    if (invalidation === "expiry") await control(page.context(), "expire");
+    await control(page.context(), "maintenance?paused=false");
+    const invalid = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/hosted/session") &&
+        response.request().method() === "GET" &&
+        response.status() === 401,
+    );
+    await page.getByRole("button", { name: "Check upgrade status" }).click();
+    await invalid;
+    await expect(
+      page.getByRole("heading", { name: "Sign in to your demo workspace", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Check upgrade status" })).toHaveCount(0);
+    await expect(title).toHaveValue(text);
+    await expect(title).toBeHidden();
+    let commands = 0;
+    page.on("request", (request) => {
+      if (request.method() === "POST" && new URL(request.url()).pathname === "/api/tasks")
+        commands++;
+    });
+    await proof(page.context());
+    await page.getByRole("button", { name: "Continue to workspace" }).click();
+    const reload = page.getByRole("button", { name: "Reload to continue" });
+    await expect
+      .poll(async () => (await title.isVisible()) || (await reload.isVisible()))
+      .toBe(true);
+    if (await reload.isVisible()) await reload.click();
+    await expect(title).toBeVisible();
+    await expect(title).toHaveValue(text);
+    expect(commands).toBe(0);
+  });
+}

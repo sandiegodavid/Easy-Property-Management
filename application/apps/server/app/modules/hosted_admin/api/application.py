@@ -88,6 +88,11 @@ def create_admin_app(origin, call, assets=None):
     @app.get("/")
     @app.get("/operators")
     @app.get("/operators/{instance}")
+    @app.get("/operators/{instance}/upgrade")
+    @app.get("/operators/{instance}/upgrade/{upgrade_id}")
+    @app.get("/upgrade-batches/new")
+    @app.get("/upgrade-batches")
+    @app.get("/upgrade-batches/{batch_id}")
     @app.get("/operations")
     @app.get("/operations/{operation_id}")
     @app.get("/qualification")
@@ -206,6 +211,38 @@ def create_admin_app(origin, call, assets=None):
     async def qualification(request: Request):
         return await forward(request, {"method": "console_qualification"})
 
+    @app.get("/admin-api/upgrade-batches/page/{offset}")
+    async def batch_directory(offset: int, request: Request):
+        return await forward(request, {"method": "batch_list", "batch_page": offset})
+
+    @app.get("/admin-api/upgrade-batches/{operation_id}/page/{offset}/{limit}")
+    async def batch_view(operation_id: str, offset: int, limit: int, request: Request):
+        return await forward(
+            request,
+            {
+                "method": "batch_view",
+                "operation_id": operation_id,
+                "batch_offset": offset,
+                "batch_limit": limit,
+            },
+        )
+
+    @app.get("/admin-api/upgrade-batch-commands/{operation_id}")
+    async def batch_lookup(operation_id: str, request: Request):
+        return await forward(request, {"method": "batch_lookup", "operation_id": operation_id})
+
+    @app.get("/admin-api/operators/{instance}/upgrade-options")
+    async def upgrade_options(instance: str, request: Request):
+        return await forward(request, {"method": "upgrade_options", "instance": instance})
+
+    @app.get("/admin-api/upgrades/{operation_id}")
+    async def upgrade_view(operation_id: str, request: Request):
+        return await forward(request, {"method": "upgrade_view", "operation_id": operation_id})
+
+    @app.get("/admin-api/upgrade-commands/{operation_id}")
+    async def upgrade_lookup(operation_id: str, request: Request):
+        return await forward(request, {"method": "upgrade_lookup", "operation_id": operation_id})
+
     @app.get("/admin-api/setup-options")
     async def setup_options(request: Request):
         return await forward(request, {"method": "setup_options"})
@@ -257,6 +294,8 @@ def create_admin_app(origin, call, assets=None):
             "cancel": "cancel",
             "setup-command": "setup_command",
             "recovery-check": "recovery_check",
+            "upgrade-command": "upgrade_command",
+            "upgrade-batch-command": "batch_command",
             "recovery-acknowledge": "recovery_acknowledge",
         }
         if action not in methods or request.headers.get("content-type") != "application/json":
@@ -276,6 +315,8 @@ def create_admin_app(origin, call, assets=None):
                 "expected_revision",
                 "setup",
                 "recovery",
+                "upgrade",
+                "batch",
             }:
                 raise ValueError()
         except ValueError:
@@ -297,7 +338,7 @@ def create_admin_app(origin, call, assets=None):
             response = JSONResponse(
                 {key: value for key, value in result.items() if key != "token"},
                 status_code=202
-                if envelope.method in {"resume", "cancel"}
+                if envelope.method in {"resume", "cancel", "upgrade_command", "batch_command"}
                 or (envelope.setup and envelope.setup.action == "create")
                 else 200,
             )

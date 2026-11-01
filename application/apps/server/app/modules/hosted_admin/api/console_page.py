@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse
 def console_route(path):
     return bool(
         re.fullmatch(
-            r"/(?:operators(?:/[a-z0-9][a-z0-9-]{0,31})?|operations(?:/[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12})?|setups(?:/new|/[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12})?|qualification|discrepancies)?",
+            r"/(?:upgrade-batches(?:/new|/[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12})?|operators(?:/[a-z0-9][a-z0-9-]{0,31}(?:/upgrade(?:/[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12})?)?)?|operations(?:/[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12})?|setups(?:/new|/[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12})?|qualification|discrepancies)?",
             path,
         )
     )

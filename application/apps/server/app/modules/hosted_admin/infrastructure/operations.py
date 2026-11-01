@@ -17,6 +17,26 @@ STEPS = {
     "source": ("source_command",),
     "provision": ("allocate", "workspace", "provider_setup", "readiness"),
     "qualification_test": ("allocate", "workspace", "provider_setup", "readiness"),
+    "upgrade_check": ("readiness",),
+    "upgrade": (
+        "revalidate",
+        "pause",
+        "stop",
+        "recovery",
+        "validate",
+        "switch",
+        "start",
+        "verify",
+        "accept",
+    ),
+    "upgrade_rollback": (
+        "stop",
+        "validate_previous",
+        "switch_previous",
+        "start_previous",
+        "verify_previous",
+        "accept",
+    ),
 }
 TERMINAL = {"succeeded", "cancelled"}
 
@@ -35,6 +55,13 @@ def enqueue(connection, store, *, identifier, identity, kind, target, payload):
         if existing["request_hash"] != desired or existing["identity"] != identity["id"]:
             raise AdminError("admin_command_conflict", 409)
         return dict(existing)
+    if (
+        kind in {"upgrade", "upgrade_rollback"}
+        and connection.execute(
+            "SELECT 1 FROM upgrade_batch_skip s WHERE s.rowid=(SELECT max(rowid) FROM upgrade_batch_skip WHERE child_id=s.child_id) AND s.state!='completed' LIMIT 1"
+        ).fetchone()
+    ):
+        raise AdminError("admin_batch_containment_pending", 409)
     if connection.execute("SELECT count(*) FROM operation").fetchone()[0] >= MAX_OPERATIONS:
         raise AdminError("admin_operation_capacity", 409)
     connection.execute("INSERT OR IGNORE INTO operation_target VALUES (?,0,0)", (target,))
@@ -201,6 +228,16 @@ class OperationEngine:
         with self.store.transaction() as connection:
             operation = self._get(connection, identifier)
             self._control(connection, operation, expected_revision, identity)
+            if (
+                operation["kind"] in {"upgrade", "upgrade_rollback"}
+                and connection.execute(
+                    "SELECT 1 FROM operation_step WHERE operation_id=? AND kind='pause' AND state!='pending'",
+                    (identifier,),
+                ).fetchone()
+            ):
+                raise AdminError("admin_upgrade_recovery_required", 409)
+            if operation["kind"] == "upgrade_rollback":
+                raise AdminError("admin_upgrade_recovery_required", 409)
             if operation["state"] in TERMINAL or operation["cancel_requested"]:
                 return self.get_from_row(operation)
             connection.execute(
@@ -298,6 +335,26 @@ class OperationEngine:
             and control[0] == operation["target_fence"]
             and not operation["cancel_requested"]
         )
+
+    def require_authority(self, identifier, *, phase=None):
+        """Recheck a worker's authority after slow checks, before a new effect.
+
+        This short read does not hold the control transaction across a source
+        call. Source CAS checks and post-effect containment still apply.
+        """
+        with self.store.transaction() as connection:
+            operation = self._get(connection, identifier)
+            if operation["state"] != "running" or not self._eligible(connection, operation):
+                raise AdminError("admin_authority_fenced", 409)
+            if phase == "pause":
+                run = connection.execute(
+                    "SELECT c.request FROM upgrade_batch_child m JOIN upgrade_batch_command c ON c.id=m.run_command WHERE m.child_id=?",
+                    (identifier,),
+                ).fetchone()
+                if run:
+                    window = json.loads(run[0])
+                    if not window["window_start"] <= self.store.clock() < window["window_end"]:
+                        raise AdminError("admin_batch_window_closed", 409)
 
     def run(self, identifier, adapter):
         """Run at most one fixed step. Reconnect/lookup never dispatches this method."""

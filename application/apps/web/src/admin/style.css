@@ -237,3 +237,8 @@ label {
 code {
   overflow-wrap: anywhere;
 }
+
+progress {
+  inline-size: 100%;
+  accent-color: #008c73;
+}

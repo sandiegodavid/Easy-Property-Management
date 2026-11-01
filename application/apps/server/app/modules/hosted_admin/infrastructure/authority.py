@@ -15,6 +15,8 @@ from app.modules.hosted_admin.application.contracts import AdminError
 from app.modules.hosted_admin.infrastructure.operation_schema import SCHEMA as OPERATION_SCHEMA
 from app.modules.hosted_admin.infrastructure.setup_schema import SCHEMA as SETUP_SCHEMA
 from app.modules.hosted_admin.infrastructure.recovery_schema import SCHEMA as RECOVERY_SCHEMA
+from app.modules.hosted_admin.infrastructure.upgrade_schema import SCHEMA as UPGRADE_SCHEMA
+from app.modules.hosted_admin.infrastructure.upgrade_batch_schema import SCHEMA as BATCH_SCHEMA
 from app.modules.hosted_admin.infrastructure.operations import OperationEngine, enqueue
 from app.modules.hosted_admin.application.operations import Observation
 from app.modules.hosted_admin.infrastructure.control_recovery import validate_control
@@ -49,6 +51,8 @@ PRAGMA user_version=1;
     + OPERATION_SCHEMA
     + SETUP_SCHEMA
     + RECOVERY_SCHEMA
+    + UPGRADE_SCHEMA
+    + BATCH_SCHEMA
 )
 
 
@@ -352,6 +356,37 @@ class AuthorityStore:
             self._audit(connection, "identity_restored", "administrator")
 
     def handle(self, request, dispatch, console=None, setup=None):
+        if request.method.startswith("batch_"):
+            with self.transaction() as connection:
+                identity = dict(self.session(connection, request.token, request.csrf))
+            upgrades = getattr(dispatch, "upgrades", None)
+            if upgrades is None:
+                raise AdminError("admin_upgrade_unavailable", 503)
+            batches = upgrades.batches
+            if request.method == "batch_list":
+                return batches.directory(identity, request.batch_page)
+            if request.method == "batch_view":
+                return batches.view(
+                    request.operation_id, identity, request.batch_offset, request.batch_limit
+                )
+            if request.method == "batch_lookup":
+                return batches.lookup(request.operation_id, identity)
+            return batches.command(request.batch, identity, request.credential)
+        if request.method.startswith("upgrade_"):
+            with self.transaction() as connection:
+                identity = dict(self.session(connection, request.token, request.csrf))
+            upgrades = getattr(dispatch, "upgrades", None)
+            if upgrades is None:
+                raise AdminError("admin_upgrade_unavailable", 503)
+            if request.method == "upgrade_options":
+                return {
+                    "items": [item.model_dump() for item in upgrades.host.options(request.instance)]
+                }
+            if request.method == "upgrade_view":
+                return upgrades.view(request.operation_id, identity)
+            if request.method == "upgrade_lookup":
+                return upgrades.lookup(request.operation_id, identity)
+            return upgrades.command(request.upgrade, identity, request.credential)
         if request.method.startswith("recovery_"):
             with self.transaction() as connection:
                 identity = dict(self.session(connection, request.token, request.csrf))

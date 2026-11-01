@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 from hashlib import sha256
 import hmac
+import json
 import re
 import secrets
 from typing import Callable
@@ -82,6 +83,12 @@ class HostedAccessService:
             raise HostedAccessError("hosted_session_required", "Sign in to this workspace.")
         hashed = token_hash(token)
         row = self.store.session(hashed)
+        if row and json.loads(row.get("maintenance_state", "{}")).get("owner"):
+            raise HostedAccessError(
+                "hosted_upgrade_in_progress",
+                "Upgrade in progress. Your unfinished work is preserved.",
+                503,
+            )
         if row is None or (
             row["revoked"]
             or not row["active"]
@@ -102,6 +109,7 @@ class HostedAccessService:
             row["workspace_id"],
             hashed,
             datetime.fromtimestamp(row["expires_at"], UTC),
+            json.loads(row.get("maintenance_state", "{}")).get("release"),
         )
 
     def logout(

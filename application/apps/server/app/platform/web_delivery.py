@@ -221,16 +221,18 @@ class PackagedWebMiddleware:
         if path == "/":
             return RedirectResponse("/home", status_code=307, headers=self._headers())
         if self.entry_metadata is not None:
-            return self._hosted_entry(entry)
+            return self._hosted_entry(entry, scope.get("state", {}).get("hosted_release"))
         return FileResponse(entry, media_type="text/html", headers=self._headers())
 
-    def _hosted_entry(self, entry: Path):
+    def _hosted_entry(self, entry: Path, release=None):
         content = entry.read_text(encoding="utf-8")
         if "<head>" not in content:
             return self._error(503, "web_build_unavailable")
         metadata = "".join(
             f'<meta name="{escape(key, quote=True)}" content="{escape(value, quote=True)}">'
-            for key, value in self.entry_metadata.items()
+            for key, value in (
+                self.entry_metadata | ({"epm-release": release} if release else {})
+            ).items()
         )
         return HTMLResponse(
             content.replace("<head>", "<head>" + metadata, 1), headers=self._headers()

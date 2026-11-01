@@ -27,6 +27,7 @@ class HostedActor:
     workspace_id: str
     session_reference: str
     expires_at: datetime
+    release: str | None = None
 
 
 @dataclass(frozen=True)

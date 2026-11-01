@@ -20,6 +20,8 @@ import {
 import "./style.css";
 import { SetupPage } from "./setup";
 import { Lifecycle } from "./lifecycle";
+import { UpgradePage } from "./upgrades";
+import { BatchPage, useUpgradeSelection } from "./upgrade-batches";
 
 function ReadState({ read }: { read: Read<unknown> }) {
   if (read.expired)
@@ -186,6 +188,7 @@ function recoveryState(recovery: Observation<Recovery>) {
   );
 }
 function DirectoryPage() {
+  const { selected, save } = useUpgradeSelection();
   const [offset, setOffset] = useState(0),
     [filter, setFilter] = useState("all");
   const read = useRead<Directory>(`/admin-api/operators/page/${offset}`);
@@ -197,6 +200,10 @@ function DirectoryPage() {
       (filter === "enabled" ? status === "Access enabled" : status !== "Access enabled")
     );
   });
+  const pageExceedsSelection =
+    selected.length +
+      (items?.filter((item) => !selected.some((other) => other.key === item.key)).length ?? 0) >
+    50;
   return (
     <>
       <div className="heading">
@@ -214,6 +221,47 @@ function DirectoryPage() {
         <QualificationPlans />
       </Panel>
       <Panel title="Operator directory">
+        <p>{selected.length} selected · Maximum 50 operators per batch</p>
+        <a href="/upgrade-batches">View upgrade batches</a>
+        {pageExceedsSelection && (
+          <p>
+            Select individual operators from this page to stay within the 50-operator batch limit.
+          </p>
+        )}
+        <div className="actions">
+          <button
+            disabled={!items?.length || read.failed || read.expired || pageExceedsSelection}
+            onClick={() =>
+              save(
+                [
+                  ...selected,
+                  ...(items ?? [])
+                    .filter((item) => Number.isInteger(item.registered_revision))
+                    .map((item) => ({
+                      key: item.key,
+                      name: item.name,
+                      revision: item.registered_revision,
+                      release: item.release,
+                      access:
+                        item.access.state === "available" ? lifecycle(item.access.data) : "Unknown",
+                    })),
+                ].sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key)),
+              )
+            }
+          >
+            Select this page
+          </button>
+          <button disabled={!selected.length} onClick={() => save([])}>
+            Clear selection
+          </button>
+          {selected.length ? (
+            <a className="button" href="/upgrade-batches/new">
+              Upgrade selected operators
+            </a>
+          ) : (
+            <button disabled>Upgrade selected operators</button>
+          )}
+        </div>
         <ReadState read={read} />
         <label htmlFor="operator-filter">Show operators on this page</label>
         <select id="operator-filter" value={filter} onChange={(e) => setFilter(e.target.value)}>
@@ -236,6 +284,40 @@ function DirectoryPage() {
         <div className="operator-table" role="list">
           {items?.map((item) => (
             <article role="listitem" className="item" key={item.key}>
+              <label htmlFor={`upgrade-select-${item.key}`}>
+                <input
+                  id={`upgrade-select-${item.key}`}
+                  type="checkbox"
+                  checked={selected.some((other) => other.key === item.key)}
+                  disabled={
+                    read.failed ||
+                    !Number.isInteger(item.registered_revision) ||
+                    (selected.length >= 50 && !selected.some((other) => other.key === item.key))
+                  }
+                  onChange={(event) =>
+                    save(
+                      event.target.checked
+                        ? [
+                            ...selected,
+                            {
+                              key: item.key,
+                              name: item.name,
+                              revision: item.registered_revision,
+                              release: item.release,
+                              access:
+                                item.access.state === "available"
+                                  ? lifecycle(item.access.data)
+                                  : "Unknown",
+                            },
+                          ].sort(
+                            (a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key),
+                          )
+                        : selected.filter((other) => other.key !== item.key),
+                    )
+                  }
+                />
+                Select {item.name}
+              </label>
               <h3>
                 <a href={`/operators/${item.key}`}>{item.name}</a>
               </h3>
@@ -293,6 +375,12 @@ function OperatorDetails({ instance }: { instance: string }) {
     5000,
   );
   const operations = useRead<OperationList>("/admin-api/operations");
+  const upgrade = operations.data?.items.find(
+    (op) =>
+      op.target === instance &&
+      op.kind.startsWith("upgrade") &&
+      !["succeeded", "cancelled"].includes(op.state),
+  );
   const item = record.data?.items[0];
   return (
     <>
@@ -327,6 +415,12 @@ function OperatorDetails({ instance }: { instance: string }) {
           hostname={item.hostname}
           email={item.email}
           expires={access.data?.data?.expires}
+          upgrading={operations.data?.items.some(
+            (op) =>
+              op.target === instance &&
+              op.kind.startsWith("upgrade") &&
+              !["succeeded", "cancelled"].includes(op.state),
+          )}
         />
       )}
       <div className="grid">
@@ -362,6 +456,17 @@ function OperatorDetails({ instance }: { instance: string }) {
           <p>Valid app-session count: Unknown. No online-presence claim.</p>
         </Panel>
         <Panel title="Runtime and capacity">
+          <p>
+            <a
+              href={
+                upgrade
+                  ? `/operators/${instance}/upgrade/${upgrade.id}`
+                  : `/operators/${instance}/upgrade`
+              }
+            >
+              {upgrade ? "View upgrade progress" : "Upgrade release"}
+            </a>
+          </p>
           <p>Registered release: {item?.release ?? "Unknown"}</p>
           <p>Registered profile: {item?.profile ?? "Unknown"}</p>
           <Observed read={runtime}>
@@ -572,7 +677,9 @@ function App() {
   const path = window.location.pathname.split("/");
   const [dark, setDark] = useState(window.matchMedia("(prefers-color-scheme: dark)").matches);
   const content =
-    path[1] === "setups" ? (
+    path[1] === "upgrade-batches" ? (
+      <BatchPage id={path[2]} />
+    ) : path[1] === "setups" ? (
       <SetupPage id={path[2]} />
     ) : path[1] === "qualification" ? (
       <>
@@ -590,7 +697,11 @@ function App() {
         <Operations />
       )
     ) : path[1] === "operators" && path[2] ? (
-      <OperatorDetails instance={path[2]} />
+      path[3] === "upgrade" ? (
+        <UpgradePage instance={path[2]} id={path[4]} />
+      ) : (
+        <OperatorDetails instance={path[2]} />
+      )
     ) : (
       <DirectoryPage />
     );

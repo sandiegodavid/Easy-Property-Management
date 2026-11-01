@@ -192,6 +192,7 @@ class AccessCommands:
             raise denied()
         if command.action in {"disable", "revoke"}:
             return  # Containment remains possible with expired/broken business data.
+        self.store.maintenance.require_open(connection)
         deployment = self.store.deployment
         if (
             command.action not in {"renew", "replace_email"}

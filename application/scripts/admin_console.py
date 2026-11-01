@@ -41,6 +41,11 @@ from app.modules.hosted_admin.infrastructure.pre_enrollment import PreEnrollment
 from app.modules.hosted_admin.infrastructure.onboarding import OnboardingRecovery
 from app.modules.hosted_admin.infrastructure.onboarding_verifier import OnboardingVerifier
 from app.modules.hosted_admin.infrastructure.edge_denial import EdgeDenial
+from app.modules.hosted_admin.infrastructure.upgrades import UpgradeService
+from app.modules.hosted_admin.infrastructure.upgrade_catalog import InstalledReleaseCatalog
+from app.modules.hosted_admin.infrastructure.upgrade_deployment import UpgradeDeployment
+from app.modules.hosted_admin.infrastructure.operations import OperationEngine
+from app.modules.hosted_admin.infrastructure.upgrade_recovery import UpgradeRecovery
 
 if __package__:
     from .admin_lifecycle import AccessCutover
@@ -459,6 +464,29 @@ def compose(authority, paths, inventory):
     dispatch.edge_denial = EdgeDenial(
         authority, dispatch, reports, lambda: setup.host.provider(setup.host.config())
     )
+    upgrade_catalog = InstalledReleaseCatalog(platform, reports, reports.snapshot, authority.clock)
+    upgrade_recovery = UpgradeRecovery(authority, platform, reports, recovery)
+
+    def upgrade_acceptance(item):
+        deployment = dispatch.prepare(item.key)["deployment"]
+        provider = setup.host.provider(setup.host.config())
+        observed = provider.verify(item.hostname, item.email)
+        if observed is None or observed["audience"] != deployment["identity_audience"]:
+            raise AdminError("admin_upgrade_provider_unverified", 409)
+        platform.verify_ingress({"hostname": item.hostname, "port": item.port}, upgrading=item.key)
+
+    upgrades = UpgradeService(
+        authority,
+        UpgradeDeployment(
+            platform,
+            upgrade_catalog,
+            upgrade_recovery,
+            upgrade_acceptance,
+            OperationEngine(authority).require_authority,
+        ),
+    )
+    dispatch.upgrades = upgrades
+    setup.upgrades = upgrades
     worker = SetupWorker(setup)
     operations = PrivateOperations(authority, qualification, dispatch, provisioning)
     console = ConsoleReads(authority, HostConsoleInventory(dispatch, discovery, reports, recovery))
@@ -471,6 +499,7 @@ def compose(authority, paths, inventory):
         operations=operations,
         console=console,
         recovery=recovery,
+        upgrades=upgrades,
     )
 
 

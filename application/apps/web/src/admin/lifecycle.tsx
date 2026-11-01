@@ -41,11 +41,13 @@ export function Lifecycle({
   hostname,
   email,
   expires,
+  upgrading = false,
 }: {
   instance: string;
   hostname: string;
   email: string;
   expires?: number;
+  upgrading?: boolean;
 }) {
   const source = useRead<Status>(`/admin-api/operators/${instance}/source-status`, 5000);
   const recovery = useRead<Handoff>(`/admin-api/operators/${instance}/recovery-handoff`, 5000);
@@ -208,7 +210,14 @@ export function Lifecycle({
           handoff={handoff}
           verified={verified && !recovery.failed}
           unavailable={unavailable}
+          upgrading={upgrading}
         />
+      )}
+      {upgrading && (
+        <p role="status">
+          An upgrade owns this operator. Other changes are paused; Disable and sign-out remain
+          available.
+        </p>
       )}
       <p role="status">{notice}</p>
     </section>
@@ -221,12 +230,14 @@ function AccessForm({
   handoff,
   verified,
   unavailable,
+  upgrading,
 }: {
   instance: string;
   status: Status;
   handoff?: Handoff;
   verified: boolean;
   unavailable: boolean;
+  upgrading: boolean;
 }) {
   const [action, setAction] = useState<Command["action"]>("disable");
   const [reason, setReason] = useState("");
@@ -270,6 +281,7 @@ function AccessForm({
   const needsGrant = !["disable", "revoke"].includes(action);
   const invalid =
     unavailable ||
+    (upgrading && needsGrant) ||
     !reason.trim() ||
     !confirmed ||
     (action === "renew" && (!starts || !ends)) ||

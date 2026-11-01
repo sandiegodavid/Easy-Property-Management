@@ -28,6 +28,23 @@ export function useRecoverableForm<T extends FieldValues>({
   );
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   useEffect(() => {
+    if (!hostedMode()) return;
+    const resumeAfterUpgrade = (event: Event) => {
+      const saved = controller.getSnapshot().record;
+      const url = new URL(window.location.href);
+      if (
+        saved &&
+        ["active", "outcome_unknown"].includes(saved.status) &&
+        url.searchParams.get("workflow") === identity.formKey
+      ) {
+        url.searchParams.set("resume", saved.id);
+        (event as CustomEvent<{ url: string }>).detail.url = url.href;
+      }
+    };
+    window.addEventListener("epm-upgrade-reload", resumeAfterUpgrade);
+    return () => window.removeEventListener("epm-upgrade-reload", resumeAfterUpgrade);
+  }, [controller, identity.formKey]);
+  useEffect(() => {
     controller.activate();
     const timer = setInterval(() => {
       void controller.renewEditing().catch(() => undefined);
