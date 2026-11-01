@@ -1,0 +1,47 @@
+Review: commit b8a2fd0275d5174abeade87488f55704e82e4ca3 — HOSTED_DEMO_ADMIN_DESIGN.md, Slice 6
+Review date: 2026-10-31
+Scope: exact parent-to-commit diff (95fff9e6..b8a2fd02). No implementation changes or live-host/provider operations.
+
+SPECIFICATION — Access lifecycle
+
+1. [P2] Require onboarding completion before allowing ordinary Enable access.
+Status: open
+File: /Users/dcai/Desktop/My Apps/Easy-Property-Management/application/apps/server/app/modules/hosted_admin/infrastructure/onboarding.py:180-189
+Related: /Users/dcai/Desktop/My Apps/Easy-Property-Management/application/apps/server/app/modules/hosted_admin/infrastructure/onboarding.py:207-209
+Related: /Users/dcai/Desktop/My Apps/Easy-Property-Management/application/apps/web/src/admin/lifecycle.tsx:325-330
+
+For a newly approved identity with verified recovery, the UI offers both Complete onboarding and Enable access. The backend accepts the same proof for either action without requiring an existing completion for Enable. Choosing Enable activates the owning access store, but completed() ignores that action, so no onboarding_completion is recorded. Setup continues to claim identity-approved/recovery-pending and neither setup nor the lifecycle checklist provides ready-to-use instructions. The design requires initial explicit completion and requires current recovery/completion evidence for ordinary Enable access.
+
+Enforce the completion prerequisite at the backend, and offer Complete onboarding until the current binding has completed onboarding. Retain Enable for explicitly re-enabling a completed binding. A renewal or replacement that requires a new completion must follow the corresponding completion workflow. Test both browser choices and direct command submission, including repeated receipt reconciliation.
+
+Validation: With real AccessCommands and OnboardingRecovery fixtures, submitting Enable for the first verified binding returned active=True while onboarding_completion had zero rows and the checklist completion remained null.
+
+SPECIFICATION — Recovery evidence
+
+2. [P2] Revalidate the current verifier identity before issuing a new activation proof.
+Status: open
+File: /Users/dcai/Desktop/My Apps/Easy-Property-Management/application/apps/server/app/modules/hosted_admin/infrastructure/onboarding.py:180-204
+
+activation() obtains the report entirely from its retained SQLite projection. It does not revalidate the protected artifact or compare the report's verifier identity with the currently pinned verifier. Replacing recovery tooling and updating verifier.json therefore leaves a pending activation able to use the superseded verifier's report until ordinary age expiry. The design requires a fresh restore drill after recovery-tool/format changes; the existing VerifiedReports.report() boundary correctly rejects this old artifact, but activation bypasses that check.
+
+Require current verifier identity/provenance before issuing a new activation proof and expose superseded evidence as requiring verification. Preserve historical reports and the existing original-receipt reconciliation path for actions that already committed. Add a regression that changes the protected verifier pin between registration and first activation.
+
+Validation: Registered a real signed report, replaced verifier.json with a different digest, and confirmed that VerifiedReports.report(id) rejected it with admin_verifier_signature_invalid while OnboardingRecovery.activation() still returned a new proof for that same report.
+
+SPECIFICATION — Assignment instructions
+
+3. [P2] Generate invitations from the effective assignment after renewal or email replacement.
+Status: open
+File: /Users/dcai/Desktop/My Apps/Easy-Property-Management/application/apps/server/app/modules/hosted_admin/infrastructure/setup.py:226-230
+Related: /Users/dcai/Desktop/My Apps/Easy-Property-Management/application/apps/server/app/modules/hosted_admin/infrastructure/setup.py:217-224
+
+Slice 6 uses the effective enrollment expiry to decide whether the operator is expired, but still generates Copy invitation from the original immutable setup data. After renewal, the invitation advertises the original, potentially expired window. After assisted email replacement, it also instructs the recipient to sign in with the previous email, which the new assignment rejects. The scheduled-state check likewise uses the original start instead of the effective start.
+
+Use the current enrollment email, start and expiry for invitations and window-related lifecycle presentation, retaining the original setup data as history. Add regressions for a renewal beyond the old expiry, a future renewed start, and replacement enrollment invitations.
+
+Validation: With real SetupService, AuthorityStore and provisioning worker steps, changed the effective enrollment email/window and advanced beyond the original expiry. Setup correctly remained nonexpired, but its invitation was identical to the original email/window invitation.
+
+STANDARDS
+No additional actionable findings.
+
+Focused verification: 48 backend lifecycle/recovery/source-command tests passed; the lifecycle Playwright test passed. Three separate temporary regression reproductions confirmed the findings above. These tests do not establish live Linux, Cloudflare or off-host deployment qualification.
