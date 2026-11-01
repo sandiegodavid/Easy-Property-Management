@@ -17,13 +17,15 @@ test("recovery checklist survives reload and explicit completion keeps its origi
   });
   const { credential } = (await issued.json()) as { credential: string };
   let active = false;
+  let revision = 1;
+  let recoveryState = "verified";
   let completion: string | null = null;
   let commands = 0;
   const now = Date.now() / 1000;
   await page.route("**/admin-api/operators/b/source-status", (route) =>
     route.fulfill({
       json: {
-        admin_revision: active ? 2 : 1,
+        admin_revision: revision,
         binding_revision: 1,
         admin_fence: 0,
         generation: 0,
@@ -38,8 +40,8 @@ test("recovery checklist survives reload and explicit completion keeps its origi
     route.fulfill({
       json: {
         id: handoffId,
-        expected_revision: active ? 2 : 1,
-        state: "verified",
+        expected_revision: revision,
+        state: recoveryState,
         binding: {
           workspace_id: "00000000-0000-4000-8000-000000000003",
           binding_revision: 1,
@@ -66,11 +68,12 @@ test("recovery checklist survives reload and explicit completion keeps its origi
     const value = route.request().postDataJSON() as {
       command: { operation_id: string; action: string; evidence_id: string; acceptance_id: string };
     };
-    expect(value.command.action).toBe("complete_onboarding");
+    expect(value.command.action).toBe(commands === 1 ? "complete_onboarding" : "enable");
     expect(value.command.evidence_id).toBe(reportId);
     expect(value.command.acceptance_id).toBe(reportId);
-    completion = value.command.operation_id;
+    completion ??= value.command.operation_id;
     active = true;
+    revision++;
     await route.fulfill({ json: { active: true } });
   });
   await page.goto("/operators/b");
@@ -83,6 +86,9 @@ test("recovery checklist survives reload and explicit completion keeps its origi
   await expect(panel).toContainText("qualified-release");
   await page.reload();
   await expect(panel.locator("pre").first()).toContainText(handoffId);
+  const actions = panel.getByRole("combobox", { name: "Action", exact: true });
+  await expect(actions.locator('option[value="enable"]')).toHaveCount(0);
+  await expect(actions.locator('option[value="complete_onboarding"]')).toBeEnabled();
   await panel
     .getByRole("combobox", { name: "Action", exact: true })
     .selectOption("complete_onboarding");
@@ -107,4 +113,29 @@ test("recovery checklist survives reload and explicit completion keeps its origi
   await page.reload();
   await expect(panel.getByRole("heading", { name: "Onboarding complete" })).toBeVisible();
   await expect(panel.getByRole("button", { name: "Copy ready-to-use instructions" })).toBeVisible();
+  // A disabled, completed binding offers re-enable, but only with current proof.
+  active = false;
+  revision++;
+  recoveryState = "stale";
+  await page.reload();
+  await expect(actions.locator('option[value="enable"]')).toHaveJSProperty("disabled", true);
+  await expect(actions.locator('option[value="complete_onboarding"]')).toHaveCount(0);
+  recoveryState = "verified";
+  await page.reload();
+  await expect(actions.locator('option[value="enable"]')).toBeEnabled();
+  await actions.selectOption("enable");
+  await panel.getByLabel("Reason", { exact: true }).fill("Re-enable the completed binding");
+  await panel.getByRole("checkbox").check();
+  await panel.getByLabel("One-use action credential").fill("synthetic-action-grant");
+  await panel.getByRole("button", { name: "Authorize reviewed change" }).click();
+  await panel.getByRole("button", { name: "Confirm access change" }).click();
+  await expect(panel.getByRole("link", { name: "Check original operation" })).toBeVisible();
+  expect(commands).toBe(2);
+  // Renewal or replacement installs a binding without a completion.
+  active = false;
+  revision++;
+  completion = null;
+  await page.reload();
+  await expect(actions.locator('option[value="enable"]')).toHaveCount(0);
+  await expect(actions.locator('option[value="complete_onboarding"]')).toBeEnabled();
 });

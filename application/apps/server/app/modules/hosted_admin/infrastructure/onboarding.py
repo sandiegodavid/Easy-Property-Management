@@ -117,6 +117,8 @@ class OnboardingRecovery:
             state = "stale"
         elif report is None:
             state = "unknown"
+        elif not self.current_report(report):
+            state = "stale"
         elif report.state == "failed":
             state = "failed"
         elif age < 0 or age >= 86400 or report.expires <= now:
@@ -136,6 +138,14 @@ class OnboardingRecovery:
             if previous is None or previous[0] != state:
                 self.store._audit(connection, "recovery_" + state, identifier)
         return state, report
+
+    def current_report(self, report):
+        """Retained history is not proof under a changed or unavailable verifier."""
+        try:
+            protected = RecoveryReport.model_validate(self.reports.report(report.id))
+        except OSError, ValueError:
+            return False
+        return protected == report
 
     def view(self, identifier, revision, binding):
         state, report = self.refresh(identifier, binding)
@@ -187,6 +197,8 @@ class OnboardingRecovery:
             or view["binding"] != binding.model_dump()
         ):
             raise AdminError("admin_recovery_verification_required", 409)
+        if payload["action"] == "enable" and not view["completion"]:
+            raise AdminError("admin_onboarding_completion_required", 409)
         from app.modules.hosted_access.application.configuration import HostedDeployment
         from app.modules.hosted_access.application.admin_commands import deployment_fingerprint
 

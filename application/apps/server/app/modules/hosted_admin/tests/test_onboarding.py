@@ -13,7 +13,8 @@ from app.modules.hosted_access.tests.conftest import deployment_values as deploy
 from app.modules.hosted_access.tests.test_source_commands import source as source, approved_source
 from app.modules.hosted_admin.application.contracts import AdminError, BrokerRequest, CommandRequest
 from app.modules.hosted_admin.application.recovery import RecoveryCheck, RecoveryReport
-from app.modules.hosted_admin.infrastructure.authority import AuthorityStore
+from app.modules.hosted_admin.infrastructure.authority import AuthorityStore, SourceEffect
+from app.modules.hosted_admin.infrastructure.operations import OperationEngine
 from app.modules.hosted_admin.infrastructure.control_recovery import (
     snapshot_control,
     restore_control,
@@ -149,6 +150,132 @@ def completion(fixture, report):
     )
 
 
+def submit(fixture, command):
+    credentials = fixture.store.login(fixture.store.issue())
+    fixture.store.reauthenticate(
+        BrokerRequest(
+            method="reauthenticate",
+            command=command,
+            credential=fixture.store.issue(command.fingerprint()),
+            **credentials,
+        )
+    )
+    return fixture.store.handle(
+        BrokerRequest(method="command", command=command, **credentials), fixture.source
+    )
+
+
+def cancel_rejected(fixture, command):
+    engine = OperationEngine(fixture.store)
+    operation = engine.get(command.operation_id)
+    engine.cancel(command.operation_id, operation["revision"], fixture.identity)
+    engine.finish_cancel(command.operation_id, SourceEffect(fixture.source))
+    assert engine.get(command.operation_id)["state"] == "cancelled"
+
+
+def test_enable_requires_completion_but_completed_binding_can_be_reenabled(onboarding):
+    f = onboarding
+    report = publish(f)
+    enable = completion(f, report).model_copy(update={"action": "enable"})
+    with pytest.raises(AdminError, match="onboarding_completion_required"):
+        submit(f, enable)
+    assert not f.commands.status()["active"]
+    with f.store.transaction() as connection:
+        assert connection.execute("SELECT count(*) FROM onboarding_completion").fetchone()[0] == 0
+    cancel_rejected(f, enable)
+    completed = submit(f, completion(f, report))
+    assert completed["active"]
+    status = f.commands.administrative_status()
+    f.commands.execute(
+        AccessCommand(
+            operation_id=str(uuid4()),
+            action="disable",
+            expected_revision=status.admin_revision,
+            expected_binding_revision=status.binding_revision,
+            fence=status.admin_fence,
+            authority_reference="owner:1",
+            reason="Disable the completed binding",
+        ),
+        datetime.fromtimestamp(f.clock[0], UTC),
+    )
+    enable = completion(f, report).model_copy(update={"action": "enable"})
+    result = submit(f, enable)
+    assert result["active"]
+    # A committed Enable reconciles even after both proof and verifier change.
+    (f.reports.directory / "verifier.json").write_text('{"verifier_digest":"' + "b" * 64 + '"}')
+    f.clock[0] += 90000
+    assert submit(f, enable) == result
+    with f.store.transaction() as connection:
+        assert connection.execute("SELECT count(*) FROM onboarding_completion").fetchone()[0] == 1
+    f.commands.validate_retained()
+
+
+def test_renewed_binding_requires_a_new_completion(onboarding):
+    f = onboarding
+    submit(f, completion(f, publish(f)))
+    status = f.commands.administrative_status()
+    renew = AccessCommand(
+        operation_id=str(uuid4()),
+        action="renew",
+        expected_revision=status.admin_revision,
+        expected_binding_revision=status.binding_revision,
+        fence=status.admin_fence,
+        authority_reference="owner:1",
+        reason="Renew with a new recovery binding",
+        starts=f.clock[0],
+        expires=f.clock[0] + 86400,
+    )
+    f.commands.execute(renew, datetime.fromtimestamp(f.clock[0], UTC))
+    f.commands.store.deployment = f.commands.replacement(renew)
+    f.handoff = f.recovery.handoff("c", f.identity)
+    assert f.handoff["completion"] is None
+    report = publish(f)
+    enable = completion(f, report).model_copy(update={"action": "enable"})
+    with pytest.raises(AdminError, match="onboarding_completion_required"):
+        submit(f, enable)
+    cancel_rejected(f, enable)
+    assert submit(f, completion(f, report))["active"]
+
+
+@pytest.mark.parametrize("change", ["pin", "missing", "changed"])
+def test_activation_revalidates_protected_report_and_preserves_history(onboarding, change):
+    f = onboarding
+    report = publish(f)
+    if change == "pin":
+        (f.reports.directory / "verifier.json").write_text('{"verifier_digest":"' + "b" * 64 + '"}')
+    elif change == "missing":
+        (f.reports.directory / f"{report.id}.json").unlink()
+    else:
+        f.reports.publish(report.id, report.model_dump() | {"snapshot_marker": "changed"})
+    check = RecoveryCheck(handoff_id=f.handoff["id"], expected_revision=1)
+    view = f.recovery.check(check)
+    assert view["state"] == "stale" and view["report"] == report.model_dump()
+    cmd = completion(f, report)
+    with pytest.raises(AdminError, match="verification_required"):
+        submit(f, cmd)
+    assert not f.commands.status()["active"]
+    assert f.recovery.observation("c").policy_state == "stale"
+    with f.store.transaction() as connection:
+        assert connection.execute("SELECT count(*) FROM recovery_report").fetchone()[0] == 1
+    if change == "pin":
+        cancel_rejected(f, cmd)
+        fresh = publish(f, verifier_digest="b" * 64)
+        assert f.recovery.check(check)["state"] == "verified"
+        assert submit(f, completion(f, fresh))["active"]
+        with f.store.transaction() as connection:
+            assert connection.execute("SELECT count(*) FROM recovery_report").fetchone()[0] == 2
+
+
+def test_committed_completion_reconciles_after_verifier_changes(onboarding):
+    f = onboarding
+    cmd = completion(f, publish(f))
+    result = submit(f, cmd)
+    (f.reports.directory / "verifier.json").write_text('{"verifier_digest":"' + "b" * 64 + '"}')
+    assert submit(f, cmd) == result
+    with f.store.transaction() as connection:
+        assert connection.execute("SELECT count(*) FROM onboarding_completion").fetchone()[0] == 1
+
+
 def test_persistent_checklist_exact_report_and_idempotent_source_completion(onboarding):
     f = onboarding
     assert f.handoff["state"] == "unknown" and not f.commands.status()["active"]
@@ -262,6 +389,8 @@ def test_source_commit_control_crash_retains_receipt_and_restored_control_stays_
         f.source.command(payload).model_dump() | {"activation": proof}
     )
     original = f.commands.execute(source_cmd, datetime.fromtimestamp(f.clock[0], UTC))
+    # The source committed before a control crash and a recovery-tool upgrade.
+    (f.reports.directory / "verifier.json").write_text('{"verifier_digest":"' + "b" * 64 + '"}')
     assert f.store.execute(admission, f.source) == original.model_dump()
     encoded = snapshot_control(f.store)
     assert b'"csrf"' not in encoded and b'"token"' not in encoded

@@ -48,6 +48,9 @@ independently of browser visits. Read-back age warns at 20 hours and becomes
 overdue at 24 hours. Acknowledgment records responsibility, not verification.
 Unknown source state resets an earlier acknowledgment while retaining verified
 archive history. Neither age nor acknowledgment changes business access.
+Changing the pinned verifier, or losing/changing its protected report, makes the
+retained evidence stale. Run a fresh private verification before activation;
+historical reports and already-committed receipts remain available.
 
 Review the snapshot marker, point references and individual completed-at times.
 Later business writes can be outside that recovery point. The helper does not
@@ -103,7 +106,9 @@ If the console cannot read source status, use the root maintenance procedure;
 do not guess a revision or claim that the UI completed a disable.
 
 Enable requires explicit fresh action authorization, a healthy qualified runtime,
-an unexpired window and current approved-binding recovery proof. A disabled
+an unexpired window, current approved-binding recovery proof and onboarding
+completion for the current binding. For a binding without completion, use
+**Complete onboarding and enable access** instead. A disabled
 assignment is never automatically restored. The operator needs fresh sign-in.
 Before re-enabling, privately restore the exact-email Cloudflare allowance and
 independently verify it through fresh recovery/acceptance. Never remove the app's
@@ -119,7 +124,8 @@ restarts the same workspace and independently observes the runtime before updati
 inventory. Other instances are not restarted. Failures stay fenced; check/resume
 the original operation to reconcile partial publication. Do not edit its dates
 under the same key. The new binding requires fresh recovery verification and
-explicit completion/enable; renewal alone never grants access.
+explicit onboarding completion; renewal alone never grants access. Setup invitations
+use the effective email and renewed start/expiry; the original setup remains history.
 
 ## Assisted sign-in email replacement
 
@@ -172,11 +178,11 @@ explicit completion/enable; renewal alone never grants access.
 | Area | Repository proof / qualification boundary |
 | --- | --- |
 | Happy paths | Current-binding signed recovery, independent remote bytes and isolated restore; explicit completion; renewal and replacement simulated target-only cutovers |
-| Invalid combinations | Forged/foreign reports, missing checks, old binding/generation, failed/expired evidence, wrong provider policy and malformed browser assertions rejected |
-| Retry | Original source receipt survives control failure/proof expiry; interrupted config publication resumes without a second mutation; same-clock failed report wins |
+| Invalid combinations | Forged/foreign reports, missing checks, old binding/generation, failed/expired/superseded-verifier evidence, wrong provider policy and malformed browser assertions rejected; ordinary Enable cannot bypass initial or renewed-binding completion |
+| Retry | Original source receipt survives control failure/proof expiry/verifier changes; interrupted config publication resumes without a second mutation; same-clock failed report wins |
 | Transaction/containment | Source audit/receipt/access atomic; disable wins over stale completion; broken config/store stops exact target without fabricated success; cleanup preserves original failure |
 | Persistence/recovery | Current schema validates immutable reports/completion; control recovery excludes credentials and restores disabled authority; encrypted binding reference stays separate from business archive |
 | Bounds | One current handoff/source read per instance, at most 1,000 instances per worker observation; control projections do not read business records |
-| UI | Persistent checklist, explicit authorization/confirmation, focused acknowledgment, original operation lookup and withheld ready instructions until completion |
+| UI | Persistent checklist, explicit authorization/confirmation, focused acknowledgment, original operation lookup and withheld ready instructions until completion; Complete onboarding before first activation, Enable for a completed binding; invitations use effective renewal/replacement email and window |
 | Manual edge denial | Disable waits after its source commit; only the private read-only provider verifier releases the gate. Missing/bypass/allow/ambiguous applications fail; retry preserves one app mutation; stale/changed reports fail closed |
 | Live gates | Real Linux ownership/mounts/systemd, provider mutation/denial, workload, reboot and third-operator rollout remain separate installation/Slice 7 qualification |

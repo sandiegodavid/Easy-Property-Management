@@ -214,24 +214,30 @@ class SetupService:
         enrollment = self.host.enrollment(value["instance"])
         # This source read must never infer activation from a healthy process.
         value["enrollment"] = enrollment
+        assignment = value["data"] | {
+            key: enrollment.get(key, value["data"][key]) for key in ("email", "starts", "expires")
+        }
         value["lifecycle"] = (
-            "identity_approved_recovery_pending"
+            "scheduled"
+            if self.store.clock() < assignment["starts"]
+            else "identity_approved_recovery_pending"
             if enrollment["approved"]
-            else "scheduled"
-            if self.store.clock() < value["data"]["starts"]
             else "awaiting_approval"
             if enrollment["status"].get("enrollments")
             else "waiting_for_sign_in"
         )
-        expires = enrollment.get("expires", value["data"]["expires"])
+        expires = assignment["expires"]
         if self.store.clock() >= expires:
             value["lifecycle"] = "expired"
         if value["lifecycle"] != "expired":
-            value["invitation"] = invitation(value["data"], value["hostname"])
+            value["invitation"] = invitation(assignment, value["hostname"])
         # Slice 6 alone may issue ready-to-use instructions after verified
         # completion. Identity-only approval cannot produce those instructions.
         value["ready_instructions"] = None
-        if enrollment["status"].get("active") and value["lifecycle"] != "expired":
+        if enrollment["status"].get("active") and value["lifecycle"] not in {
+            "expired",
+            "scheduled",
+        }:
             with self.store.transaction() as connection:
                 completed = connection.execute(
                     "SELECT 1 FROM onboarding_completion c JOIN recovery_handoff h ON h.id=c.handoff_id WHERE h.instance=? AND json_extract(h.binding,'$.binding_revision')=? LIMIT 1",

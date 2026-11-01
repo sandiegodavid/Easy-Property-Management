@@ -359,6 +359,38 @@ def test_invitation_names_zone_offsets_start_pending_and_final_return_steps():
     assert "return at the start time" in text and "setup is complete" in text
 
 
+@pytest.mark.parametrize("change", ["renew", "scheduled", "replace_email"])
+def test_invitation_and_schedule_use_effective_assignment_without_rewriting_setup(setup, change):
+    service, host, _, clock = setup
+    created = start(setup)
+    host.provider_ready = True
+    for _ in range(4):
+        SetupWorker(service).tick()
+    original = service.status(created["id"], identity(service))
+    clock[0] = original["data"]["expires"] + 100
+    assignment = {
+        "email": "replacement@example.test"
+        if change == "replace_email"
+        else original["data"]["email"],
+        "starts": clock[0] + 100 if change == "scheduled" else clock[0] - 10,
+        "expires": clock[0] + 86400,
+    }
+    host.enrollment = lambda _: {
+        "approved": change == "scheduled",
+        "status": {"active": False},
+        **assignment,
+    }
+    current = service.status(created["id"], identity(service))
+    assert current["lifecycle"] == ("scheduled" if change == "scheduled" else "waiting_for_sign_in")
+    assert current["invitation"] == invitation(original["data"] | assignment, current["hostname"])
+    assert current["invitation"] != original["invitation"]
+    assert current["data"] == original["data"]
+    assert current["ready_instructions"] is None
+    actor = identity(service)
+    with service.store.transaction() as connection:
+        assert json.loads(service.get(connection, created["id"], actor)["data"]) == original["data"]
+
+
 def test_retained_setup_tampering_and_unknown_fields_are_rejected(setup):
     service, _, _, _ = setup
     send(setup)

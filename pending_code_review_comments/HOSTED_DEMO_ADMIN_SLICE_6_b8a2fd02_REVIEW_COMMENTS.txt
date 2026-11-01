@@ -5,7 +5,7 @@ Scope: exact parent-to-commit diff (95fff9e6..b8a2fd02). No implementation chang
 SPECIFICATION — Access lifecycle
 
 1. [P2] Require onboarding completion before allowing ordinary Enable access.
-Status: open
+Status: resolved — 2026-10-31
 File: /Users/dcai/Desktop/My Apps/Easy-Property-Management/application/apps/server/app/modules/hosted_admin/infrastructure/onboarding.py:180-189
 Related: /Users/dcai/Desktop/My Apps/Easy-Property-Management/application/apps/server/app/modules/hosted_admin/infrastructure/onboarding.py:207-209
 Related: /Users/dcai/Desktop/My Apps/Easy-Property-Management/application/apps/web/src/admin/lifecycle.tsx:325-330
@@ -16,10 +16,12 @@ Enforce the completion prerequisite at the backend, and offer Complete onboardin
 
 Validation: With real AccessCommands and OnboardingRecovery fixtures, submitting Enable for the first verified binding returned active=True while onboarding_completion had zero rows and the checklist completion remained null.
 
+Resolution: activation now requires a current-handoff completion for Enable. The UI offers Complete onboarding until that completion exists, then Enable for a disabled completed binding. Direct-command regressions cover initial rejection, renewed-binding rejection, successful completion/re-enable and original receipt replay after proof expiry or verifier change. Browser coverage checks both choices and stale-evidence gating.
+
 SPECIFICATION — Recovery evidence
 
 2. [P2] Revalidate the current verifier identity before issuing a new activation proof.
-Status: open
+Status: resolved — 2026-10-31
 File: /Users/dcai/Desktop/My Apps/Easy-Property-Management/application/apps/server/app/modules/hosted_admin/infrastructure/onboarding.py:180-204
 
 activation() obtains the report entirely from its retained SQLite projection. It does not revalidate the protected artifact or compare the report's verifier identity with the currently pinned verifier. Replacing recovery tooling and updating verifier.json therefore leaves a pending activation able to use the superseded verifier's report until ordinary age expiry. The design requires a fresh restore drill after recovery-tool/format changes; the existing VerifiedReports.report() boundary correctly rejects this old artifact, but activation bypasses that check.
@@ -28,10 +30,12 @@ Require current verifier identity/provenance before issuing a new activation pro
 
 Validation: Registered a real signed report, replaced verifier.json with a different digest, and confirmed that VerifiedReports.report(id) rejected it with admin_verifier_signature_invalid while OnboardingRecovery.activation() still returned a new proof for that same report.
 
+Resolution: checklist refresh reopens the protected report through VerifiedReports.report(), revalidating its signature/current verifier pin and comparing it with the retained projection. Missing, superseded or changed artifacts produce stale evidence and cannot issue a new activation proof. Tests preserve historical reports, require fresh verification under the new pin, and reconcile committed source receipts even after a control crash and verifier change.
+
 SPECIFICATION — Assignment instructions
 
 3. [P2] Generate invitations from the effective assignment after renewal or email replacement.
-Status: open
+Status: resolved — 2026-10-31
 File: /Users/dcai/Desktop/My Apps/Easy-Property-Management/application/apps/server/app/modules/hosted_admin/infrastructure/setup.py:226-230
 Related: /Users/dcai/Desktop/My Apps/Easy-Property-Management/application/apps/server/app/modules/hosted_admin/infrastructure/setup.py:217-224
 
@@ -41,7 +45,11 @@ Use the current enrollment email, start and expiry for invitations and window-re
 
 Validation: With real SetupService, AuthorityStore and provisioning worker steps, changed the effective enrollment email/window and advanced beyond the original expiry. Setup correctly remained nonexpired, but its invitation was identical to the original email/window invitation.
 
+Resolution: invitations and scheduled/expired presentation use the effective enrollment email/start/expiry; immutable setup input remains history. A future renewed start takes precedence over identity approval and cannot present ready instructions. Parameterized regressions cover renewal beyond the old expiry, future renewal with an approved identity and replacement-email invitations.
+
 STANDARDS
 No additional actionable findings.
 
 Focused verification: 48 backend lifecycle/recovery/source-command tests passed; the lifecycle Playwright test passed. Three separate temporary regression reproductions confirmed the findings above. These tests do not establish live Linux, Cloudflare or off-host deployment qualification.
+
+Implementation validation — 2026-10-31: 80 focused backend tests passed across onboarding, setup, source runner, cutover and owning access commands. Five setup Playwright tests passed; the extended lifecycle Playwright regression passed after correcting its native-option assertion. Python Ruff check/format and frontend lint/format/type checks passed. No live host/provider changes or deployment qualification were performed.

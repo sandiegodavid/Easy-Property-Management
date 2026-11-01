@@ -273,7 +273,8 @@ function AccessForm({
     !reason.trim() ||
     !confirmed ||
     (action === "renew" && (!starts || !ends)) ||
-    (["enable", "complete_onboarding"].includes(action) && !verified);
+    (["enable", "complete_onboarding"].includes(action) && (!verified || status.active)) ||
+    (action === "enable" && !handoff?.completion);
   function edit() {
     setAuthorized(false);
     setCredential("");
@@ -294,7 +295,7 @@ function AccessForm({
         await post("/commands", { command });
         setNotice(
           action === "renew"
-            ? "New demo window recorded. Access remains blocked until recovery verification and explicit enable. Fresh sign-in is required."
+            ? "New demo window recorded. Access remains blocked until recovery verification and explicit onboarding completion. Fresh sign-in is required."
             : action === "disable"
               ? "App access disabled and sessions revoked. Private Cloudflare allowance and session revocation still requires independent verification; this receipt does not confirm edge denial."
               : "Access change recorded. Review the current status before another change.",
@@ -322,12 +323,15 @@ function AccessForm({
           >
             <option value="disable">Disable access</option>
             <option value="revoke">Revoke all sessions</option>
-            <option value="complete_onboarding" disabled={!verified || status.active}>
-              Complete onboarding and enable access
-            </option>
-            <option value="enable" disabled={!verified || status.active}>
-              Enable access
-            </option>
+            {handoff?.completion ? (
+              <option value="enable" disabled={!verified || status.active}>
+                Enable access
+              </option>
+            ) : (
+              <option value="complete_onboarding" disabled={!verified || status.active}>
+                Complete onboarding and enable access
+              </option>
+            )}
             <option value="renew">Extend demo</option>
           </select>
         </label>
