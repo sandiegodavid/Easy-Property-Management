@@ -12,6 +12,7 @@ from app.modules.hosted_admin.application.setup import SetupCommand
 from app.modules.hosted_admin.application.recovery import RecoveryCheck
 from app.modules.hosted_admin.application.upgrades import UpgradeCommand
 from app.modules.hosted_admin.application.upgrade_batches import BatchCommand
+from app.modules.hosted_admin.application.storage import StorageCommand
 
 
 class AdminError(ValueError):
@@ -105,6 +106,8 @@ class BrokerRequest(BaseModel):
         "batch_view",
         "batch_lookup",
         "batch_list",
+        "storage_inspect",
+        "storage_apply",
     ]
     token: str = Field(default="", max_length=128)
     csrf: str = Field(default="", max_length=128)
@@ -119,6 +122,7 @@ class BrokerRequest(BaseModel):
     recovery: RecoveryCheck | None = None
     upgrade: UpgradeCommand | None = None
     batch: BatchCommand | None = None
+    storage: StorageCommand | None = None
     batch_offset: int = Field(default=0, ge=0, le=49)
     batch_limit: int = Field(default=10, ge=1, le=50)
     batch_page: int = Field(default=0, ge=0, le=990, multiple_of=10)
@@ -128,6 +132,8 @@ class BrokerRequest(BaseModel):
 
     @model_validator(mode="after")
     def coherent(self):
+        if (self.method == "storage_apply") != (self.storage is not None):
+            raise ValueError("Storage effects require a typed registered operation command.")
         if self.method != "batch_list" and self.batch_page:
             raise ValueError("Only batch history accepts directory pagination.")
         if (self.method == "batch_command") != (self.batch is not None):
@@ -167,7 +173,13 @@ class BrokerRequest(BaseModel):
             raise ValueError("Canonical lookup identity required.")
         if (
             self.method
-            in {"source_status", "console_record", "recovery_handoff", "upgrade_options"}
+            in {
+                "source_status",
+                "console_record",
+                "recovery_handoff",
+                "upgrade_options",
+                "storage_inspect",
+            }
             or (
                 self.method == "console_observation"
                 and self.section in {"access", "runtime", "recovery"}

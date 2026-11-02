@@ -2340,6 +2340,155 @@
         "required": ["items", "total", "offset", "next_offset"],
         "title": "BatchDirectory",
         "type": "object"
+      },
+      "StorageCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "operation_id": {
+            "title": "Operation Id",
+            "type": "string"
+          },
+          "expected_revision": {
+            "minimum": 1,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "action": {
+            "enum": ["apply", "reconcile", "retire", "finish_retirement"],
+            "title": "Action",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": ["id", "operation_id", "expected_revision", "action", "reason"],
+        "title": "StorageCommand",
+        "type": "object"
+      },
+      "StorageView": {
+        "additionalProperties": false,
+        "properties": {
+          "operation_id": {
+            "title": "Operation Id",
+            "type": "string"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "policy_revision": {
+            "minimum": 1,
+            "title": "Policy Revision",
+            "type": "integer"
+          },
+          "state": {
+            "enum": ["reserved", "active", "retiring", "retired"],
+            "title": "State",
+            "type": "string"
+          },
+          "tier": {
+            "enum": ["50mb", "200mb", "1gb"],
+            "title": "Tier",
+            "type": "string"
+          },
+          "allowance_bytes": {
+            "exclusiveMinimum": 0,
+            "title": "Allowance Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "operation_id",
+          "instance",
+          "revision",
+          "policy_revision",
+          "state",
+          "tier",
+          "allowance_bytes"
+        ],
+        "title": "StorageView",
+        "type": "object"
+      },
+      "StorageInspection": {
+        "additionalProperties": false,
+        "properties": {
+          "allocation": {
+            "$ref": "#/components/schemas/StorageView"
+          },
+          "observed": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Observed"
+          },
+          "enforcement": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Enforcement"
+          },
+          "allocated_bytes": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Allocated Bytes"
+          },
+          "allocated_inodes": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Allocated Inodes"
+          },
+          "state": {
+            "default": "unknown",
+            "enum": ["unknown", "available", "stale"],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": ["allocation"],
+        "title": "StorageInspection",
+        "type": "object"
       }
     }
   }

@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
+from app.modules.hosted_access.application.storage_policy import StoragePolicy
 
 CAPABILITIES = frozenset({"records.read", "records.write", "files.read", "files.write"})
 DEMO_DURATION = timedelta(days=14)
@@ -59,7 +60,9 @@ class HostedDeployment(BaseModel):
     administrator_contact: str = Field(min_length=3, max_length=254)
     administration_database: Path
     storage_volume: Path
-    storage_image: Path
+    storage_image: Path | None
+    storage_backend: Literal["loop_image", "project_quota"] = "loop_image"
+    storage_policy: StoragePolicy | None = None
     enabled_at: AwareDatetime
     expires_at: AwareDatetime
     capabilities: frozenset[Literal["records.read", "records.write", "files.read", "files.write"]]
@@ -85,10 +88,35 @@ class HostedDeployment(BaseModel):
 
     @field_validator("storage_volume", "storage_image")
     @classmethod
-    def absolute_storage(cls, value: Path) -> Path:
+    def absolute_storage(cls, value: Path | None) -> Path | None:
+        if value is None:
+            return None
         if not value.is_absolute() or value == Path("/") or ".." in value.parts:
             raise ValueError("An explicit absolute storage path is required.")
         return value
+
+    @model_validator(mode="after")
+    def protected_storage_policy(self):
+        if self.storage_backend == "loop_image":
+            if self.storage_image is None or self.storage_policy is not None:
+                raise ValueError("Loop allocations require only their recorded image.")
+            return self
+        policy = self.storage_policy
+        if (
+            self.storage_image is not None
+            or policy is None
+            or (policy.workspace_id, policy.operator_id)
+            != (str(self.workspace_id), str(self.operator_id))
+        ):
+            raise ValueError("Project storage must match the protected source binding.")
+        projects = {item.role: item for item in policy.projects}
+        if any(
+            not Path(item.directory).is_relative_to(self.storage_volume) for item in policy.projects
+        ) or not self.administration_database.is_relative_to(Path(projects["control"].directory)):
+            raise ValueError(
+                "Project paths must match the protected shared filesystem and control allocation."
+            )
+        return self
 
     @model_validator(mode="after")
     def coherent_deployment(self):

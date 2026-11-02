@@ -17,6 +17,7 @@ from app.modules.hosted_admin.infrastructure.setup_schema import SCHEMA as SETUP
 from app.modules.hosted_admin.infrastructure.recovery_schema import SCHEMA as RECOVERY_SCHEMA
 from app.modules.hosted_admin.infrastructure.upgrade_schema import SCHEMA as UPGRADE_SCHEMA
 from app.modules.hosted_admin.infrastructure.upgrade_batch_schema import SCHEMA as BATCH_SCHEMA
+from app.modules.hosted_admin.infrastructure.storage_schema import SCHEMA as STORAGE_SCHEMA
 from app.modules.hosted_admin.infrastructure.operations import OperationEngine, enqueue
 from app.modules.hosted_admin.application.operations import Observation
 from app.modules.hosted_admin.infrastructure.control_recovery import validate_control
@@ -53,6 +54,7 @@ PRAGMA user_version=1;
     + RECOVERY_SCHEMA
     + UPGRADE_SCHEMA
     + BATCH_SCHEMA
+    + STORAGE_SCHEMA
 )
 
 
@@ -356,6 +358,15 @@ class AuthorityStore:
             self._audit(connection, "identity_restored", "administrator")
 
     def handle(self, request, dispatch, console=None, setup=None):
+        if request.method.startswith("storage_"):
+            with self.transaction() as connection:
+                identity = dict(self.session(connection, request.token, request.csrf))
+            storage = getattr(dispatch, "storage", None)
+            if storage is None:
+                raise AdminError("admin_storage_unavailable", 503)
+            if request.method == "storage_inspect":
+                return storage.inspect(request.instance, identity)
+            return storage.command(request.storage, identity, request.credential)
         if request.method.startswith("batch_"):
             with self.transaction() as connection:
                 identity = dict(self.session(connection, request.token, request.csrf))

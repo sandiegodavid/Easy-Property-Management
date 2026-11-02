@@ -76,6 +76,10 @@ def _mount_identity(volume):
 
 
 def validate_storage_volume(deployment, workspace_root):
+    if getattr(deployment, "storage_backend", "loop_image") == "project_quota":
+        raise HostedConfigurationError(
+            "Project-backed writes require the qualified source-accounting boundary."
+        )
     volume, image = deployment.storage_volume, deployment.storage_image
     if os.name != "posix" or not Path("/proc/self/mountinfo").is_file() or os.geteuid() == 0:
         raise HostedConfigurationError(

@@ -14,6 +14,7 @@ from app.modules.hosted_admin.application.setup import (
     SetupView,
 )
 from app.modules.hosted_admin.application.contracts import CommandRequest
+from app.modules.hosted_admin.application.storage import StorageCommand, StorageInspection
 from app.modules.hosted_admin.application.recovery import RecoveryCheck, RecoveryReport
 from app.modules.hosted_access.application.admin_commands import AccessStatus
 from app.modules.hosted_admin.application.upgrades import (
@@ -40,6 +41,8 @@ def specification():
         BatchCommand,
         BatchView,
         BatchDirectory,
+        StorageCommand,
+        StorageInspection,
     ):
         value = model.model_json_schema(ref_template="#/components/schemas/{model}")
         schemas.update(value.pop("$defs", {}))

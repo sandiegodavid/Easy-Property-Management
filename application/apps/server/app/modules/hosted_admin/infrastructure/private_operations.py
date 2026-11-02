@@ -1,5 +1,6 @@
 """Root-peer-only commands for durable work and bounded capacity qualification."""
 
+import json
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -13,6 +14,7 @@ from app.modules.hosted_admin.application.qualification import (
 from app.modules.hosted_admin.infrastructure.authority import SourceEffect
 from app.modules.hosted_admin.application.upgrades import UpgradeCommand
 from app.modules.hosted_admin.application.upgrade_batches import BatchCommand
+from app.modules.hosted_admin.application.storage import StorageCommand, StorageReservation
 from app.modules.hosted_admin.infrastructure.upgrades import UpgradeEffects
 from app.modules.hosted_admin.infrastructure.operations import OperationEngine
 
@@ -39,6 +41,10 @@ class PrivateOperationRequest(BaseModel):
         "batch-status",
         "batch-list",
         "batch-run",
+        "storage-profile-register",
+        "storage-grant",
+        "storage-reserve",
+        "storage-command",
     ]
     plan: QualificationPlan | None = None
     command: QualificationCommand | None = None
@@ -50,10 +56,22 @@ class PrivateOperationRequest(BaseModel):
     source_command: CommandRequest | None = None
     upgrade: UpgradeCommand | None = None
     batch: BatchCommand | None = None
+    storage: StorageCommand | None = None
+    storage_reservation: StorageReservation | None = None
     page: int = Field(default=0, ge=0, le=990, multiple_of=10)
 
     @model_validator(mode="after")
     def coherent(self):
+        if self.action in {"storage-grant", "storage-command", "storage-reserve"}:
+            if self.action == "storage-grant":
+                if (self.storage is None) == (self.storage_reservation is None):
+                    raise ValueError("Select exactly one reviewed storage intent.")
+            elif (self.action == "storage-command") != (self.storage is not None) or (
+                self.action == "storage-reserve"
+            ) != (self.storage_reservation is not None):
+                raise ValueError("Use the exact typed storage intent.")
+        elif self.storage is not None or self.storage_reservation is not None:
+            raise ValueError("Unexpected storage intent.")
         if self.action != "batch-list" and self.page:
             raise ValueError("Only batch history accepts pagination.")
         if (self.action in {"batch-grant", "batch-admit"}) != (self.batch is not None):
@@ -88,9 +106,13 @@ class PrivateOperationRequest(BaseModel):
             "access-admit",
             "upgrade-admit",
             "batch-admit",
+            "storage-reserve",
+            "storage-command",
         }:
-            raise ValueError("Only the exact qualification command consumes a credential.")
-        if (self.action == "recovery-register") != (self.report_id is not None):
+            raise ValueError("Only an exact admitted command consumes a credential.")
+        if (self.action in {"recovery-register", "storage-profile-register"}) != (
+            self.report_id is not None
+        ):
             raise ValueError("Recovery registration requires a protected report identity.")
         if (self.action == "access-admit") != (self.source_command is not None):
             raise ValueError("Access admission requires its exact source command.")
@@ -104,10 +126,22 @@ class PrivateOperations:
         self.engine = OperationEngine(authority)
 
     def handle(self, payload):
-        request = PrivateOperationRequest.model_validate(payload)
+        request = PrivateOperationRequest.model_validate_json(json.dumps(payload, allow_nan=False))
         with self.authority.transaction() as connection:
             identity = dict(self.authority._identity(connection))
         handlers = {
+            "storage-profile-register": lambda: self.dispatch.storage.register(request.report_id),
+            "storage-grant": lambda: {
+                "credential": self.authority.issue(
+                    (request.storage or request.storage_reservation).fingerprint()
+                )
+            },
+            "storage-reserve": lambda: self.dispatch.storage.reserve(
+                request.storage_reservation, identity, request.credential
+            ),
+            "storage-command": lambda: self.dispatch.storage.command(
+                request.storage, identity, request.credential
+            ),
             "qualification-create": lambda: self.qualification.create(request.plan, identity),
             "qualification-command": lambda: self.qualification.command(
                 request.command, identity, request.credential

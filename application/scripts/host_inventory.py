@@ -15,6 +15,7 @@ import re
 import sqlite3
 import stat
 from uuid import UUID, uuid4
+from app.modules.hosted_access.application.storage_policy import StoragePolicy
 
 KEY = re.compile(r"[a-z0-9][a-z0-9-]{0,31}")
 DIGEST = re.compile(r"[a-f0-9]{64}")
@@ -51,6 +52,7 @@ IMMUTABLE_ALLOCATION_FIELDS = (
     "mount",
     "image",
     "local_config",
+    "storage_backend",
 )
 
 
@@ -75,6 +77,36 @@ def valid_hostname(value):
     )
 
 
+def validate_storage_separation(records):
+    """Validate the bounded inventory as a set, including retained mappings."""
+    mounts, projects, directories = {}, set(), []
+    for record in records:
+        mount = record["mount"]
+        policy = (
+            StoragePolicy.model_validate_json(record["storage_policy"])
+            if record["storage_backend"] == "project_quota"
+            else None
+        )
+        identity = policy.filesystem_uuid if policy else None
+        if mount in mounts and (identity is None or mounts[mount] != identity):
+            raise InventoryError("Storage mount is already registered with a conflicting identity.")
+        mounts[mount] = identity
+        if policy:
+            for project in policy.projects:
+                key = (identity, project.project_id)
+                if key in projects:
+                    raise InventoryError("Project identity is already registered.")
+                projects.add(key)
+                directories.append(Path(project.directory))
+        else:
+            directories.append(Path(mount))
+    # Sorting path components makes every ancestor immediately precede a child;
+    # this also catches aliases recorded beneath another allocation's tree.
+    ordered = sorted(directories, key=lambda path: path.parts)
+    if any(child.is_relative_to(parent) for parent, child in zip(ordered, ordered[1:])):
+        raise InventoryError("Storage directories overlap another allocation.")
+
+
 @dataclass(frozen=True)
 class MaintenanceRequest:
     key: str | None = None
@@ -95,7 +127,7 @@ class Instance:
     port: int
     user: str
     mount: str
-    image: str
+    image: str | None
     release: str
     profile: str
     template: str
@@ -106,10 +138,20 @@ class Instance:
     workspace: str
     revision: int = 1
     lifecycle: str = "adopted"
+    storage_backend: str = "loop_image"
+    storage_policy: str | None = None
 
     def validate(self):
         self._validate_identity()
         self._validate_paths()
+        if self.storage_backend == "project_quota":
+            self._validate_project_storage()
+        elif (
+            self.storage_backend != "loop_image"
+            or self.image is None
+            or self.storage_policy is not None
+        ):
+            raise InventoryError("Invalid recorded storage backend.")
         if self.mount == self.image or not all(
             KEY.fullmatch(value) for value in (self.release, self.profile, self.template)
         ):
@@ -120,8 +162,38 @@ class Instance:
             raise InventoryError("Invalid instance lifecycle or revision.")
         if Path(self.mount) not in Path(self.workspace).parents:
             raise InventoryError("Workspace must belong to the allocated mount.")
-        if Path(self.mount) in Path(self.access_database).parents:
+        if (
+            self.storage_backend == "loop_image"
+            and Path(self.mount) in Path(self.access_database).parents
+        ):
             raise InventoryError("Access authority cannot be on the business volume.")
+
+    def _validate_project_storage(self):
+        if self.image is not None or self.storage_policy is None:
+            raise InventoryError("A project allocation requires protected policy, not an image.")
+        policy = StoragePolicy.model_validate_json(self.storage_policy)
+        if (
+            json.dumps(policy.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+            != self.storage_policy
+        ):
+            raise InventoryError("Storage policy must be canonical.")
+        if (policy.instance, policy.workspace_id, policy.operator_id) != (
+            self.key,
+            self.workspace_id,
+            self.operator_id,
+        ):
+            raise InventoryError("Storage policy identity differs from inventory.")
+        projects = {item.role: item for item in policy.projects}
+        if projects["workspace"].directory != self.workspace or not Path(
+            self.access_database
+        ).is_relative_to(Path(projects["control"].directory)):
+            raise InventoryError("Storage policy paths differ from inventory.")
+        if any(
+            not Path(item.directory).is_relative_to(Path(self.mount)) for item in policy.projects
+        ):
+            raise InventoryError(
+                "All project directories must use the registered shared filesystem."
+            )
 
     def _validate_identity(self):
         if (
@@ -158,6 +230,8 @@ class Instance:
             self.access_database,
             self.workspace,
         ):
+            if value is None:
+                continue
             path = Path(value)
             if (
                 not path.is_absolute()
@@ -175,14 +249,19 @@ CREATE TABLE instances (
   allocation_id TEXT NOT NULL UNIQUE, operator_id TEXT NOT NULL UNIQUE,
   workspace_id TEXT NOT NULL UNIQUE, email TEXT NOT NULL UNIQUE,
   hostname TEXT NOT NULL UNIQUE, port INTEGER NOT NULL UNIQUE,
-  user TEXT NOT NULL UNIQUE, mount TEXT NOT NULL UNIQUE, image TEXT NOT NULL UNIQUE,
+  user TEXT NOT NULL UNIQUE, mount TEXT NOT NULL, image TEXT UNIQUE,
   release TEXT NOT NULL, profile TEXT NOT NULL, template TEXT NOT NULL,
   config_digest TEXT NOT NULL, baseline_digest TEXT NOT NULL,
   local_config TEXT NOT NULL UNIQUE, access_database TEXT NOT NULL UNIQUE,
   workspace TEXT NOT NULL UNIQUE, revision INTEGER NOT NULL CHECK (revision > 0),
   lifecycle TEXT NOT NULL CHECK (lifecycle = 'adopted'),
-  registered_at TEXT NOT NULL
+  storage_backend TEXT NOT NULL CHECK(storage_backend IN ('loop_image','project_quota')),
+  storage_policy TEXT,
+  registered_at TEXT NOT NULL,
+  CHECK((storage_backend='loop_image' AND image IS NOT NULL AND storage_policy IS NULL)
+     OR (storage_backend='project_quota' AND image IS NULL AND storage_policy IS NOT NULL))
 ) STRICT;
+CREATE UNIQUE INDEX unique_loop_mount ON instances(mount) WHERE storage_backend='loop_image';
 CREATE TRIGGER instances_no_delete BEFORE DELETE ON instances
 BEGIN SELECT RAISE(ABORT, 'Instance allocations must be retained'); END;
 CREATE TABLE maintenance (
@@ -306,6 +385,7 @@ class HostInventory:
             except (ValueError, TypeError, KeyError) as error:
                 raise InventoryError("Invalid retained inventory record.") from error
             result.append(instance)
+        validate_storage_separation([vars(item) for item in result])
         return result
 
     def register(self, instance: Instance):
@@ -320,11 +400,17 @@ class HostInventory:
                 ):
                     raise InventoryError("Inventory exceeds its instance bound.")
                 collision = connection.execute(
-                    "SELECT 1 FROM instances WHERE mount = ? OR image = ? LIMIT 1",
+                    "SELECT 1 FROM instances WHERE "
+                    "(storage_backend='loop_image' AND mount = ?) OR image = ? LIMIT 1",
                     (instance.image, instance.mount),
                 ).fetchone()
                 if collision:
                     raise InventoryError("Instance or allocation is already registered.")
+                retained = connection.execute(
+                    "SELECT mount,storage_backend,storage_policy FROM instances LIMIT ?",
+                    (MAX_INSTANCES,),
+                ).fetchall()
+                validate_storage_separation([*retained, values])
                 columns = ", ".join(values)
                 placeholders = ", ".join("?" for _ in values)
                 connection.execute(

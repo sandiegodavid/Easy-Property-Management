@@ -17,6 +17,12 @@ from app.modules.hosted_admin.application.qualification import QualificationPlan
 from app.modules.hosted_admin.infrastructure.operations import STEPS
 
 TABLES = (
+    "storage_profile",
+    "storage_allocation",
+    "storage_project",
+    "storage_event",
+    "storage_attempt",
+    "storage_command",
     "operation_target",
     "operation",
     "operation_step",
@@ -59,6 +65,9 @@ def validate_control(connection):
     from app.modules.hosted_admin.infrastructure.upgrade_batches import validate_batches
 
     validate_batches(connection)
+    from app.modules.hosted_admin.infrastructure.storage_validation import validate_storage
+
+    validate_storage(connection)
 
     for row in connection.execute("SELECT * FROM recovery_handoff"):
         binding = RecoveryBinding.model_validate_json(row["binding"])

@@ -925,6 +925,75 @@ export interface components {
             /** Next Offset */
             next_offset: number | null;
         };
+        /** StorageCommand */
+        StorageCommand: {
+            /** Id */
+            id: string;
+            /** Operation Id */
+            operation_id: string;
+            /** Expected Revision */
+            expected_revision: number;
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "apply" | "reconcile" | "retire" | "finish_retirement";
+            /** Reason */
+            reason: string;
+        };
+        /** StorageView */
+        StorageView: {
+            /** Operation Id */
+            operation_id: string;
+            /** Instance */
+            instance: string;
+            /** Revision */
+            revision: number;
+            /** Policy Revision */
+            policy_revision: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "reserved" | "active" | "retiring" | "retired";
+            /**
+             * Tier
+             * @enum {string}
+             */
+            tier: "50mb" | "200mb" | "1gb";
+            /** Allowance Bytes */
+            allowance_bytes: number;
+        };
+        /** StorageInspection */
+        StorageInspection: {
+            allocation: components["schemas"]["StorageView"];
+            /**
+             * Observed
+             * @default null
+             */
+            observed: number | null;
+            /**
+             * Enforcement
+             * @default null
+             */
+            enforcement: boolean | null;
+            /**
+             * Allocated Bytes
+             * @default null
+             */
+            allocated_bytes: number | null;
+            /**
+             * Allocated Inodes
+             * @default null
+             */
+            allocated_inodes: number | null;
+            /**
+             * State
+             * @default unknown
+             * @enum {string}
+             */
+            state: "unknown" | "available" | "stale";
+        };
     };
     responses: never;
     parameters: never;

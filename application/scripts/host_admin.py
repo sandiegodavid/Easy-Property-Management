@@ -166,10 +166,17 @@ def read_bounded_text(path):
 
 
 def validate_nonsecret_configuration(deployment, local):
-    if set(deployment) != DEPLOYMENT_FIELDS or not all(
-        isinstance(value, str) for key, value in deployment.items() if key != "capabilities"
+    if set(deployment) - {"storage_backend", "storage_policy"} != DEPLOYMENT_FIELDS or not all(
+        isinstance(value, str)
+        for key, value in deployment.items()
+        if key not in {"capabilities", "storage_backend", "storage_policy"}
     ):
         raise InventoryError("Hosted deployment fields do not match the non-secret contract.")
+    if (
+        deployment.get("storage_backend", "loop_image") != "loop_image"
+        or deployment.get("storage_policy") is not None
+    ):
+        raise InventoryError("Project storage requires its separately qualified adoption workflow.")
     if set(local) - LOCAL_FIELDS or not all(
         value is None or isinstance(value, str) for value in local.values()
     ):
@@ -328,7 +335,7 @@ class HostDiscovery:
         deployment_path = paths.configs / f"hosted-{key}.json"
         deployment = read_json(deployment_path, paths)
         if (
-            set(deployment) != DEPLOYMENT_FIELDS
+            set(deployment) - {"storage_backend", "storage_policy"} != DEPLOYMENT_FIELDS
             or deployment.get("deployment_mode") != "hosted_demo"
         ):
             raise InventoryError("Only synthetic hosted demo deployments can be adopted.")

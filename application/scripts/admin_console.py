@@ -2,6 +2,8 @@
 
 import argparse
 from getpass import getpass
+from app.modules.hosted_admin.infrastructure.storage_host import StorageHost
+from app.modules.hosted_admin.infrastructure.storage_service import StorageService
 from dataclasses import asdict
 from functools import partial
 import json
@@ -486,6 +488,7 @@ def compose(authority, paths, inventory):
         ),
     )
     dispatch.upgrades = upgrades
+    dispatch.storage = StorageService(authority, StorageHost(authority, platform, reports))
     setup.upgrades = upgrades
     worker = SetupWorker(setup)
     operations = PrivateOperations(authority, qualification, dispatch, provisioning)

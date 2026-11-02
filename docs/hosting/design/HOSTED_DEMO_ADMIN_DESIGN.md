@@ -264,7 +264,7 @@ Cover successful upgrade; initially disabled/expired operators; invalid or chang
 
 ## Shared filesystem, project quotas and storage requests — Slice 8
 
-Approved design addition November 1, 2026; **8A is locally qualified and repository delivered; 8B–8H remain planned and nothing is deployed**. Deliver the Admin and Operator interfaces, accounting, enforcement, request handling and safe provisioning/change operation together. Operator **Upgrade** submits a request for Admin approval; it does not purchase storage or resize anything. No payment integration is included.
+Approved design addition November 1, 2026; **8A is locally qualified and repository delivered; 8B internal contracts/reservations are repository delivered; 8C–8H remain planned and nothing is deployed**. Deliver the Admin and Operator interfaces, accounting, enforcement, request handling and safe provisioning/change operation together. Operator **Upgrade** submits a request for Admin approval; it does not purchase storage or resize anything. No payment integration is included.
 
 ### One filesystem, private operator directories
 
@@ -587,14 +587,14 @@ Each slice needs focused backend and UI/browser evidence for its boundary. Repos
 
 ## Remaining delivery plan
 
-Planning baseline: commit `8ed8f784`, November 1, 2026. **8A is locally qualified and repository delivered; 8B onward remain planned.** Slices 1–7 are repository-delivered foundations; their live installation, adoption and qualification prerequisites are not assumed complete. This plan subdivides the remaining scope without reopening those implementations or changing the approved storage/product boundaries. Each slice should be one cohesive, reviewable delivery where practical.
+Planning baseline: commit `8ed8f784`, November 1, 2026. **8A is locally qualified and repository delivered; 8B internal contracts/reservations are repository delivered; 8C onward remain planned.** Slices 1–7 are repository-delivered foundations; their live installation, adoption and qualification prerequisites are not assumed complete. This plan subdivides the remaining scope without reopening those implementations or changing the approved storage/product boundaries. Each slice should be one cohesive, reviewable delivery where practical.
 
 Keep the parent numbers **8** and **9** for existing references. Implement the following rows from top to bottom; each depends on the preceding row unless noted. Backend foundations may precede portal actions, but a functional row includes its own usable UI and acceptance. A disabled/unavailable future control must explain the blocker; never expose an action whose owning service is unfinished. No unfinished sub-slice establishes completion of parent Slice 8 or authorizes live deployment.
 
 | Order | Slice | Deliverable | Completion gate |
 | --- | --- | --- | --- |
 | 1 | **8A — delivered locally** | Shared-filesystem quota and sandbox feasibility | Real isolated ARM64 Linux enforcement/escape proof including reboot; no live-host qualification |
-| 2 | **8B** | Protected storage policy, inventory and host commitments | Validated current-schema contracts and atomic allocation admission |
+| 2 | **8B (delivered)** | Protected storage policy, inventory and host commitments | Validated current-schema contracts and atomic allocation admission |
 | 3 | **8C** | Source accounting, admission and usage UI | Every growth path is accounted; both portals show correct scoped usage |
 | 4 | **8D** | Quota-aware backup, restore and reset | Verified recovery round trip with destination project isolation |
 | 5 | **8E** | Admin Add operator with selectable storage | Fresh quota-backed operator completes setup and recovery, with usable Admin UI |
@@ -618,6 +618,8 @@ Build the narrow private probe/quota adapter and a disposable Linux qualificatio
 Record kernel/e2fsprogs/sandbox versions, command/tool digests, evidence and precise blockers. Document the private installation procedure and whether feature enablement requires offline maintenance. Reuse existing Admin readiness/availability presentation for a failed preflight; this row does not introduce operator mutations or a new UI destination. **Done:** real kernel tests prove the boundary, not just mocked quota calls. If escape prevention is unproven, stop this implementation path and resolve the design before allocating project-backed operators. Do not inspect/change the live host without the separate deployment authorization.
 
 ### 8B — Define policy, protected inventory and commitments
+
+Repository delivered November 2, 2026. Private command/recovery instructions and the focused validation matrix are in [Protected storage policies and reservations](../operations/HOSTED_ADMIN_STORAGE.md). No production profiles, project-backend writes, portal mutation controls or deployment are enabled by this slice.
 
 Extend the current control/access configuration schemas and owning contracts with tier IDs/exact logical bytes, policy revision, filesystem/directory/project identity, workspace/scratch/control byte and inode ceilings, project-ID reservations, enforcement/profile evidence, and host commitments. Define canonical intent hashing, expected-revision checks, request/operation references and safe read models. Add the typed broker operations for inspecting/applying registered quotas; accept no arbitrary project IDs or paths from either portal. Generate API contracts as these shapes become available.
 

@@ -7,6 +7,8 @@ import os
 import secrets
 import sqlite3
 import stat
+from app.modules.hosted_admin.infrastructure.storage_queries import PENDING_STORAGE
+
 
 from app.modules.hosted_admin.application.contracts import AdminError
 from app.modules.hosted_admin.application.operations import StepResult, canonical, fingerprint
@@ -55,6 +57,13 @@ def enqueue(connection, store, *, identifier, identity, kind, target, payload):
         if existing["request_hash"] != desired or existing["identity"] != identity["id"]:
             raise AdminError("admin_command_conflict", 409)
         return dict(existing)
+    if (
+        kind in {"upgrade", "upgrade_rollback"}
+        and connection.execute(
+            "SELECT 1 FROM (" + PENDING_STORAGE + ") WHERE instance=? LIMIT 1", (target,)
+        ).fetchone()
+    ):
+        raise AdminError("admin_storage_upgrade_conflict", 409)
     if (
         kind in {"upgrade", "upgrade_rollback"}
         and connection.execute(
