@@ -33,3 +33,15 @@ writes, production profiles and portal mutation controls remain gated.
   No new UI controls or frontend source changed.
 - No full suite was run. Kernel qualification remains the separate Slice 8A
   evidence; synthetic profiles and mocked effects do not qualify a live host.
+
+## Review fixes — commit 658b6b8d findings 1–4
+
+Addressed November 2, 2026. Fresh authorized cleanup can finish a retiring
+allocation after authority/control restoration without erasing prior attempts.
+The live collector reserves reclamation uncertainty; reserved projects have a
+scoped zero-limit pre-apply read and strict post-apply proof. Qualified root
+filesystem mounts are supported without allowing root project directories.
+All 247 focused regressions and changed-file Ruff checks passed; contract
+reproducibility and whitespace checks passed. No host/VM changes were made.
+Resolution details remain in the named review-comments file and the updated
+storage operations runbook. Unrelated in-progress design edits were preserved.

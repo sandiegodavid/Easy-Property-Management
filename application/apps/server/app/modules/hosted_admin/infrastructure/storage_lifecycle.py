@@ -53,13 +53,10 @@ class StorageLifecycle:
                     ) != (identity["id"], identity["generation"]):
                         raise AdminError("admin_authority_fenced", 409)
                 else:
-                    if (
-                        connection.execute(
-                            "SELECT 1 FROM (" + PENDING_STORAGE + ") WHERE operation_id=? LIMIT 1",
-                            (command.operation_id,),
-                        ).fetchone()
-                        and command.action != "reconcile"
-                    ):
+                    if connection.execute(
+                        "SELECT 1 FROM (" + PENDING_STORAGE + ") WHERE operation_id=? LIMIT 1",
+                        (command.operation_id,),
+                    ).fetchone() and command.action not in {"reconcile", "finish_retirement"}:
                         raise AdminError("admin_storage_reconciliation_required", 409)
                     if (
                         connection.execute("SELECT count(*) FROM storage_attempt").fetchone()[0]

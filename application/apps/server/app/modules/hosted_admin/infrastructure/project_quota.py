@@ -218,6 +218,17 @@ class ProjectQuota:
         return self.observe()
 
     def observe(self):
+        return self._observe(require_limits=True)
+
+    def observe_for_apply(self):
+        """Registered, attributed project only; permits initially unset limits.
+
+        Owning commands must fence writers and verify strict limits after apply.
+        This observation alone never establishes an active allocation proof.
+        """
+        return self._observe(require_limits=False)
+
+    def _observe(self, *, require_limits):
         device = self.filesystem()
         with protected_directory(self.binding.directory, self.binding.uid) as descriptor:
             flags, _, _, project, _, _ = attributes(descriptor)
@@ -228,7 +239,7 @@ class ProjectQuota:
             ):
                 raise QuotaUnavailable("admin_project_identity_changed")
         quota = self._control(device, 0x800007, DiskQuota())
-        if not quota.block_hard or not quota.inode_hard:
+        if require_limits and (not quota.block_hard or not quota.inode_hard):
             raise QuotaUnavailable("admin_project_limits_missing")
         return {
             "project_id": project,

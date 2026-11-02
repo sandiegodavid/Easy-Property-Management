@@ -31,7 +31,10 @@ The owning contracts are `hosted_access/application/storage_policy.py` and
   and the typed policy. Inventory stores that policy as canonical JSON. The
   workspace/control paths and identities must match the source. Shared mounts
   require the same filesystem identity; project IDs and directory trees cannot
-  overlap another allocation. Legacy adoption cannot create this backend.
+  overlap another allocation. A qualified existing root filesystem may use `/`
+  as the shared mount; project directories and other allocation paths must remain
+  private non-root paths. Loop-image mounts still cannot be `/`. Legacy adoption
+  cannot create this backend.
 
 `/etc/epm/storage-control.json` has three required keys:
 
@@ -41,12 +44,19 @@ The owning contracts are `hosted_access/application/storage_policy.py` and
 | `profiles` | Up to 100 profile IDs mapped to signed `ProfileReport` artifact UUIDs |
 | `bindings` | Up to 1,000 instance keys mapped to signed `BindingReport` artifact UUIDs |
 
-These are remaining growth commitments, not occupied-byte estimates. Already
-occupied blocks are absent from filesystem free space and are not subtracted a
-second time. Admission subtracts remaining project growth plus these host budgets,
-then retains the greater of 20% total capacity, required recovery space and
-16 MiB. Stopped/disabled allocations still reserve capacity. Inode commitments
-are checked independently. Unknown or stale usage fails admission.
+These are remaining growth commitments, not occupied-byte estimates. Accounting
+keeps measured allocation, remaining project growth and host budgets separate.
+The live collector additionally reserves the full observed reclaimable footprint
+(bytes and inodes) as uncertainty: quota and free-space reads are not atomic, and
+a concurrent deletion/checkpoint may already have increased free space. This
+conservative surcharge prevents spending that occupied-space credit twice. It may
+reject an otherwise feasible allocation until a coherent writer barrier permits a
+tighter observation; it does not alter reported usage or claim atomic sampling.
+Admission retains the greater of 20% total capacity, required recovery space and
+16 MiB after commitments and uncertainty. Stopped/disabled allocations still
+reserve capacity. Unknown or stale usage fails admission. Reserved projects may
+have unset limits, but still undergo exact identity checks and reserve their full
+admitted ceilings; active-project observations require enforced limits.
 
 Reports use the existing protected verifier/HMAC artifact store:
 
@@ -89,6 +99,9 @@ Subsequent `StorageCommand` objects contain a new command `id`, original
 `operation_id`, current `expected_revision`, reason and one of:
 
 1. `apply`: reserved → active after exact ceilings and enforcement verify.
+   Its pre-apply observation checks filesystem/directory/project attribution but
+   permits unset limits; its final proof always requires the strict target limits.
+   An interruption after any project is applied can retry the original command.
 2. `reconcile`: reserved/active → active after inspecting the original intent.
 3. `retire`: reserved/active → retiring; no bytes are deleted or reclaimed.
 4. `finish_retirement`: retiring → retired only with verified cleanup evidence.
@@ -101,7 +114,11 @@ not permission to discard the reservation or generate a replacement upload/key.
 
 Retry the **same** admitted command first. Its completed receipt replays unchanged;
 a changed request conflicts. Explicit fresh reconciliation may resolve an uncertain
-attempt without erasing its history. Original reservation retries return the original
+attempt without erasing its history. For a retiring allocation, ordinary reconcile
+cannot reactivate it. After authority/control restoration, a new current-generation
+`finish_retirement` command and exact grant may replace an interrupted cleanup. It
+requires fresh command-bound cleanup proof, and retains the original attempt; only
+successful verified retirement resolves the earlier pending cleanup. Original reservation retries return the original
 reserved result, even after the allocation advances. Inspect current state separately.
 Project identities remain retained after verified retirement; no automatic reuse or
 cleanup is performed. Occupied bytes are never counted as reclaimed by retirement.
@@ -128,10 +145,10 @@ Focused repository proof (synthetic profiles and mocked effects are not host qua
 
 | Area | Coverage |
 | --- | --- |
-| Happy paths | Reserve, apply, inspect, reconcile, retire, verified cleanup; root-only JSON transport and exact grants |
+| Happy paths | Reserve, first apply with zero limits, inspect, reconcile, retire, verified cleanup; project root-mount configuration/inventory round trip; root-only JSON transport and exact grants |
 | Invalid combinations | Wrong backend/source identity, conflicting mount/filesystem/project/nested paths, unsafe broker fields, stale/expired evidence, missing maintenance gate |
-| Retry/authority | Immutable original receipts, changed request conflicts, lost-effect retry, revoked generation, CSRF/session/action grants, mutual release/quota exclusion |
-| Rollback/races | Concurrent duplicate admission, SQL-trigger failure restores credential/reservation/audit, original uncertain attempt retained |
+| Retry/authority | Immutable original receipts, changed request conflicts, partial first-apply retry, interrupted cleanup across authority/control restore with fresh proof, CSRF/session/action grants, mutual release/quota exclusion |
+| Rollback/races | Concurrent duplicate admission, quota/free-space reclamation interleavings for blocks/inodes, SQL-trigger failure restores credential/reservation/audit, original uncertain attempt retained |
 | Persistence | Canonical profiles/intents, correlated audit/revision chains, exact usage/proof/result; corrupt mappings/history rejected |
 | Backup/restore | Populated reservation and completed lifecycle snapshots, retained identities, disabled restored authority, failed restore rollback |
 | Bounds | Three inspection SELECTs at 1/10/50 allocations, no collector calls; bounded inventory, reservations and action admissions |

@@ -219,6 +219,7 @@ def test_root_adapter_applies_and_retires_exact_admitted_policy(storage, monkeyp
             usage for usage in observations.projects if usage.project_id == p.project_id
         )
     )
+    host.initial_usage = host.usage
     lifecycle = StorageLifecycle(allocations, host.effects)
     assert run(lifecycle, apply, identity)["state"] == "active"
     for project in reservation.policy.projects:
@@ -306,3 +307,219 @@ def test_private_json_commands_consume_exact_storage_grants(storage):
         == "active"
     )
     assert service.inspect("a", identity)["state"] == "available"
+
+
+@pytest.mark.parametrize("root_mount", [False, True])
+def test_project_root_filesystem_contracts_round_trip(
+    storage, inventory, deployment_values, root_mount
+):
+    from app.modules.hosted_admin.application.storage import FilesystemBudget
+    from app.modules.hosted_access.application.storage_policy import ProjectIdentity
+
+    _, _, _, request, _ = storage
+    policy = request().policy
+    item = replace(project_instance(policy), mount="/" if root_mount else "/var/lib/data")
+    inventory.register(item)
+    assert inventory.get("a") == item
+    values = deployment_values | dict(
+        workspace_id=policy.workspace_id,
+        operator_id=policy.operator_id,
+        storage_backend="project_quota",
+        storage_image=None,
+        storage_volume=Path(item.mount),
+        storage_policy=policy,
+        administration_database=Path(item.access_database),
+    )
+    deployment = HostedDeployment.model_validate_json(
+        HostedDeployment.model_validate(values).model_dump_json()
+    )
+    assert str(deployment.storage_volume) == item.mount
+    assert (
+        FilesystemBudget(
+            filesystem_uuid=policy.filesystem_uuid,
+            mount=item.mount,
+            recovery_required=0,
+            shared_overhead=0,
+            retained_image_growth=0,
+            administrative_growth=0,
+            administrative_inodes=0,
+        ).mount
+        == item.mount
+    )
+    with pytest.raises(ValueError):
+        ProjectIdentity.model_validate(policy.projects[0].model_dump() | {"directory": "/"})
+    with pytest.raises(ValueError):
+        replace(instance("b"), mount="/", workspace="/business").validate()
+    for field in ("workspace", "local_config", "access_database"):
+        with pytest.raises(ValueError):
+            replace(item, **{field: "/"}).validate()
+    with pytest.raises(ValueError):
+        HostedDeployment.model_validate(deployment_values | {"storage_volume": Path("/")})
+
+
+@pytest.mark.parametrize("resource", ["bytes", "inodes"])
+def test_reclamation_between_quota_and_free_space_cannot_spend_reserves(
+    storage, monkeypatch, resource
+):
+    from app.modules.hosted_admin.application.storage import FilesystemBudget, ProjectUsage
+
+    store, allocations, identity, request, facts = storage
+    first = request()
+    admit(allocations, first, identity)
+    budget = FilesystemBudget(
+        **facts.model_dump(
+            include={
+                "filesystem_uuid",
+                "recovery_required",
+                "shared_overhead",
+                "retained_image_growth",
+                "administrative_growth",
+                "administrative_inodes",
+            }
+        ),
+        mount="/var/lib/data",
+    )
+    host = StorageHost(store, Mock(), Mock())
+    host.budget = Mock(return_value=budget)
+    host.reports.snapshot.return_value = SimpleNamespace(environment_hash=facts.environment_hash)
+    monkeypatch.setattr("app.modules.hosted_admin.infrastructure.storage_host.ProjectQuota", Mock())
+    observed = []
+
+    def usage(policy, project):
+        observed.append(project.project_id)
+        return ProjectUsage(
+            project_id=project.project_id,
+            directory_inode=project.directory_inode,
+            hard_bytes=0,
+            hard_inodes=0,
+            enforcement=True,
+            allocated_bytes=60 * 1024**2 if project.role == "workspace" else 0,
+            allocated_inodes=900 if project.role == "workspace" else 0,
+        )
+
+    host.initial_usage = usage
+    hard = sum(p.hard_bytes for p in first.policy.projects)
+    reserve = (facts.total_bytes + 4) // 5
+
+    def after_cleanup(path):
+        assert len(observed) == 3
+        # Workspace now occupies only 20 MiB / 100 inodes. statvfs already sees
+        # the freed 40 MiB / 800 inodes, but the earlier quota samples do not.
+        return SimpleNamespace(
+            f_blocks=facts.total_bytes,
+            f_frsize=1,
+            f_bavail=(
+                reserve
+                + hard * 2
+                - 40 * 1024**2
+                + facts.shared_overhead
+                + facts.administrative_growth
+            )
+            if resource == "bytes"
+            else facts.free_bytes,
+            f_favail=5500 if resource == "inodes" else facts.free_inodes,
+        )
+
+    monkeypatch.setattr("os.statvfs", after_cleanup)
+    allocations.collect = host.collect
+    with pytest.raises(AdminError, match="capacity_exhausted"):
+        admit(allocations, request("b", 2001), identity)
+    with store.transaction() as connection:
+        assert connection.execute("SELECT count(*) FROM storage_allocation").fetchone()[0] == 1
+
+
+def test_first_limits_and_partial_apply_retry_use_real_quota_observer(
+    storage, tmp_path, monkeypatch
+):
+    import os
+    from contextlib import contextmanager, nullcontext
+    from app.modules.hosted_admin.infrastructure import project_quota as kernel
+    from app.modules.hosted_admin.infrastructure.storage_lifecycle import StorageLifecycle
+    from app.modules.hosted_admin.tests.test_storage_lifecycle import command, run
+
+    store, allocations, identity, request, _ = storage
+    reservation = request()
+    root = tmp_path / "projects"
+    root.mkdir()
+    projects = []
+    for original in reservation.policy.projects:
+        directory = root / original.role
+        directory.mkdir()
+        projects.append(
+            original.model_copy(
+                update={
+                    "directory": str(directory),
+                    "directory_inode": directory.stat().st_ino,
+                    "uid": os.getuid(),
+                }
+            )
+        )
+    reservation = reservation.model_copy(
+        update={"policy": reservation.policy.model_copy(update={"projects": tuple(projects)})}
+    )
+    admit(allocations, reservation, identity)
+    item = replace(project_instance(reservation.policy), mount=str(root))
+    host = StorageHost(store, Mock(), Mock())
+    host.registered = Mock(return_value=item)
+    host.platform.h.inventory.get.return_value = item
+    host.platform.h.source._transport.return_value = {"owner": reservation.id}
+    host.binding = Mock()
+    host.profile = Mock()
+    host.effect_lock = lambda: nullcontext()
+    state = {p.project_id: kernel.DiskQuota() for p in projects}
+    writes = []
+    interrupt = [True]
+
+    @contextmanager
+    def protected(path, *args):
+        descriptor = os.open(path, os.O_RDONLY)
+        try:
+            yield descriptor
+        finally:
+            os.close(descriptor)
+
+    monkeypatch.setattr(kernel, "protected_directory", protected)
+    by_inode = {p.directory_inode: p.project_id for p in projects}
+    monkeypatch.setattr(
+        kernel,
+        "attributes",
+        lambda fd: (kernel.INHERIT, 0, 0, by_inode[os.fstat(fd).st_ino], 0, b""),
+    )
+
+    def probe(policy, project):
+        result = kernel.ProjectQuota(
+            kernel.ProjectBinding(
+                root,
+                Path(project.directory),
+                policy.filesystem_uuid,
+                project.project_id,
+                project.uid,
+            )
+        )
+        result.filesystem = Mock(return_value=Path("/dev/qualified-test"))
+
+        def control(device, action, quota):
+            if action == 0x800008:
+                state[project.project_id] = quota
+                writes.append(project.project_id)
+                if interrupt[0]:
+                    interrupt[0] = False
+                    raise OSError("interrupted after first installed project limit")
+            return state[project.project_id]
+
+        result._control = control
+        return result
+
+    host.probe = probe
+    with pytest.raises(kernel.QuotaUnavailable, match="limits_missing"):
+        host.usage(reservation.policy, projects[0])
+    assert host.initial_usage(reservation.policy, projects[0]).hard_bytes == 0
+    apply = command(reservation.id, "apply", 1)
+    lifecycle = StorageLifecycle(allocations, host.effects)
+    with pytest.raises(OSError):
+        run(lifecycle, apply, identity)
+    assert writes == [projects[0].project_id]
+    assert lifecycle.command(apply, identity, "")["state"] == "active"
+    for project in projects:
+        assert host.usage(reservation.policy, project).hard_bytes == project.hard_bytes
+    assert set(writes) == set(state)

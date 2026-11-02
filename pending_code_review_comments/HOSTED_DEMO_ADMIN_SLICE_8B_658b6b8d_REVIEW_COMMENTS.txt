@@ -1,0 +1,44 @@
+Review: commit 658b6b8d, HOSTED_DEMO_ADMIN_DESIGN.md Slice 8B
+Date: 2026-11-02
+Scope: protected storage contracts, reservations, host commitments and broker lifecycle. Planned 8C–8H functionality is excluded.
+Validation: 39 focused storage tests passed using .venv/bin/python -m pytest. Additional fixture reproductions confirmed the retirement recovery dead end and capacity-accounting inconsistency. No live-host changes or kernel qualification performed. No independent actionable standards findings.
+
+RESOLVED FINDINGS — verified 2026-11-02
+
+SPECIFICATION — RETIREMENT / AUTHORITY RECOVERY
+
+1. resolved (2026-11-02) [P1] Allow explicitly authorized recovery of interrupted retirement after authority restoration.
+File: application/apps/server/app/modules/hosted_admin/infrastructure/storage_lifecycle.py:56-63
+Related: application/apps/server/app/modules/hosted_admin/infrastructure/storage_lifecycle.py:49-54,166-171.
+Reproduction: reserve an allocation, retire it, let finish_retirement raise OSError after durable action admission, then revoke and restore the Admin identity. Retrying the original cleanup fails with admin_authority_fenced because its attempt belongs to the previous generation. A freshly authorized finish_retirement fails with admin_storage_reconciliation_required, while reconcile fails with admin_storage_lifecycle_conflict because it excludes retiring allocations. There is no supported command that can complete cleanup and release commitments after control recovery. Add a current-generation, explicitly authorized retirement-reconciliation or replacement-cleanup path that preserves the original attempt and requires fresh cleanup proof; do not make ordinary reconciliation reactivate a retiring allocation. Test the interrupted cleanup across authority restoration/control restore and verify eventual retirement without deleting history.
+
+Resolution: A fresh, exact-grant finish_retirement can complete an interrupted retiring allocation after authority/control restoration. It requires new cleanup proof; successful completion resolves older pending cleanup while preserving attempts and project identities. Ordinary reconcile remains forbidden for retiring allocations. Focused authority-restore and control-restore regressions passed.
+
+SPECIFICATION — HOST CAPACITY ADMISSION
+
+2. resolved (2026-11-02) [P2] Avoid combining pre-cleanup quota usage with post-cleanup free space.
+File: application/apps/server/app/modules/hosted_admin/infrastructure/storage_host.py:179-192
+Related: application/apps/server/app/modules/hosted_admin/infrastructure/storage_allocations.py:245-257.
+The collector reads project allocation first and statvfs afterward. A concurrent scratch cleanup, file deletion or WAL truncation can free blocks/inodes between those reads. Admission then sees the increased free space but still subtracts the smaller remaining commitment calculated from the old, higher allocation, overstating available capacity by the freed amount. The control SQLite transaction does not serialize filesystem cleanup. In a fixture reproduction, old workspace usage of 60 MiB followed by free space after usage falls to 20 MiB admits the next allocation; using current usage with the same free-space reading correctly raises admin_storage_capacity_exhausted. Obtain a coherent or conservatively bounded observation across collection/admission, accounting for concurrent reclamation as well as growth. Add an interleaving test that frees project bytes/inodes between the reads and proves admission cannot consume required host reserves.
+
+Resolution: The live collector now includes explicit bytes/inodes reclamation uncertainty equal to the observed footprint. Admission subtracts that uncertainty in addition to remaining growth, preventing stale occupied-space credit from being spent after deletion/checkpoint reclamation. Actual usage remains unchanged; admission is intentionally conservative without a writer barrier. Byte and inode interleaving regressions passed.
+
+SPECIFICATION — REGISTERED QUOTA APPLICATION
+
+3. resolved (2026-11-02) [P2] Let the typed apply operation install the first project limits.
+File: application/apps/server/app/modules/hosted_admin/infrastructure/storage_host.py:237-247
+Related: application/apps/server/app/modules/hosted_admin/infrastructure/storage_host.py:153-155; application/apps/server/app/modules/hosted_admin/infrastructure/project_quota.py:230-232.
+Before setting limits, apply calls usage(), which delegates to ProjectQuota.observe(). That observer rejects a project with unset block or inode hard limits. A newly initialized, correctly attributed project therefore raises admin_project_limits_missing before set_limits can execute, leaving the admitted attempt unresolved. The root-adapter test mocks usage with already populated target limits, hiding this bootstrap failure. Add a narrowly scoped pre-apply observation that validates the registered filesystem/directory/project identity and reads actual allocation even when limits are unset; apply the admitted ceilings while fenced, then require the existing strict enforced-limit proof. Keep ordinary active-project inspection fail-closed. Also ensure collection of reserved, not-yet-applied projects cannot prevent their safe admission/recovery. Test initially zero limits and interruption after only one project's limits are applied.
+
+Resolution: A scoped pre-apply observer validates exact filesystem/directory/project attribution while permitting zero limits. Apply uses it before setting limits and requires strict enforced target limits afterward. Reserved collection accepts zero/target limits while active inspection remains strict. A regression using the real quota observer covers initial zero limits and retry after the first project was applied.
+
+SPECIFICATION — SHARED FILESYSTEM CONFIGURATION
+
+4. resolved (2026-11-02) [P2] Support the approved qualified root-filesystem topology in project-backend contracts.
+File: application/apps/server/app/modules/hosted_admin/application/storage.py:205-210
+Related: application/apps/server/app/modules/hosted_access/application/configuration.py:89-95; application/scripts/host_inventory.py:235-241.
+FilesystemBudget rejects mount="/" unconditionally, and the deployment/inventory path validators also reject it. The accepted design explicitly allows reusing the qualified existing host filesystem and describes enabling project quotas on an existing root filesystem (design lines 271 and 277). Even a fully qualified root filesystem therefore cannot be registered as the shared project backend; a separate filesystem becomes mandatory despite the approved installation choice. Allow "/" specifically as the qualified project-backend filesystem mount/volume across these contracts, while preserving loop-image restrictions, exact filesystem verification, private non-root project directories and cross-operator separation. Add a round-trip root-mount configuration/inventory test and retain rejection of root as a project directory.
+
+Resolution: Project-backend budgets, source configuration and inventory now allow a qualified root filesystem mount. Project directories and other paths still reject root; loop-image root mounts remain invalid. Root-mount round-trip and negative-path regressions passed.
+
+Final focused validation: 247 passed; changed-file Ruff check and format --check passed for all 10 changed Python files. No live-host or kernel qualification was performed for these fixes.

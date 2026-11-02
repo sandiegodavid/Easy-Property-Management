@@ -271,3 +271,51 @@ def test_queued_release_blocks_quota_effect_without_spending_grant(storage):
     effects.assert_not_called()
     with store.transaction() as connection:
         assert connection.execute("SELECT count(*) FROM storage_attempt").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize("control_restore", [False, True])
+def test_restored_authority_can_replace_interrupted_cleanup_without_reactivation(
+    storage, tmp_path, control_restore
+):
+    store, service, identity, request, _ = storage
+    reservation = request()
+    admit(service, reservation, identity)
+    lifecycle = StorageLifecycle(service, lambda c, r: proof(service, c, r))
+    run(lifecycle, command(reservation.id, "retire", 1), identity)
+    old = command(reservation.id, "finish_retirement", 2)
+    lifecycle.effects = Mock(side_effect=OSError("interrupted cleanup"))
+    with pytest.raises(OSError):
+        run(lifecycle, old, identity)
+    if control_restore:
+        restored = AuthorityStore.initialize(
+            tmp_path / "restored" / "control.sqlite", identity["id"]
+        )
+        restore_control(restored, snapshot_control(store))
+        service.store = restored
+        store = restored
+    else:
+        store.revoke_identity()
+    store.restore_identity()
+    with store.transaction() as connection:
+        current = dict(store._identity(connection))
+    lifecycle = StorageLifecycle(service, lambda c, r: proof(service, c, r))
+    with pytest.raises(AdminError, match="authority_fenced"):
+        lifecycle.command(old, current, "")
+    with pytest.raises(AdminError, match="lifecycle_conflict"):
+        run(lifecycle, command(reservation.id, "reconcile", 2), current)
+    replacement = command(reservation.id, "finish_retirement", 2)
+    with pytest.raises(AdminError):
+        lifecycle.command(replacement, current, "")
+    lifecycle.effects = lambda c, r: proof(service, c, r).model_copy(
+        update={"no_open_files": False}
+    )
+    with pytest.raises(AdminError, match="proof_invalid"):
+        run(lifecycle, replacement, current)
+    lifecycle.effects = lambda c, r: proof(service, c, r)
+    assert lifecycle.command(replacement, current, "")["state"] == "retired"
+    with store.transaction() as connection:
+        assert not connection.execute("SELECT * FROM (" + PENDING_STORAGE + ")").fetchall()
+        assert connection.execute("SELECT count(*) FROM storage_attempt").fetchone()[0] == 3
+        assert connection.execute("SELECT count(*) FROM storage_project").fetchone()[0] == 3
+        assert connection.execute("SELECT id FROM storage_attempt WHERE id=?", (old.id,)).fetchone()
+        validate_control(connection)

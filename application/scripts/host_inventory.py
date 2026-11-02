@@ -223,13 +223,8 @@ class Instance:
             raise InventoryError("Invalid instance address or port.")
 
     def _validate_paths(self):
-        for value in (
-            self.mount,
-            self.image,
-            self.local_config,
-            self.access_database,
-            self.workspace,
-        ):
+        for field in ("mount", "image", "local_config", "access_database", "workspace"):
+            value = getattr(self, field)
             if value is None:
                 continue
             path = Path(value)
@@ -238,7 +233,10 @@ class Instance:
                 or value != str(path)
                 or any(character.isspace() or not character.isprintable() for character in value)
                 or ".." in path.parts
-                or path == Path("/")
+                or (
+                    path == Path("/")
+                    and not (field == "mount" and self.storage_backend == "project_quota")
+                )
             ):
                 raise InventoryError("Invalid allocation path.")
 

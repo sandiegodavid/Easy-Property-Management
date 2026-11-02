@@ -34,6 +34,8 @@ class HostStorageFacts(ProtectedRecord):
     administrative_growth: int = Field(ge=0)
     enforcement: bool
     administrative_inodes: int = Field(default=0, ge=0)
+    reclamation_bytes: int = Field(default=0, ge=0)
+    reclamation_inodes: int = Field(default=0, ge=0)
     environment_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
     projects: tuple["ProjectUsage", ...] = Field(default=(), max_length=3000)
 
@@ -52,8 +54,8 @@ class ProjectUsage(ProtectedRecord):
     allocated_bytes: int = Field(ge=0)
     allocated_inodes: int = Field(ge=0)
     directory_inode: int = Field(gt=0)
-    hard_bytes: int = Field(gt=0, multiple_of=1024)
-    hard_inodes: int = Field(gt=0)
+    hard_bytes: int = Field(ge=0, multiple_of=1024)
+    hard_inodes: int = Field(ge=0)
     enforcement: bool
 
 
@@ -207,7 +209,6 @@ class FilesystemBudget(ProtectedRecord):
             or not PurePosixPath(self.mount).is_absolute()
             or str(PurePosixPath(self.mount)) != self.mount
             or ".." in PurePosixPath(self.mount).parts
-            or self.mount == "/"
         ):
             raise ValueError("An exact protected filesystem budget is required.")
         return self

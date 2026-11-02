@@ -151,8 +151,14 @@ class StorageHost:
         )
 
     def usage(self, policy, project):
+        return self._usage(policy, project, initial=False)
+
+    def initial_usage(self, policy, project):
+        return self._usage(policy, project, initial=True)
+
+    def _usage(self, policy, project, *, initial):
         probe = self.probe(policy, project)
-        values = probe.observe()
+        values = probe.observe_for_apply() if initial else probe.observe()
         inode = os.stat(project.directory, follow_symlinks=False).st_ino
         if inode != project.directory_inode:
             raise AdminError("admin_storage_binding_changed", 409)
@@ -171,7 +177,7 @@ class StorageHost:
         ).filesystem()
         with self.store.transaction() as connection:
             rows = connection.execute(
-                "SELECT request FROM storage_allocation WHERE filesystem_uuid=? AND state!='retired' LIMIT 1001",
+                "SELECT request,state FROM storage_allocation WHERE filesystem_uuid=? AND state!='retired' LIMIT 1001",
                 (filesystem,),
             ).fetchall()
         if len(rows) > 1000:
@@ -180,9 +186,13 @@ class StorageHost:
         for row in rows:
             policy = StorageReservation.model_validate_json(row[0]).policy
             for project in policy.projects:
-                usage.append(self.usage(policy, project))
-        # Read usage before free space: intervening growth is conservatively
-        # reserved rather than reusing an optimistic pre-growth free reading.
+                observe = self.initial_usage if row["state"] == "reserved" else self.usage
+                usage.append(observe(policy, project))
+        # Quota/statvfs reads are not atomic, and cleanup is not serialized with
+        # admission. Reserve the entire observed reclaimable footprint as scan
+        # uncertainty: none of its occupied-space credit can be spent a second
+        # time if deletion/checkpoint reclamation races this scan or admission.
+        # A future writer barrier may supply a tighter coherent observation.
         self.platform.h.protected(Path(budget.mount), self.platform.h.paths, regular=False)
         stats = os.statvfs(budget.mount)
         return HostStorageFacts(
@@ -194,6 +204,8 @@ class StorageHost:
             enforcement=True,
             environment_hash=self.reports.snapshot().environment_hash,
             projects=tuple(usage),
+            reclamation_bytes=sum(item.allocated_bytes for item in usage),
+            reclamation_inodes=sum(item.allocated_inodes for item in usage),
         )
 
     def effects(self, command, request):
@@ -236,7 +248,11 @@ class StorageHost:
                 raise AdminError("admin_storage_binding_changed", 409)
             for project in policy.projects:
                 self.require_attempt(command)
-                observed = self.usage(policy, project)
+                observed = (
+                    self.initial_usage(policy, project)
+                    if command.action == "apply"
+                    else self.usage(policy, project)
+                )
                 if command.action == "apply":
                     self.profile(policy.profile_id)
                     if (

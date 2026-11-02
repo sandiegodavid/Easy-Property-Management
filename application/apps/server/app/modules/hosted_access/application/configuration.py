@@ -91,14 +91,19 @@ class HostedDeployment(BaseModel):
     def absolute_storage(cls, value: Path | None) -> Path | None:
         if value is None:
             return None
-        if not value.is_absolute() or value == Path("/") or ".." in value.parts:
+        if not value.is_absolute() or ".." in value.parts:
             raise ValueError("An explicit absolute storage path is required.")
         return value
 
     @model_validator(mode="after")
     def protected_storage_policy(self):
         if self.storage_backend == "loop_image":
-            if self.storage_image is None or self.storage_policy is not None:
+            if (
+                self.storage_image is None
+                or self.storage_policy is not None
+                or self.storage_volume == Path("/")
+                or self.storage_image == Path("/")
+            ):
                 raise ValueError("Loop allocations require only their recorded image.")
             return self
         policy = self.storage_policy

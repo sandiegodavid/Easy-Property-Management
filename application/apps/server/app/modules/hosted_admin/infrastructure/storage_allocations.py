@@ -238,8 +238,16 @@ class StorageAllocations:
                 raise AdminError("admin_storage_observation_unavailable", 409)
             if observed and (
                 not observed.enforcement
-                or (observed.hard_bytes, observed.hard_inodes)
-                != (row["hard_bytes"], row["hard_inodes"])
+                or observed.hard_bytes
+                not in (
+                    {0, row["hard_bytes"]} if row["state"] == "reserved" else {row["hard_bytes"]}
+                )
+                or observed.hard_inodes
+                not in (
+                    {0, row["hard_inodes"]} if row["state"] == "reserved" else {row["hard_inodes"]}
+                )
+                or observed.allocated_bytes > row["hard_bytes"]
+                or observed.allocated_inodes > row["hard_inodes"]
             ):
                 raise AdminError("admin_storage_observation_unavailable", 409)
             growth_bytes += max(
@@ -253,8 +261,9 @@ class StorageAllocations:
         reserve = max((facts.total_bytes + 4) // 5, facts.recovery_required, 16 * 1024 * 1024)
         other = facts.shared_overhead + facts.retained_image_growth + facts.administrative_growth
         if (
-            facts.free_bytes - growth_bytes - other < reserve
-            or facts.free_inodes < growth_inodes + facts.administrative_inodes
+            facts.free_bytes - growth_bytes - other - facts.reclamation_bytes < reserve
+            or facts.free_inodes
+            < growth_inodes + facts.administrative_inodes + facts.reclamation_inodes
         ):
             raise AdminError("admin_storage_capacity_exhausted", 409)
 
