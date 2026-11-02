@@ -1,6 +1,11 @@
 Review: commit 029c8145, HOSTED_DEMO_ADMIN_DESIGN.md Slice 7
 Date: 2026-11-01
 
+Re-review: commit 9f43e76f, 2026-11-01
+Scope: the three findings from the preceding Slice 7 review, per AGENTS.md.
+Result: findings 1, 2 and 3 are resolved. No actionable remaining or regressed findings identified within this scope.
+Independent re-review validation: 24 upgrade-deployment backend tests passed; 4 packaged hosted-session browser tests passed, covering fresh sign-in with preserved/revoked sessions and expiry/revocation during maintenance. No full-suite or live-host validation performed. No actionable standards findings.
+
 RESOLVED FINDINGS — 2026-11-01
 
 HOSTED SESSION / BROWSER
