@@ -41,6 +41,8 @@ product scope; no additional data-residency requirement is imposed.
 | [Ongoing Google Cloud runbook](operations/GOOGLE_CLOUD_ONGOING_RUNBOOK.md) | After-setup quick reference and replacement-release build/upload/switch/rollback sequence |
 | [Operator guide](operations/HOSTED_DEMO_OPERATOR_GUIDE.md) | Assigned sign-in, session controls, multiple devices, saved forms and safe recovery |
 | [Qualification and rollout plan](qualification/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md) | **Single current checkpoint**, passed scope, remaining gates, test matrix and completion criteria |
+| [Local Linux test VM](qualification/LOCAL_LINUX_VM.md) | Retained Lima/Ubuntu ARM64 VM: start/stop, isolated test inputs, package prerequisites and Slice 8A qualification limits |
+| [Project quota qualification](qualification/HOSTED_PROJECT_QUOTA_QUALIFICATION.md) | Slice 8A probe/sandbox, local Linux/reboot evidence, focused matrix and repeat/private-installation procedure; no live qualification |
 | [Cloudflare/VM operations record](operations/CLOUDFLARE_OPERATIONS.md) | Current exact inventory, completed setup sequence and cumulative future operation entries |
 | [Supporting reports](qualification/reports) / [raw evidence](evidence) | Dated focused Linux/upload/recovery/build reports and machine-readable results |
 | [Source archive](archive/README.md) | All pre-consolidation details and historical PDF exports; context rather than current instructions |

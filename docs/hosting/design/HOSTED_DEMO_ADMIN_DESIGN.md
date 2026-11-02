@@ -264,7 +264,7 @@ Cover successful upgrade; initially disabled/expired operators; invalid or chang
 
 ## Shared filesystem, project quotas and storage requests — Slice 8
 
-Approved design addition November 1, 2026; **planned, not implemented or deployed**. Deliver the Admin and Operator interfaces, accounting, enforcement, request handling and safe provisioning/change operation together. Operator **Upgrade** submits a request for Admin approval; it does not purchase storage or resize anything. No payment integration is included.
+Approved design addition November 1, 2026; **8A is locally qualified and repository delivered; 8B–8H remain planned and nothing is deployed**. Deliver the Admin and Operator interfaces, accounting, enforcement, request handling and safe provisioning/change operation together. Operator **Upgrade** submits a request for Admin approval; it does not purchase storage or resize anything. No payment integration is included.
 
 ### One filesystem, private operator directories
 
@@ -587,13 +587,13 @@ Each slice needs focused backend and UI/browser evidence for its boundary. Repos
 
 ## Remaining delivery plan
 
-Planning baseline: commit `8ed8f784`, November 1, 2026. All slices below are **planned**. Slices 1–7 are repository-delivered foundations; their live installation, adoption and qualification prerequisites are not assumed complete. This plan subdivides the remaining scope without reopening those implementations or changing the approved storage/product boundaries. Each slice should be one cohesive, reviewable delivery where practical.
+Planning baseline: commit `8ed8f784`, November 1, 2026. **8A is locally qualified and repository delivered; 8B onward remain planned.** Slices 1–7 are repository-delivered foundations; their live installation, adoption and qualification prerequisites are not assumed complete. This plan subdivides the remaining scope without reopening those implementations or changing the approved storage/product boundaries. Each slice should be one cohesive, reviewable delivery where practical.
 
 Keep the parent numbers **8** and **9** for existing references. Implement the following rows from top to bottom; each depends on the preceding row unless noted. Backend foundations may precede portal actions, but a functional row includes its own usable UI and acceptance. A disabled/unavailable future control must explain the blocker; never expose an action whose owning service is unfinished. No unfinished sub-slice establishes completion of parent Slice 8 or authorizes live deployment.
 
 | Order | Slice | Deliverable | Completion gate |
 | --- | --- | --- | --- |
-| 1 | **8A** | Shared-filesystem quota and sandbox feasibility | Real isolated Linux proof of project enforcement and escape prevention |
+| 1 | **8A — delivered locally** | Shared-filesystem quota and sandbox feasibility | Real isolated ARM64 Linux enforcement/escape proof including reboot; no live-host qualification |
 | 2 | **8B** | Protected storage policy, inventory and host commitments | Validated current-schema contracts and atomic allocation admission |
 | 3 | **8C** | Source accounting, admission and usage UI | Every growth path is accounted; both portals show correct scoped usage |
 | 4 | **8D** | Quota-aware backup, restore and reset | Verified recovery round trip with destination project isolation |
@@ -607,6 +607,11 @@ Keep the parent numbers **8** and **9** for existing references. Implement the f
 | 12 | **9D** | Promote capacity and onboard fresh C | Audited ceiling promotion followed by ordinary C onboarding |
 
 ### 8A — Prove the filesystem and sandbox boundary
+
+**Delivered November 1, 2026 on the retained local ARM64 Linux VM.** See
+[Project quota qualification](../qualification/HOSTED_PROJECT_QUOTA_QUALIFICATION.md)
+for the private probe/sandbox, actual kernel evidence, focused matrix and
+repeat/private-installation procedure. Live deployment remains gated.
 
 Build the narrow private probe/quota adapter and a disposable Linux qualification harness. Verify filesystem identity/features, quota accounting and enforcement, inherited project attribution, hard byte/inode limits and sandbox restrictions as the real service identity. Exercise direct project-ID/inheritance mutation, compatibility interfaces, hard links/renames, writable temporary paths and inherited descriptors. Include enforcement persistence after a test-machine reboot/remount and a missing/disabled-enforcement failure case. A loop-backed filesystem may be used by the isolated test harness only; it is not the target per-operator storage design.
 

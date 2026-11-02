@@ -10,6 +10,7 @@ import pytest
 from app.modules.hosted_admin.api.application import create_admin_app
 from app.modules.hosted_admin.application.contracts import BrokerRequest, AdminError
 from app.modules.hosted_admin.infrastructure.console import ConsoleReads
+from app.modules.hosted_admin.infrastructure.project_quota import QuotaUnavailable
 from app.modules.hosted_admin.tests.test_authority import (
     authority as authority,
     login,
@@ -38,6 +39,25 @@ def drain(jobs):
     while jobs:
         task, key = jobs.pop(0)
         task(key)
+
+
+def test_failed_quota_preflight_reuses_the_independent_unavailable_section(console):
+    reads, inventory, jobs = console
+    observe = inventory.observe
+
+    def preflight(section, instance):
+        if section == "runtime":
+            raise QuotaUnavailable("admin_project_enforcement_unavailable")
+        return observe(section, instance)
+
+    inventory.observe = preflight
+    reads.observation("runtime", "a")
+    reads.observation("access", "a")
+    drain(jobs)
+    unavailable = reads.observation("runtime", "a")
+    assert unavailable["failed"] and unavailable["data"] is None
+    assert reads.observation("access", "a")["state"] == "available"
+    assert "enforcement" not in json.dumps(unavailable)  # No private exception content.
 
 
 @pytest.mark.parametrize("count", [1, 100, 200])

@@ -1,0 +1,211 @@
+{
+  "architecture": "aarch64",
+  "boot_id": "38e64df7-308d-4c9c-9d4a-1edf0be8e1d9",
+  "e2fsprogs": "e2fsprogs\t1.47.0-2.4~exp1ubuntu4.1",
+  "filesystem_uuid": "12399c54-9cb1-441f-bb6e-9ce16181d00f",
+  "kernel": "6.8.0-142-generic",
+  "kernel_config_sha256": "217703dcf37786843b5f4f6f36e778dc04fbfe6cbf1f41dae7c09124e96901a4",
+  "launcher_sha256": "6da892b049417b8e0326ae41f9083788a390a6440c2f85323dc37fad2286f749",
+  "libseccomp": "2.5.5",
+  "observed": 1793588872.744565,
+  "results": {
+    "a-scratch-attribution": 3,
+    "a-workspace-attribution": 4,
+    "binding_failures": {
+      "project_zero_descendant": "rejected",
+      "symlink": "rejected",
+      "wrong_uuid": "unavailable"
+    },
+    "bytes": {
+      "errno": 122,
+      "iterations": 16
+    },
+    "bytes-usage": {
+      "allocated_bytes": 1048576,
+      "allocated_inodes": 18,
+      "hard_bytes": 1048576,
+      "hard_inodes": 512,
+      "project_id": 1001
+    },
+    "compatibility": {
+      "ambient": "kernel-rejected-compat-elf",
+      "errno": 8,
+      "sha256": "e2317cdca1d167c15302ec24f16c7b0f3d410d7bf5d65bb493d9a68636e3151d"
+    },
+    "deleted": {
+      "deleted_open_charged": true,
+      "errno": 122
+    },
+    "deleted-usage": {
+      "allocated_bytes": 4096,
+      "allocated_inodes": 1,
+      "hard_bytes": 1048576,
+      "hard_inodes": 512,
+      "project_id": 1001
+    },
+    "disabled_enforcement": {
+      "error": "admin_project_quota_unavailable",
+      "state": "unavailable"
+    },
+    "enforcement_negative_control": {
+      "allocated_above_hard_limit_with_enforcement_off": true
+    },
+    "inodes": {
+      "errno": 122,
+      "iterations": 31
+    },
+    "inodes-usage": {
+      "allocated_bytes": 4096,
+      "allocated_inodes": 32,
+      "hard_bytes": 8388608,
+      "hard_inodes": 32,
+      "project_id": 1001
+    },
+    "missing_mount": {
+      "error": "admin_project_quota_unavailable",
+      "state": "unavailable"
+    },
+    "remount": "limits-and-attribution-retained",
+    "sandbox": {
+      "/dev/shm/epm-escape": 30,
+      "/etc/epm-escape": 30,
+      "/run/epm-escape": 30,
+      "/tmp": "writable-accounted",
+      "/var/lib/epm-quota-qualification-6ekbut04/data/a-scratch": "writable-accounted",
+      "/var/tmp": "writable-accounted",
+      "child_exec_filter": "mutation-denied",
+      "inherited_descriptors": "no-unbudgeted-regular-files",
+      "ioctl_a-workspace_40046602": 1,
+      "ioctl_a-workspace_40046604": 1,
+      "ioctl_a-workspace_40086602": 1,
+      "ioctl_a-workspace_401c5820": 1,
+      "ioctl_child_40046602": 1,
+      "ioctl_child_40046604": 1,
+      "ioctl_child_40086602": 1,
+      "ioctl_child_401c5820": 1,
+      "ioctl_owned_40046602": 1,
+      "ioctl_owned_40046604": 1,
+      "ioctl_owned_40086602": 1,
+      "ioctl_owned_401c5820": 1,
+      "link_other": 13,
+      "link_scratch": 18,
+      "mount": 1,
+      "normal_writes": "sqlite-wal-checkpoint-and-files",
+      "quotactl": 1,
+      "read_other": 13,
+      "read_raw_image": 13,
+      "rename_other": 13,
+      "rename_scratch": 18,
+      "unshare": 1,
+      "write_other": 13
+    }
+  },
+  "root": "/var/lib/epm-quota-qualification-6ekbut04",
+  "sandbox": [
+    "User=epm-qtest-21842b3fa",
+    "UMask=0077",
+    "NoNewPrivileges=yes",
+    "CapabilityBoundingSet=",
+    "AmbientCapabilities=",
+    "RestrictSUIDSGID=yes",
+    "ProtectSystem=strict",
+    "ProtectHome=yes",
+    "PrivateDevices=yes",
+    "ProtectKernelTunables=yes",
+    "ProtectKernelModules=yes",
+    "ProtectControlGroups=yes",
+    "RestrictNamespaces=yes",
+    "LockPersonality=yes",
+    "SystemCallArchitectures=native",
+    "SystemCallFilter=@system-service",
+    "SystemCallFilter=~quotactl quotactl_fd @mount @privileged @resources",
+    "SystemCallErrorNumber=EPERM",
+    "ReadWritePaths=/var/lib/epm-quota-qualification-6ekbut04/data/a-workspace /var/lib/epm-quota-qualification-6ekbut04/data/a-scratch /var/lib/epm-quota-qualification-6ekbut04/data/a-control",
+    "Environment=TMPDIR=/var/lib/epm-quota-qualification-6ekbut04/data/a-scratch",
+    "BindPaths=/var/lib/epm-quota-qualification-6ekbut04/data/a-scratch:/tmp /var/lib/epm-quota-qualification-6ekbut04/data/a-scratch:/var/tmp",
+    "TemporaryFileSystem=/dev/shm:ro /run:ro",
+    "ProtectProc=invisible",
+    "TasksMax=32",
+    "MemoryMax=128M",
+    "RuntimeMaxSec=30"
+  ],
+  "source_sha256": {
+    "project_quota.py": "e97783d29154aae4a81d8fde5fa5e6bee8df00c0d28e6535e8dbd31e31549a4d",
+    "project_quota_qualification.py": "31eecd3564390836daaefee98a571de10326e4a47b680828efef17685d2001ca",
+    "project_sandbox.py": "5cb94be503044ed1660654109b4899792877df985c1e78aaeb17cb31bc34254b",
+    "quota_actor.py": "14b1db62d17d5d9974aee5740c1501770a90a115f80f85170ccdb0799c39c8bf",
+    "quota_sandbox_exec.c": "851618b8dc4556b6b9b7d709648229b48127e3e8cfaa2add39d59db637bb9aa0"
+  },
+  "status": "awaiting_reboot",
+  "systemd": "systemd 255 (255.4-1ubuntu8.17)",
+  "tools": {
+    "arm-linux-gnueabihf-gcc": {
+      "path": "/usr/bin/arm-linux-gnueabihf-gcc-13",
+      "sha256": "9f51de9c65c61c43f31ef3b3bebebd79541575da52044ed5b6b6a0444f1fd10b"
+    },
+    "dpkg-query": {
+      "path": "/usr/bin/dpkg-query",
+      "sha256": "eea6a1a5fc4fff653dfc733c9b4a551625d5fb7720a84952013076cacdb0927f"
+    },
+    "findmnt": {
+      "path": "/usr/bin/findmnt",
+      "sha256": "9255be2528da5c9a3f253d7a695ac2d96c1591caf9c8822fc0fe3abe430244ba"
+    },
+    "gcc": {
+      "path": "/usr/bin/aarch64-linux-gnu-gcc-13",
+      "sha256": "a20520ee21543f243d40636a9181a142c45ecd989de31ab86b99a8ea5ada870d"
+    },
+    "mkfs.ext4": {
+      "path": "/usr/sbin/mke2fs",
+      "sha256": "84419f91298e173cf1569b3a9c957c9f3e26a28852a6025800ed9e0cd9227ea2"
+    },
+    "modprobe": {
+      "path": "/usr/bin/kmod",
+      "sha256": "73488f3014abe1978f17072faf6408901d6489ebb4bb59ffce6fb4f1a77b3eaf"
+    },
+    "mount": {
+      "path": "/usr/bin/mount",
+      "sha256": "a4e2960330ff237a185306d9d92df1fc69ee77d8abe9d3282f662f54e13f01f4"
+    },
+    "pkg-config": {
+      "path": "/usr/bin/pkgconf",
+      "sha256": "b21b58e97876992968c82d823d74034abbc6a4176f8c9d5f2e0400f343e73fc1"
+    },
+    "python3": {
+      "path": "/usr/bin/python3.12",
+      "sha256": "c86f21d0da9290ece2d7d49a3f7ed52aed59cb029abdf0ea25c79634f6cbe960"
+    },
+    "quotaoff": {
+      "path": "/usr/sbin/quotaon",
+      "sha256": "4a95533b4b0923d998d9b5ec4bd1c99eaf5ac1272967696e5de23c6cc54796a9"
+    },
+    "quotaon": {
+      "path": "/usr/sbin/quotaon",
+      "sha256": "4a95533b4b0923d998d9b5ec4bd1c99eaf5ac1272967696e5de23c6cc54796a9"
+    },
+    "systemctl": {
+      "path": "/usr/bin/systemctl",
+      "sha256": "1bf2f1e98c533b0313a78143ffcda2690116d90d76816dc7b74df79c4767aa95"
+    },
+    "systemd-run": {
+      "path": "/usr/bin/systemd-run",
+      "sha256": "0253595d482ea0aa9c4bf2e58080e9615bc59a51e29dbe1cebd14145b92bd8fc"
+    },
+    "tune2fs": {
+      "path": "/usr/sbin/tune2fs",
+      "sha256": "3d1a5087c9b930d2f0c1e6f24a734ce34ef4fa64eabdccfe1ca1205024523df5"
+    },
+    "umount": {
+      "path": "/usr/bin/umount",
+      "sha256": "2a7315235424943e447398eff16f5fd36755f52a9b694dfe6b562d8f2f91d2a6"
+    },
+    "useradd": {
+      "path": "/usr/sbin/useradd",
+      "sha256": "b23ce975fd7ba8040e1782763f0475bd4bb3d5937461dbdeb816ceba10f9f8aa"
+    },
+    "userdel": {
+      "path": "/usr/sbin/userdel",
+      "sha256": "ec1873ad2ee1b01f4089ba2136f0939b7274fbdef4a7940a08694a6176f00e78"
+    }
+  }
+}
