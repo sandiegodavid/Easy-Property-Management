@@ -264,7 +264,7 @@ Cover successful upgrade; initially disabled/expired operators; invalid or chang
 
 ## Shared filesystem, project quotas and storage requests — Slice 8
 
-Approved design addition November 1, 2026; **8A is locally qualified and repository delivered; 8B internal contracts/reservations are repository delivered; 8C–8H remain planned and nothing is deployed**. Deliver the Admin and Operator interfaces, accounting, enforcement, request handling and safe provisioning/change operation together. Operator **Upgrade** submits a request for Admin approval; it does not purchase storage or resize anything. No payment integration is included.
+Approved design addition November 1, 2026; **8A is locally qualified and repository delivered; 8B internal contracts/reservations are repository delivered; 8CA and 8C–8H remain planned and nothing is deployed**. Deliver the Admin and Operator interfaces, accounting, enforcement, request handling and safe provisioning/change operation together. Operator **Upgrade** submits a request for Admin approval; it does not purchase storage or resize anything. No payment integration is included.
 
 ### One filesystem, private operator directories
 
@@ -497,6 +497,27 @@ The API contracts are separate too: `packages/contracts/openapi.json` and `src/g
 
 Deliver this cleanup as one focused contract/tooling change before extending the Slice 8C usage contracts. It does not reopen the completed Slice 8B storage implementation. Portal behavior stays the same; no new controls are needed. Acceptance must prove: each contract can generate/check independently without a workspace or installed host; combined generation remains deterministic; Operator schemas contain no private Admin command/credential/project-binding models; Operator source/build imports no Admin contract entry point; existing Admin and Operator type checks still pass. Focused store tests must continue to reject the other store's schema and prevent cross-instance access; source command retry/rollback and separate control/access recovery remain intact. Add dependency-boundary checks rather than relying on naming alone.
 
+#### Separate Admin database schema resources
+
+**Approved direction; design only, not yet implemented.** Delivered by [Slice 8CA](#8ca--separate-admin-database-schema-resources), immediately before 8C. Follow the business workspace's dedicated Alembic baseline and initializer/validator pattern for the **Admin authority database**, with its own resource tree and revision namespace. This is a separation of schema definitions from runtime service code, not another database split. Host inventory and per-instance access schemas remain outside this change.
+
+| Proposed file / area | Responsibility |
+| --- | --- |
+| `application/alembic-admin.ini` | Dedicated Admin configuration; never select the business workspace migration directory |
+| `application/database/admin-sqlite-migrations/env.py` | Run the Admin baseline using the initializer-supplied connection; no host discovery, business bootstrap or implicit database creation |
+| `application/database/admin-sqlite-migrations/versions/0001_admin_initial_schema.py` | Single current greenfield baseline, revision `admin_0001`: administrator/grant/session/authorization, admissions/audit, operations, setup, recovery, upgrades/batches and storage tables, indexes, checks and immutability triggers |
+| `hosted_admin/infrastructure/schema_management.py` | Resolve installed resources, initialize a fresh database and validate the exact current revision/schema using that baseline; no application table DDL embedded here |
+| `hosted_admin/infrastructure/authority.py` | Private path checks, exclusive creation, initial administrator seed, transactions and authority behavior; delegate schema initialization/validation |
+| `hosted_admin/infrastructure/control_recovery.py` | Preserve existing logical snapshot, retained-history and restore-fencing responsibilities; validate against the dedicated Admin schema/revision |
+
+Extract the DDL currently composed in `authority.py` and its `operation_schema.py`, `setup_schema.py`, `recovery_schema.py`, `upgrade_schema.py`, `upgrade_batch_schema.py` and `storage_schema.py` fragments into the dedicated baseline. Remove duplicate runtime schema strings after consumers and tests delegate to the new owner. Domain checks and retained-data validators stay in their owning modules. Preserve SQLite STRICT tables, constraints, indexes, foreign keys and all audit/intent immutability guarantees; adopting Alembic does not require converting runtime sqlite3 queries to an ORM. Alembic tracks `admin_0001` in the Admin database's own `alembic_version` table; the workspace revision is never accepted as an Admin revision. Treat `PRAGMA user_version` only as an explicitly validated format marker if retained, not a competing revision authority.
+
+Initialization remains restricted to a newly, exclusively created private file. Execute schema creation and initial administrator insertion under one explicit transaction on the supplied connection; verify SQLite DDL rollback rather than assuming Alembic's defaults provide it. A failure must not leave an apparently usable authority store, overwrite an existing database or activate a partially seeded identity. Opening a store performs read-only exact schema/revision and retained-data validation; it never upgrades, stamps or repairs it. Build the expected schema from the same baseline in an isolated temporary database to avoid a second authoritative DDL copy. There is no old-format migration chain or automatic rewrite of installed stores in this greenfield change.
+
+Deliver resource extraction/initialization first, then update control snapshot validation and matching release packaging/staging/verification together before declaring completion. Stage the matching `alembic-admin.ini` and Admin resource tree alongside the existing business resources; reject missing, mismatched or symlinked resources through the protected release checks. Keep Operator-only resource installation possible without requiring an Admin store. Document the Admin installation resource requirement and update focused fixtures to use the real initializer. Schema revision metadata is validated during restore; it cannot restore sessions, grants or executable authority, and existing restore-generation fencing remains mandatory.
+
+Acceptance: fresh Admin creation and reopen; wrong database kind/revision; missing or altered tables/indexes/triggers; missing resources; injected failures during DDL and seeding; duplicate initialization; unchanged source-command idempotency and operation retries; populated control snapshot round trip with disabled restored authority and invalid-restore rollback; installation from an isolated wheel plus matching resource bundle. Verify neither initialization nor validation opens an Operator database and that no source/workspace backup gains host Admin data. Run focused authority, operations, storage, control-recovery and packaging tests plus required Python lint/format checks. No portal workflow or UI change is required.
+
 Discovery is reconciliation, not automatic adoption. Register A/B by inspecting root-owned configuration, effective systemd commands, mount identities and access bindings, then administrator confirmation. A discrepancy or unmanaged `epm-hosted@*.service` blocks destructive cleanup and further conflicting allocations. Never overwrite a populated path to “repair” inventory.
 
 ### Reconciliation with private tools and unknown resources
@@ -606,7 +627,7 @@ Each slice needs focused backend and UI/browser evidence for its boundary. Repos
 
 ## Remaining delivery plan
 
-Planning baseline: commit `8ed8f784`, November 1, 2026. **8A is locally qualified and repository delivered; 8B internal contracts/reservations are repository delivered; 8C onward remain planned.** Slices 1–7 are repository-delivered foundations; their live installation, adoption and qualification prerequisites are not assumed complete. This plan subdivides the remaining scope without reopening those implementations or changing the approved storage/product boundaries. Each slice should be one cohesive, reviewable delivery where practical.
+Planning baseline: commit `8ed8f784`, November 1, 2026. **8A is locally qualified and repository delivered; 8B internal contracts/reservations are repository delivered; 8CA and 8C onward remain planned.** Slices 1–7 are repository-delivered foundations; their live installation, adoption and qualification prerequisites are not assumed complete. This plan subdivides the remaining scope without reopening those implementations or changing the approved storage/product boundaries. Each slice should be one cohesive, reviewable delivery where practical.
 
 Keep the parent numbers **8** and **9** for existing references. Implement the following rows from top to bottom; each depends on the preceding row unless noted. Backend foundations may precede portal actions, but a functional row includes its own usable UI and acceptance. A disabled/unavailable future control must explain the blocker; never expose an action whose owning service is unfinished. No unfinished sub-slice establishes completion of parent Slice 8 or authorizes live deployment.
 
@@ -614,16 +635,17 @@ Keep the parent numbers **8** and **9** for existing references. Implement the f
 | --- | --- | --- | --- |
 | 1 | **8A — delivered locally** | Shared-filesystem quota and sandbox feasibility | Real isolated ARM64 Linux enforcement/escape proof including reboot; no live-host qualification |
 | 2 | **8B (delivered)** | Protected storage policy, inventory and host commitments | Validated current-schema contracts and atomic allocation admission |
-| 3 | **8C** | Source accounting, admission and usage UI | Every growth path is accounted; both portals show correct scoped usage |
-| 4 | **8D** | Quota-aware backup, restore and reset | Verified recovery round trip with destination project isolation |
-| 5 | **8E** | Admin Add operator with selectable storage | Fresh quota-backed operator completes setup and recovery, with usable Admin UI |
-| 6 | **8F** | Admin change-storage operation and UI | Increase/decrease reconcile safely across quota, source and inventory |
-| 7 | **8G** | Operator upgrade requests and Admin review | Full cross-portal request → decision → verified result workflow |
-| 8 | **8H** | Backend-transition tooling and integrated release acceptance | Rehearsed A/B cutover and complete Slice 8 release evidence |
-| 9 | **9A** | Private live-host readiness and installation | Authorized installation, recovery baseline and exact host prerequisites verified |
-| 10 | **9B** | Bounded three-instance qualification | Trusted evidence passes; ordinary ceiling remains two |
-| 11 | **9C** | Retire test instances and roll out to A/B | A/B restored/transitioned and accepted on the tested profile |
-| 12 | **9D** | Promote capacity and onboard fresh C | Audited ceiling promotion followed by ordinary C onboarding |
+| 3 | **8CA** | Separate Admin database schema resources | Dedicated Admin Alembic baseline, exact validation and matching recovery/package resources; no Operator schema changes |
+| 4 | **8C** | Source accounting, admission and usage UI | Every growth path is accounted; both portals show correct scoped usage |
+| 5 | **8D** | Quota-aware backup, restore and reset | Verified recovery round trip with destination project isolation |
+| 6 | **8E** | Admin Add operator with selectable storage | Fresh quota-backed operator completes setup and recovery, with usable Admin UI |
+| 7 | **8F** | Admin change-storage operation and UI | Increase/decrease reconcile safely across quota, source and inventory |
+| 8 | **8G** | Operator upgrade requests and Admin review | Full cross-portal request → decision → verified result workflow |
+| 9 | **8H** | Backend-transition tooling and integrated release acceptance | Rehearsed A/B cutover and complete Slice 8 release evidence |
+| 10 | **9A** | Private live-host readiness and installation | Authorized installation, recovery baseline and exact host prerequisites verified |
+| 11 | **9B** | Bounded three-instance qualification | Trusted evidence passes; ordinary ceiling remains two |
+| 12 | **9C** | Retire test instances and roll out to A/B | A/B restored/transitioned and accepted on the tested profile |
+| 13 | **9D** | Promote capacity and onboard fresh C | Audited ceiling promotion followed by ordinary C onboarding |
 
 ### 8A — Prove the filesystem and sandbox boundary
 
@@ -643,6 +665,12 @@ Repository delivered November 2, 2026. Private command/recovery instructions and
 Extend the current control/access configuration schemas and owning contracts with tier IDs/exact logical bytes, policy revision, filesystem/directory/project identity, workspace/scratch/control byte and inode ceilings, project-ID reservations, enforcement/profile evidence, and host commitments. Define canonical intent hashing, expected-revision checks, request/operation references and safe read models. Add the typed broker operations for inspecting/applying registered quotas; accept no arbitrary project IDs or paths from either portal. Generate API contracts as these shapes become available.
 
 Implement atomic project-ID/capacity reservation, explicit retirement/reconciliation and aggregate host accounting for occupied bytes versus remaining commitments. Include stopped/disabled portfolios, retained old images, staging/recovery and control/log budgets. Define the protected tier profile format and evidence linkage now; exact overhead/inode/concurrency values remain unavailable until measured in 8C and verified in 8H. The 256 MiB scratch figure remains a qualification candidate, not a production guarantee. **Done:** duplicate/revision races, transaction rollback, exhausted host capacity, invalid persisted mappings, restored reservations and unauthorized broker calls fail safely. This is internal infrastructure; portal mutations remain gated until their functional rows.
+
+### 8CA — Separate Admin database schema resources
+
+**Planned. Depends on 8B; blocks 8C.** Implement the [Admin schema-resource design](#separate-admin-database-schema-resources) using a dedicated `alembic-admin.ini`, `database/admin-sqlite-migrations` baseline (`admin_0001`) and owning initializer/validator. Extract the Admin authority schema and its operation/setup/recovery/upgrade/batch/storage fragments from runtime code. Preserve existing transaction, constraint, trigger, authority and retained-history guarantees. Host inventory and per-instance access/business schemas are outside this slice; no automatic migration or rewrite of an installed store is included.
+
+Complete initialization and exact validation, control snapshot/restore handling, resource staging/verification, installation instructions and real-baseline fixtures as one delivery. **Done:** fresh initialization/reopen and isolated wheel-plus-resource installation work; wrong-kind/revision/schema and missing resources fail closed; injected DDL/seed failures leave no usable partial authority; populated recovery preserves history and restores disabled authority. Focused authority/operations/storage/recovery/packaging tests and required Python lint/format checks pass. Existing idempotency, retries, rollback and Operator database isolation remain intact. No portal UI changes or live deployment are required. Slice 8C must use this schema owner for subsequent Admin persistence changes.
 
 ### 8C — Enforce accounting and display usage in both portals
 
