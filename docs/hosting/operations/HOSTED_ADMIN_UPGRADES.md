@@ -27,7 +27,7 @@ The private independent release/host qualification collector must publish signed
 Each report binds the installed manifest, session-compatibility evidence digest,
 host environment, profile, qualified operator count and observation/expiry. A
 browser assertion or editing a catalog does not qualify a release. Applicable live
-qualification is required for the current count and target profile; Slice 8 alone
+qualification is required for the current count and target profile; Slice 9 alone
 can promote the operator ceiling.
 
 A root-owned, mode-0600 `upgrades/catalog.json` contains at most 50 unique report

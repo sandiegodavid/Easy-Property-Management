@@ -156,7 +156,7 @@ HTTP/CLI command to sign an administrator's declaration or manufacture evidence.
 Without approved collector output, capacity/qualification commands fail closed.
 The [Slice 7 upgrade adapters](HOSTED_ADMIN_UPGRADES.md) execute and register
 Linux/Cloudflare acceptance using this trusted input. Real host qualification
-and ceiling promotion remain separate Slice 8 work.
+and ceiling promotion remain separate Slice 9 work.
 
 The collector publishes:
 

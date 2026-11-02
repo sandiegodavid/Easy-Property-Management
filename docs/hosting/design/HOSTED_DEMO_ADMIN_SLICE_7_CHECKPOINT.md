@@ -45,7 +45,7 @@ Validation:
 - No full application suite run. No running test/tool sessions remain.
 
 No Slice 7 repository implementation work remains. Real Linux deployment,
-release/profile qualification, recovery installation and Slice 8 rollout require
+release/profile qualification, recovery installation and Slice 9 rollout require
 separate authorization/evidence. A skipped operator that remains paused still
 needs the private recovery described in the runbook; a skip is never acceptance
 or permission to remove its gate.
