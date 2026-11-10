@@ -1,5 +1,7 @@
 # Per-Operator SQLite Schema Upgrade Workflow
 
+> **Research input, not independently adopted — status clarified November 10, 2026.** Current direction: [Hosted MVP design](../design/HOSTED_MVP_DESIGN.md). The technical proposal below must be evaluated against the current one-writer, immutable-release and no-post-reopen-data-loss upgrade rules. Its historical repository findings and proposed mechanisms are not automatically accepted or implemented.
+
 Prepared: October 31, 2026
 Status: design proposal, not yet adopted
 Origin: study of how Bluesky's Personal Data Server (PDS) handles schema change across per-user SQLite databases ([Pragmatic Engineer deep dive on Bluesky](https://newsletter.pragmaticengineer.com/p/bluesky), the [May 2023 federation architecture post](https://bsky.social/about/blog/5-5-2023-federation-architecture), the [AT Protocol paper, arXiv 2402.03239](https://arxiv.org/pdf/2402.03239.pdf), and the [bluesky-social/atproto source tree](https://github.com/bluesky-social/atproto)). Full references in section 9.

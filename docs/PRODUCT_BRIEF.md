@@ -12,7 +12,7 @@ The product should make three questions easy to answer:
 
 ## Target customer
 
-Independent landlords and property managers responsible for roughly 1–50 rentable spaces.
+Independent landlords and property managers typically responsible for roughly 1–50 rentable spaces. This describes the target customer, not a hosted property/space entitlement.
 
 They do not need technical skills, but they are expected to have practical accounting and/or property-management experience in the initial release.
 
@@ -27,15 +27,37 @@ They may manage:
 
 From one dashboard, a user can see what money is due, what is vacant, what needs attention, and drill into the underlying property, tenant, transaction, lead, or repair.
 
-The MVP is a single-user application that runs locally for the operator. It requires no account or login, stores its records and attachments locally, and provides backup/export and restore. The product owner sets up each MVP user's local instance with operator-run setup scripts; self-service installation and update flows are not required. Hosted operator access has a separate qualification path. Planned hosted-only premium tenant rent payments are defined below; local operation remains single-user and requires no login.
+The implemented core is a local, single-operator application with no required cloud account or login, local records and attachments, and backup/export and restore. Product-owner setup scripts remain available. Preserve this free local offering without requiring hosted billing or adding local/cloud synchronization.
 
-## Free operator offering and premium tenant payments
+The [hosted MVP design](hosting/design/HOSTED_MVP_DESIGN.md) defines the fresh hosted direction: an Admin portal, automated operator onboarding, subscriptions, backups and independently scheduled releases, initially on Google Cloud with Cloudflare. It is a design and qualification target, not a claim that these services are deployed or that planned services are already implemented. The backlog now schedules HOSTED-001, then PORTAL-001/002.
 
-Accepted October 27, 2026: existing local functionality and a bounded hosted operator workspace are free. The initial free hosted allowance is one operator, five rentable spaces and 250 MB of attachments; physical hosting admission and recovery capacity remain separate gates. Limits preserve reading, exporting and correcting existing records.
+## First hosted release — Pilot 0
 
-[PAY-001](active/PAY-001_DESIGN.md) owns hosted-only premium tenant access, paid for by the operator: rent balance, one-time bank payments, capped fixed-amount autopay, history/receipts and payment help. Tenants have individual lease-scoped identities and no subscription charge. Recipient-paid processor fees are separately disclosed; EPM adds no transaction markup initially. One verified owner/operator receives each lease's payments directly through the processor. General tenant documents, messaging and maintenance remain later PORTAL-001 work.
+HOSTED-001 starts at H01 and releases Pilot 0 at H06: five invited operators on Free 50 MB workspaces, Admin-lite provisioning, nightly verified off-host backups with rehearsed restore, continuously running containers and one announced maintenance window. No Stripe, paid plan enrollment, per-operator update scheduling or idle-wake automation. Manual handling is acceptable where ownership, safe retry and operational time/cost are recorded. Isolation, identity and recovery checks still precede real records. Later hosted slices deliver the full catalog and automation below.
 
-The feature includes its operator setup, authentication/authorization, dated pilot entitlements, notifications, reconciliation and recovery safeguards. Final premium pricing/capacity and automated subscription billing remain deferred. This accepted design does not establish deployed payment capability or authorize real funds in the synthetic demo.
+## Hosted offering and future tenant payments
+
+One verified operator identity owns one hosted workspace and one subscription. The same operator can work from multiple devices with full business permissions, subject to account, maintenance, storage and record-revision checks. There are no staff roles or shared credentials. Admin provisions operators within measured capacity; the target grows from a few toward 100 operators, without a fixed operator count or property/space allowance.
+
+The provisional monthly USD catalog is:
+
+| Benefit | Free | Paid 1 — $10/month | Paid 2 — $20/month |
+| --- | --- | --- | --- |
+| Usable workspace storage | 50 MB | 200 MB | 1 GB |
+| Backups | Nightly; seven nightly points | Recent 15-minute recovery-point target; fine-grained last 24 hours, then daily through 30 days | Recent 15-minute recovery-point target; fine-grained last 24 hours, then daily through 90 days |
+| Runtime | May suspend after about 15 minutes without human activity; wake on access | Keep warm initially | Keep warm initially |
+| Supported imports, when implemented | Included | Included | Included |
+| Tenant portal/payments | Not included | Intended future benefit | Intended future benefit |
+
+Storage uses decimal bytes (50,000,000 / 200,000,000 / 1,000,000,000) and counts business database usage plus retained managed files, including retained versions, without double-counting shared content or database/WAL representations. There is no separate attachment allowance. Backups, temporary processing, authentication/control state and physical headroom have separate host reservations. Prices, allowances and recovery objectives require measurement and publication approval; they are not authorization to charge or contractual service guarantees. Imports and tenant payments are not yet delivered and must not be advertised as available. Initially, paid value is storage and stronger recovery; Free still includes export and recovery assistance.
+
+Admin invites an operator into a dedicated container with private persistent SQLite/files and a per-operator subdomain. Default to an empty workspace; a synthetic portfolio is optional. Business access remains disabled during setup. Managed Google sign-in or email-link login verifies the invited identity; successful claim activates access automatically after readiness and off-host recovery checks. Admin access is separate and requires MFA. Central login hands off to an exact registered operator origin with host-only sessions; knowing a subdomain does not grant access.
+
+Settings shows workspace usage and subscription controls; Stripe Checkout/Billing/Customer Portal supplies the subscription payment flows. Apply upgrades only after verified payment and verified capacity/policy changes. Downgrades and cancellation take effect at paid-period end; existing paid subscribers have a seven-day renewal-payment grace. Retain data when Free or a smaller tier is over quota, block unadmitted growth, and preserve login, billing repair, reads/export, backups and supported cleanup. Already-promised backup expiry remains honored. Subscription cancellation, access disablement and workspace retirement are separate operations. Automated recovery requires Admin confirmation; release upgrades use suggested low-activity windows with operator scheduling and safe draining across devices.
+
+[PAY-001](active/PAY-001_DESIGN.md) defines future hosted-only tenant rent payments, available to operators on either paid tier once separately qualified and delivered. Tenants have individual lease-scoped identities and no subscription charge. The intended feature covers rent balance, one-time bank payments, capped fixed-amount autopay, history/receipts and payment help. One verified owner/operator receives each lease's funds directly through the processor; recipient-paid processor fees are disclosed separately, with no initial EPM transaction markup. Choosing Stripe for operator subscriptions does not select or qualify a rent-payment processor. PORTAL-001 adds published lease terms, shared FIN-009 assessed late-fee explanations and tenant issue reporting. PORTAL-002 adds owner-scoped rent/fees/terms/payments, concern reporting and reports. General messaging and unrestricted document libraries remain later extensions. Both portals include matching operator workflows and use source-owned records; owner paid-tier inclusion is provisional until commercial confirmation.
+
+Tenant payments and the tenant/owner portals follow the hosting task in the immediate backlog order, rather than gating Pilot 0. PAY-001 must consume the hosted identity and effective subscription capabilities rather than create a separate manual pilot-entitlement system. Tenant grants, payment authorization, reconciliation and recovery safeguards still require payment-specific implementation and acceptance. No design here authorizes real funds or claims deployed payment capability.
 
 ## Local workspace design
 
@@ -54,7 +76,7 @@ chosen-workspace/
 └── backups/
 ```
 
-Database references to attachments use workspace-relative paths so the whole workspace can be moved, restored, exported, or later migrated to SaaS without rewriting machine-specific absolute paths. Provider credentials and tokens remain in the operating system credential store, keyed to the workspace ID; they are not written to the manifest, database export, or backup.
+Database references to attachments use workspace-relative paths so the whole workspace can be moved, restored, exported, or later migrated to SaaS without rewriting machine-specific absolute paths. For local use, provider credentials and tokens remain in the operating system credential store, keyed to the workspace ID; they are not written to the manifest, database export, or backup. Hosted deployments instead use protected platform secret/key custody, persistent private mounts and unattended encrypted off-host recovery under the hosted design; operators do not choose server paths or supply a passphrase for scheduled hosted backups.
 
 The product-owner setup workflow selects the external location, validates that it is writable and not inside the Git checkout, initializes or restores the workspace, and records the selected path in the machine-local locator. It should warn against using a cloud-sync folder for a live SQLite database unless that configuration has been explicitly supported and tested.
 
@@ -83,15 +105,17 @@ The [UI-001 operator design](ui/operator-experience.md), confirmed September 23,
 
 Home separates actionable, waiting, and upcoming work, with visible appointments and information gaps. Waiting retains follow-up context without changing original deadlines or concealing urgent unresolved work. Information review distinguishes recorded information, missing required information, review needs, and justified non-applicability. Resumable drafts, source drill-down, and precise partial-success feedback support operator trust.
 
-MVP also includes manual eviction/legal-matter preparation and process tracking with attorney/provider links, evidence, dated milestones, confirmed deadline sources, and explicit closure outcomes. It does not infer legal eligibility or automatically change leases, occupancy, or money. Property-linked HOA work covers violation notices and narrow coordination of an HOA-covered common-element repair: one Maintenance-owned case can appear across affected managed condo units while retaining every association contact and follow-up until physical verification. Standing rules management, architectural approvals, assessments, and broader HOA administration remain post-MVP.
+Planned post-MVP workflows include manual eviction/legal-matter preparation and process tracking with attorney/provider links, evidence, dated milestones, confirmed deadline sources, and explicit closure outcomes. It does not infer legal eligibility or automatically change leases, occupancy, or money. Property-linked HOA work covers violation notices and narrow coordination of an HOA-covered common-element repair: one Maintenance-owned case can appear across affected managed condo units while retaining every association contact and follow-up until physical verification. Standing rules management, architectural approvals, assessments, and broader HOA administration remain post-MVP.
 
-Initial intake supports Excel uploads and direct read-only Google Sheets snapshots for properties, owners, and providers. The operator maps columns and relationships, reviews validation/duplicates, and confirms create/link/skip operations. Import does not silently merge or overwrite records, write to source sheets, or continuously synchronize. Broader lease/balance/history migration remains later scope.
+Planned onboarding imports support Excel uploads and direct read-only Google Sheets snapshots for properties, owners, and providers on all tiers. These imports are not implemented and are outside the hosting task. The operator maps columns and relationships, reviews validation/duplicates, and confirms create/link/skip operations. Import does not silently merge or overwrite records, write to source sheets, or continuously synchronize. Broader lease/balance/history migration remains later scope.
 
 ## Future accessibility for complete beginners
 
 Later phases may support users with little or no accounting or property-management experience through guided setup, plain-language explanations, contextual checklists, safe defaults, and step-by-step workflows. This should add a beginner-friendly layer without removing the professional detail that experienced operators rely on.
 
-## MVP modules
+## Business modules and functional direction
+
+This catalog describes business areas, not a claim that every workflow is delivered or an immediate hosting prerequisite. Use the backlog for current phase/status; HOSTED-001 and the tenant/owner follow-up define immediate delivery priority.
 
 1. **Home** — overdue rent, urgent repairs, upcoming showings, expiring leases, money summary, and a simple value snapshot showing tracked income, estimated cost avoided and time saved, retention, and issue-resolution speed. Metrics show their source records and clearly label estimates and operator-configured baselines.
 2. **Properties** — owned versus managed relationship, property type, spaces, occupancy, and history.
@@ -107,7 +131,7 @@ Later phases may support users with little or no accounting or property-manageme
 12. **Reports** — occupancy, rent roll, delinquency, income/expenses, owner balances/disbursements, leasing funnel, and repair cost, all with drill-down.
 13. **AI-assisted documents and marketing** — maintain approved document templates; draft leases, addenda, notices, and listing copy; summarize obligations and missing information; and compare document versions, always subject to operator review.
 
-Because the MVP is local and single-user, the operator records or approves rent receipts and rental/property issues reported by owners or tenants and identifies who raised each item. Messages may arrive through connected external accounts, but owners and tenants do not sign in to the application. The hosted-only PAY-001 exception adds the focused premium tenant payment area; broader forms and portals remain later scope.
+In the local single-operator application, the operator records or approves rent receipts and rental/property issues reported by owners or tenants and identifies who raised each item. Owners and tenants do not sign in to the local application. The hosted MVP adds managed operator access; tenant access remains deferred. PAY-001 supplies the paid payment engine for PORTAL-001; PORTAL-002 supplies owner access. The initial portal plan includes their required workflows and source prerequisites after hosting.
 
 Connecting Gmail, Outlook.com/Hotmail, or an SMS provider uses that provider's authorization and does not create application user accounts. Connection credentials remain local, are excluded from portable backups, and must be reauthorized after restore or migration.
 
@@ -115,9 +139,9 @@ Standalone voice notes may be recorded in the application or imported as audio f
 
 The current operator application records payment methods, including externally arranged automatic bank payments, without initiating transfers or storing online-banking credentials. Planned hosted PAY-001 adds processor-mediated collection through its separate tenant authorization boundary. A future-dated prepaid check covers one complete rent-expectation period, creates a property-local deposit reminder, and is not counted as received income until a confirmed correlated receipt/allocation handoff. Returned, voided, and replacement checks retain history without storing raw check or bank data.
 
-## Explicit MVP boundaries
+## Local offering boundaries
 
-The local operator offering does not include the following hosted or later capabilities. PAY-001 is the explicit hosted premium exception for tenant rent payments, individual tenant access and payment-specific transactional email; FIN-004 separately owns planned bank feeds/reconciliation.
+These boundaries apply to the local operator offering. The hosted design separately includes managed operator identity, subscriptions, automated provisioning/recovery and operational email. PAY-001 defines deferred hosted tenant rent payments, individual tenant access and payment-specific transactional email; FIN-004 separately owns planned bank feeds/reconciliation. The backlog schedules hosted and portal delivery explicitly; design approval alone does not establish payment availability.
 
 - Initiating online rent payments or autopay, bank feeds, or reconciliation. The MVP may record an externally arranged automatic-payment method.
 - Application authentication, multiple application users, shared cloud workspaces, application-hosted remote intake, or tenant/owner portals. External mailbox and SMS-provider authorization is permitted for ingestion.
@@ -131,9 +155,9 @@ The local operator offering does not include the following hosted or later capab
 ## Core data-model decisions
 
 - A property may be self-owned, client-managed, or both through an explicit relationship record.
-- The MVP has one local workspace and one operator, with no authentication or cloud dependency.
+- Local use has one workspace and one operator, with no required authentication or cloud dependency. Hosted use assigns one verified operator identity to one private workspace/subscription; multiple devices share full business permissions with revision conflicts rather than silent last-writer-wins saves.
 - The selected workspace path lives in a machine-local locator outside both Git and the workspace; the workspace itself has a stable ID and versioned, non-secret manifest.
-- User data is stored in a configurable external workspace, with the SQLite database, its live journal files, attachments, exports, and backups kept together; application code must not infer this path from its Git checkout.
+- Local user data is stored in a configurable external workspace, with the SQLite database, its live journal files, attachments, exports, and backups kept together; application code must not infer this path from its Git checkout. Hosted workspaces use platform-assigned private persistent directories outside container images, with separately reserved control/scratch capacity and verified encrypted off-host recovery. Replacing a container does not delete its workspace.
 - Attachment references are workspace-relative. Workspace relocation and restore verify the complete database-and-files set before switching the locator.
 - A shared “space” concept supports homes, condos, townhomes, office suites, and later apartment units.
 - The US-only MVP requires US property addresses and stores one canonical US IANA time zone inferred locally from each structured address; date-relative lease, finance, task, and reporting behavior uses that property zone rather than the server process's ambient time zone. International addresses, time zones, and currencies are deferred.

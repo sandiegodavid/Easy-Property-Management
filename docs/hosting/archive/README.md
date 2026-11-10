@@ -1,5 +1,10 @@
 # Hosting source archive
 
+Current direction: [fresh Hosted MVP design](../design/HOSTED_MVP_DESIGN.md). The
+[November 10 pre-alignment Hosting Plan](2026-11-10-pre-mvp-alignment/README.md)
+preserves the superseded plan before documentation alignment. All historical
+source snapshots, PDFs, manifests and raw test artifacts retain their original scope.
+
 The October 24 consolidation preserves all seven source Markdown documents below,
 including the six requested documents and their configuration companion. Only
 relative link targets are normalized for the new folder structure; original prose,

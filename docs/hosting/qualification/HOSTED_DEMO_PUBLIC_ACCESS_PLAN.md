@@ -1,11 +1,13 @@
 # Hosted demo qualification and remaining rollout plan
 
+> **Historical demo checkpoint — status clarified November 10, 2026.** Current direction: [Hosted MVP design](../design/HOSTED_MVP_DESIGN.md). This register applies only to its recorded demo releases. The fresh rollout checklist is HOSTED_MVP_ACCEPTANCE.md in this directory; its gates cannot be marked passed from these old results.
+
 Recorded state reviewed October 26, 2026. Requirements live in the
 [design](../design/HOSTED_DEMO_DESIGN.md); procedures in
 [deployment](../deployment/GOOGLE_CLOUD_DEMO_DEPLOYMENT.md) and
 [operations](../operations/HOSTED_DEMO_OPERATIONS.md); exact deployment artifacts in the
-[Cloudflare/VM record](../operations/CLOUDFLARE_OPERATIONS.md). This is the sole current
-checkpoint.
+[Cloudflare/VM record](../operations/CLOUDFLARE_OPERATIONS.md). This is the historical checkpoint for that demo. See the
+[fresh MVP acceptance register](HOSTED_MVP_ACCEPTANCE.md) for the new target.
 
 ## Release reconciliation — October 26, 2026
 

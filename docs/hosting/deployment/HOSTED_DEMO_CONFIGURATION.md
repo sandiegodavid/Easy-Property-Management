@@ -1,5 +1,7 @@
 # Hosted demo configuration and route contract
 
+> **Earlier release configuration reference — status clarified November 10, 2026.** Current direction: [Hosted MVP design](../design/HOSTED_MVP_DESIGN.md). The JSON/paths/capabilities/CLI below describe their original release. Reuse of these fields, account-expiry or Access assumptions requires explicit adaptation and fresh validation; this is not the new runtime contract.
+
 Application configuration/route reference; consolidated October 24, 2026. Local `serve`
 remains loopback-only. Current hosted deployment and real-client evidence are recorded in
 the [qualification plan](../qualification/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md).

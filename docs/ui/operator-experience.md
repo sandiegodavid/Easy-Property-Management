@@ -47,3 +47,7 @@ The single-operator application runs locally without sign-in. Responsive windows
 - [Validation guide](validation.md): executable evidence and completed delivery records.
 - [Active work](../active/README.md): remaining capabilities.
 - [Visual reference](../../demo/operator-experience.html): synthetic design comparison; future prototype states are not current capabilities.
+
+## Planned hosted and portal workflows
+
+The current guide documents delivered operator behavior. [HOSTED-001](../hosting/design/HOSTED_MVP_DESIGN.md#implementation-slices) adds Admin/operator setup, identity, usage/protection/progress and later subscription/update controls. Pilot 0 at H06 shows Free pilot usage/support, uses one maintenance window and exposes no paid upgrade, individual scheduling or idle-wake controls. [PORTAL-001/002](../active/PORTALS_IMPLEMENTATION_PLAN.md) later add role-scoped rent/late-fee/lease/payment views, tenant issues and owner concerns/reports, including matching operator publication/handling UI. Reuse interaction/accessibility patterns, with tenant/owner authorization enforced by the server. These are planned additions, not capabilities established by core UI acceptance.

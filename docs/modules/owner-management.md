@@ -55,3 +55,7 @@ Source workflow acceptance completed October 13, 2026; see the [completed matrix
 - [test_owner_concerns.py](../../application/apps/server/app/modules/owner_management/tests/test_owner_concerns.py).
 
 Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Core browser acceptance is recorded in [browser validation](../ui/validation.md); later capability acceptance remains in [active work](../active/README.md).
+
+## Planned owner submission
+
+[PORTAL-002](../active/PORTALS_IMPLEMENTATION_PLAN.md#portal-002--owner-slices) adds owner-granted concern submission, tracking and published responses with matching operator handling. Reuse this module's source lifecycle and reporter validation; portal access does not permit editing lease/money facts or reading internal notes. Owner rent, payment and reports compose their owning sources, rather than becoming concern records. This is planned follow-up after hosting, not Pilot 0 functionality.

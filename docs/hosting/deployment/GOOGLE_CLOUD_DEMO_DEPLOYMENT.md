@@ -1,5 +1,7 @@
 # Google Cloud and Cloudflare deployment guide
 
+> **Historical deployment procedure — status clarified November 10, 2026.** Current direction: [Hosted MVP design](../design/HOSTED_MVP_DESIGN.md). Commands below are specific to the older process/loop-volume/Access deployment. They are not a Docker/managed-identity/subscription installation procedure. Do not execute them as the new MVP setup.
+
 For an already-configured host, use the [ongoing operation and release-update
 runbook](../operations/GOOGLE_CLOUD_ONGOING_RUNBOOK.md).
 

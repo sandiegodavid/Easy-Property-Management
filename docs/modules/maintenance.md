@@ -90,3 +90,7 @@ MAINT-001 acceptance completed on October 13, 2026; see the [completed matrix](.
 - [test_workflow.py](../../application/apps/server/app/modules/maintenance/tests/test_workflow.py).
 
 Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Core browser acceptance is recorded in [browser validation](../ui/validation.md); later capability acceptance remains in [active work](../active/README.md).
+
+## Planned tenant submission
+
+[PORTAL-001](../active/PORTALS_IMPLEMENTATION_PLAN.md#portal-001--tenant-slices) adds authenticated tenant issue reporting, safe evidence, submission receipts and published status/responses. The server derives permitted lease/property/reporter context from the grant and invokes source-owned Maintenance operations; tenants cannot call broad operator routes. Operator triage, internal notes and tenant-visible responses remain distinct. This is planned follow-up after hosting, not Pilot 0 functionality.

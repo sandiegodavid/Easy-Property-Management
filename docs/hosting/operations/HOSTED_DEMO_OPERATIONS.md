@@ -1,5 +1,7 @@
 # Hosted demo administrator runbook
 
+> **Historical operations procedure — status clarified November 10, 2026.** Current direction: [Hosted MVP design](../design/HOSTED_MVP_DESIGN.md). The body retains manual backups/passphrases, activation, expiry, reset and recovery steps for the earlier deployment. The fresh design requires unattended recovery and automated portal workflows; those are not made available by this runbook.
+
 Consolidated October 24, 2026. Use this for recurring operation of the recorded deployment.
 For the short routine-operation and release-update sequence, use the
 [ongoing Google Cloud runbook](GOOGLE_CLOUD_ONGOING_RUNBOOK.md).

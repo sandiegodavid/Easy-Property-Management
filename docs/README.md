@@ -4,13 +4,17 @@ Operators should start with the separate [operator manual](../manual/README.md),
 
 ## Start here
 
-Read these in order for the whole project. Core UI-001 and DASH-001 Home delivery are complete; follow-up integrations remain active:
+Read these in order for the whole project. Core UI-001 and DASH-001 Home delivery are complete; hosted and portal delivery is now the immediate priority:
 
 1. [Repository README](../README.md): setup, local workspace and development commands.
 2. [Product brief](PRODUCT_BRIEF.md): intended users, operating vocabulary and product scope.
 3. [Architecture](ARCHITECTURE.md): current module/data boundaries and composition.
 4. [Current modules](#current-modules): implementation guides and code/test entry points.
-5. [Active work](active/README.md): remaining delivery and proposed changes.
+5. [Hosted implementation slices](hosting/design/HOSTED_MVP_DESIGN.md#implementation-slices): HOSTED-001 H01–H12, with five-operator Free Pilot 0 at H06.
+6. [Portal plan](active/PORTALS_IMPLEMENTATION_PLAN.md) and [backlog](FEATURE_BACKLOG.md): tenant/owner follow-up, FIN-009 late fees and PAY-001/002 payment ownership.
+7. [Active work](active/README.md): other remaining delivery and proposed changes.
+
+Pilot 0 uses Admin-lite/manual operations, verified nightly off-host protection and one announced maintenance window; no Stripe, paid enrollment, idle-wake or individual update scheduling. Later hosted slices deliver those automations. Tenant/owner portals are separate follow-up tasks, not Pilot 0 gates. Design approval does not establish deployed capability.
 
 For a specific change, read its owning module, relevant shared platform contract and active feature design. Historical backlog designs are optional rationale, not the starting point.
 

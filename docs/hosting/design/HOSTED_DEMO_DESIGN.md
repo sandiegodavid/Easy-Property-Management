@@ -1,5 +1,7 @@
 # Hosted demo design and accepted decisions
 
+> **Superseded design — status clarified November 10, 2026.** Current direction: [Hosted MVP design](HOSTED_MVP_DESIGN.md). The body preserves the earlier synthetic-demo requirements and their original scope. It is not the current commercial MVP specification.
+
 Accepted October 23, 2026; consolidated October 24, 2026.
 
 This document defines the bounded two-operator experiment. For current deployment and

@@ -1,57 +1,55 @@
-# Hosting documentation — review index
+# Hosting documentation
 
-Consolidated October 24, 2026. This set covers local operation, the two-operator
-synthetic hosted demo and the planned hosted MVP. US customers/properties are the
-product scope; no additional data-residency requirement is imposed.
+Updated November 10, 2026. Start with the confirmed fresh hosted-MVP direction.
+Documentation describes requirements and evidence separately; it does not establish
+implementation or permission to deploy, charge or admit real customer data.
 
-## Current demo in one page
+## Current direction
 
-- **Host:** Google Cloud `epm-demo`, `us-west1-b`, E2 medium/4 GB, Ubuntu 24.04
-  x86_64, 30 GB disk; administrator SSH through IAP only.
-- **Isolation:** separate Unix identities, one process/writer and fully allocated
-  250 MiB workspace image each; local SQLite/evidence, 50 MiB per-file limit.
-- **Access:** exact `demo-a.epmdemo.xyz` and `demo-b.epmdemo.xyz`, Cloudflare email
-  PIN plus approved subject/application session. Both intended accounts active;
-  Home, policy matrix, device and multi-session logout passed as recorded.
-- **Runtime:** `signin-nav-20261024`, Python 3.14.9/package 0.1.0; old qualified
-  runtime retained. Hosted units active/enabled; old local units masked. Tunnel
-  active for acceptance but **disabled at boot**. General invitations pending.
-- **Recovery:** fresh A/B business archives verified through real R2 restore;
-  current-binding administrator references separately encrypted and verified.
-  Manual daily backups/seven successful UTC days; no unattended keyring/cron claim.
-- **Funding:** trial ends January 22, 2027 and $30 alerts configured per operator;
-  review funding by January 15. $30/month is a target, not a cap or price quote.
-- **Next:** prepared synthetic Task persistence/foreign-record test remains
-  unreported. Actual file/receipt/concurrency/cache/performance/final boot/outage
-  gates still apply. See the qualification plan for the one current checkpoint.
+- [Hosted MVP design](design/HOSTED_MVP_DESIGN.md): accepted architecture, product
+  plans, Admin/operator workflows, identity/subdomains, subscriptions, recovery,
+  independent updates, budgets and validation gates.
+- [Hosting Plan](Hosting_Plan.md): concise overview and product/delivery boundaries.
+- [MVP acceptance register](qualification/HOSTED_MVP_ACCEPTANCE.md): current target's
+  implementation and release-proof gates. No completed MVP qualification is inferred
+  from the previous demo.
 
-## Reading order and document ownership
+Initial platform: Google Compute Engine/Docker/persistent SQLite and files,
+Cloudflare edge/Tunnel/R2, managed identity and Stripe subscriptions. Admin chooses
+operator count within qualified capacity; Empty workspace is the default. Imports
+are deferred but available to all tiers when implemented; tenant/owner portals follow hosting in the immediate backlog.
+Launch and 100-operator gross budget targets are $250 and $300/month before credits.
 
-| Read | Purpose / owner of information |
+## Implement first
+
+Start [HOSTED-001 H01](design/HOSTED_MVP_DESIGN.md#implementation-slices). Pilot 0 releases at H06 to five invited Free operators: Admin-lite, verified nightly off-host backups/rehearsed restore, warm runtimes, one maintenance window and recorded manual operating cost. No Stripe, idle-wake or per-operator scheduling. H07–H12 deliver the subsequent full platform described above. [PORTAL-001/002](../active/PORTALS_IMPLEMENTATION_PLAN.md) follow it, with shared FIN-009 and PAY-001/002 sources.
+
+## Find the right document
+
+| Area | Use |
 | --- | --- |
-| [Hosting Plan](Hosting_Plan.md) | Product-level local/demo/hosted-MVP choices and later commercial gaps |
-| [Hosted demo design](design/HOSTED_DEMO_DESIGN.md) | Accepted scope, architecture, security, resource/cost/latency requirements and delivery boundaries |
-| [Additional operators and Admin console proposal](design/HOSTED_DEMO_ADMIN_DESIGN.md) | Proposed expansion beyond A/B: capacity qualification, private Admin workflow/UI, provisioning, access lifecycle and backend/tooling changes; not deployed |
-| [Deployment guide](deployment/GOOGLE_CLOUD_DEMO_DEPLOYMENT.md) | Google VM/IAP, reproducible release, volumes, Cloudflare and enrollment setup; new-resource commands |
-| [Configuration contract](deployment/HOSTED_DEMO_CONFIGURATION.md) | JSON fields, route/capability inventory, owner CLI, session and edit-lease rules |
-| [Administrator runbook](operations/HOSTED_DEMO_OPERATIONS.md) | Daily inspection/backups, credentials, disable/renew/reset, host-loss recovery and rollback |
-| [Ongoing Google Cloud runbook](operations/GOOGLE_CLOUD_ONGOING_RUNBOOK.md) | After-setup quick reference and replacement-release build/upload/switch/rollback sequence |
-| [Operator guide](operations/HOSTED_DEMO_OPERATOR_GUIDE.md) | Assigned sign-in, session controls, multiple devices, saved forms and safe recovery |
-| [Qualification and rollout plan](qualification/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md) | **Single current checkpoint**, passed scope, remaining gates, test matrix and completion criteria |
-| [Cloudflare/VM operations record](operations/CLOUDFLARE_OPERATIONS.md) | Current exact inventory, completed setup sequence and cumulative future operation entries |
-| [Supporting reports](qualification/reports) / [raw evidence](evidence) | Dated focused Linux/upload/recovery/build reports and machine-readable results |
-| [Source archive](archive/README.md) | All pre-consolidation details and historical PDF exports; context rather than current instructions |
+| [Design index](design/README.md) | Current MVP specification and clearly superseded demo designs |
+| [Deployment index](deployment/README.md) | Fresh-target prerequisites versus older release-specific procedures |
+| [Operations index](operations/README.md) | Current intended workflows and limitations of older executable runbooks |
+| [Qualification index](qualification/README.md) | New acceptance gates versus dated reports/raw evidence |
+| [SQLite upgrade research](research/SQLITE_SCHEMA_UPGRADE_WORKFLOW_2026-10-31.md) | Technical research to evaluate under current release/recovery rules; not independently adopted |
+| [Archive](archive/README.md) | Preserved original plans and historical exports |
 
-## Evidence and maintenance rules
+## Historical deployment and evidence
 
-Design requirements, operating procedures and observed evidence are distinct.
-Use operator-reported/injected/physical qualifiers, preserve exact evidence dates
-and limits, and do not infer completed gates from a reachable page or successful
-connector. Put actual secrets/emails/AUDs/passphrases only in protected deployment
-inputs; public examples use placeholders. Source archive preserves every original
-detail, while current pages use the latest accepted decisions and deployment state.
+The October A/B process/Unix-user/loop-image installation, Cloudflare Access
+customer login, manual backups and invitation/expiry procedures describe a different
+release/topology. Their counts, prices, paths, quotas and test outcomes are historical,
+not current operator limits or deployable MVP instructions. Inspect an actual host
+before drawing conclusions about its present state; old prose is not live inventory.
 
-When progressing setup, append the operation once to the cumulative record and
-replace the qualification checkpoint rather than accumulating competing handoffs.
-Record new checksums for changed artifacts; never silently promote planned tests
-or stale recovery-age observations into current verified results.
+[Deployment record](operations/CLOUDFLARE_OPERATIONS.md),
+[demo checkpoint](qualification/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md),
+[supporting reports](qualification/reports/README.md) and [raw evidence](evidence/)
+remain available with their original tested scope. Do not silently relabel evidence
+or alter historical fixtures to make them match the new design.
+
+Maintain the MVP design for accepted requirements, the acceptance register for new
+proof and limitations, and dated records for actual deployment results. Preserve
+sensitive configuration/credentials outside documentation. Backlog changes require
+separate authorization; this alignment changes documentation only.

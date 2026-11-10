@@ -129,3 +129,7 @@ FIN-006 acceptance completed on October 13, 2026: [focused matrix and results](.
 FIN-003 acceptance completed October 13, 2026: **21 money-summary backend tests and 3 focused reporting browser cases passed**. The [completed acceptance matrix](../archive/designs/FIN-003_DESIGN_COMPLETED_2026-10-13.md) covers corrections, independently dated refunds, signed deposit reconciliation, archived scope, concurrent snapshots, bounded queries, encrypted restore and stale-view drill-down. Home/DASH presentation and future owner accounting/reporting extensions remain separate features.
 
 Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Core browser acceptance is recorded in [browser validation](../ui/validation.md); later capability acceptance remains in [active work](../active/README.md).
+
+## Planned hosted payment and late-fee extensions
+
+[FIN-009 and the portal plan](../active/PORTALS_IMPLEMENTATION_PLAN.md#fin-009--shared-late-fee-prerequisite) add versioned calculation previews and explicit operator assessment/waiver/correction; the current rent late classification is not an assessed late-fee ledger. Operator/tenant/owner views must consume the same source-owned assessed charges and explanations. PAY-001/002 own processor operations and use Finance ports for reservations, allocations, receipts and return/refund consequences. Stripe operator subscriptions belong to HOSTED-001 and are not tenant rent receipts. None is included in Pilot 0 or claimed implemented here.

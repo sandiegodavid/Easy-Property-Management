@@ -1,5 +1,7 @@
 # Review: commit e35de731 and the docs/hosting set
 
+> **Dated code/document review — status clarified November 10, 2026.** Current direction: [Hosted MVP design](design/HOSTED_MVP_DESIGN.md). Findings and estimates below concern the named October commit and documents. They have not been re-reviewed or marked resolved by this alignment and do not define the fresh MVP architecture.
+
 Review date: October 24, 2026. Scope: commit e35de731 ("Google Cloudflare public access
 hosting", 172 files, about 16,600 insertions) and the current `docs/hosting/` tree after the
 October 24 reorganization. Archive material was treated as history, per the hosting index's

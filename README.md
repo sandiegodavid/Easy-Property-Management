@@ -4,16 +4,25 @@ Easy Property Management is a local-first, AI-assisted application for independe
 
 Delivered workflows cover portfolio and people, leases and inspections, maintenance, money, communications, Tasks, retained evidence, and live Home aggregation. Optional AI governance is implemented; available AI actions depend on registered capabilities. See the [feature backlog](docs/FEATURE_BACKLOG.md) for delivery status and planned integrations.
 
+## Immediate delivery
+
+The [backlog](docs/FEATURE_BACKLOG.md#now--hosted-mvp-then-tenant-and-owner-portals) schedules HOSTED-001, followed by tenant PORTAL-001 and owner PORTAL-002. Start [hosted slice H01](docs/hosting/design/HOSTED_MVP_DESIGN.md#implementation-slices). These are planned capabilities, not deployed services.
+
+The first release milestone is **Pilot 0 at H06**: five invited operators, Free 50 MB workspaces, Admin-lite provisioning, nightly verified off-host backups and rehearsed restore. Keep containers running, use one announced maintenance window, and record manual operational time and gross cost. No Stripe, idle-wake automation or per-operator update scheduling in this pilot.
+
+Later slices deliver automated provisioning, the provisional 50 MB / 200 MB / 1 GB freemium catalog, paid recovery, Stripe operator subscriptions and independent updates. Tenant/owner portals then add scoped rent, late-fee explanations, lease terms and payments; tenants report issues, and owners report concerns and view reports. [Portal delivery](docs/active/PORTALS_IMPLEMENTATION_PLAN.md) includes shared FIN-009 late-fee work and reuses PAY-001/002 for payment execution. Local single-operator use stays free and requires no hosted account or synchronization.
+
 ## Start here
 
 | Your goal | Read |
 | --- | --- |
 | Install or use the application | [Operator manual](manual/README.md) |
-| Deploy an existing release to a new VM | [VM deployment guide](manual/deployment.md) |
+| Install an existing wheel on a new VM (not the fresh hosted rollout) | [VM deployment guide](manual/deployment.md) |
 | Develop or build from this checkout | Continue below, then use the [developer documentation](docs/README.md) |
+| Implement the hosted MVP | [Hosted slices and Pilot 0](docs/hosting/design/HOSTED_MVP_DESIGN.md#implementation-slices), [acceptance register](docs/hosting/qualification/HOSTED_MVP_ACCEPTANCE.md) |
 | Explore synthetic data | [Demo workspace](application/demo/README.md) |
 
-The application uses React, Vite and TypeScript in the browser, with Python, FastAPI, SQLAlchemy, Alembic and SQLite on the server. [Architecture](docs/ARCHITECTURE.md) describes module boundaries, the local workspace, AI governance and the future PostgreSQL SaaS path.
+The application uses React, Vite and TypeScript in the browser, with Python, FastAPI, SQLAlchemy, Alembic and SQLite on the server. [Architecture](docs/ARCHITECTURE.md) describes module boundaries, the local workspace, AI governance and the shared business core. The [hosted MVP design](docs/hosting/design/HOSTED_MVP_DESIGN.md) specifies the immediate hosted direction with dedicated containers and private SQLite; PostgreSQL is not a hosting prerequisite.
 
 ## Repository layout
 

@@ -1,9 +1,17 @@
-# Demo design
+# Hosting designs
 
-[Hosted demo design](HOSTED_DEMO_DESIGN.md) defines the accepted architecture,
-identity and session boundaries, concurrency rules, recovery policy and measurable
-acceptance targets.
+The [fresh hosted MVP design](HOSTED_MVP_DESIGN.md), consolidated November 10, 2026,
+is the current accepted hosting direction. It owns scope, architecture, tiers,
+identity, Admin/operator workflows, automation and validation gates. The
+[Hosting Plan](../Hosting_Plan.md) summarizes it; the
+[MVP acceptance register](../qualification/HOSTED_MVP_ACCEPTANCE.md) tracks proof.
 
-For product-level choices across local use, the synthetic demo and hosted MVP,
-read the [Hosting Plan](../Hosting_Plan.md). For observed results rather than
-requirements, read the [qualification register](../qualification/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md).
+| Reference | Status |
+| --- | --- |
+| [Hosted MVP design](HOSTED_MVP_DESIGN.md) | Current design; implementation/deployment not established by documentation |
+| [Earlier demo design](HOSTED_DEMO_DESIGN.md) | Superseded as the current hosting direction; preserved for the earlier synthetic topology |
+| [Earlier demo Admin proposal](HOSTED_DEMO_ADMIN_DESIGN.md) | Superseded proposal; its manual approval, expiry, capacity and tooling choices are not the fresh target |
+
+The [SQLite upgrade research](../research/SQLITE_SCHEMA_UPGRADE_WORKFLOW_2026-10-31.md)
+remains a candidate technical input, subordinate to current one-writer, recovery,
+release-compatibility and post-reopen data-preservation requirements. [HOSTED-001](../../FEATURE_BACKLOG.md) now schedules H01–H12; Pilot 0 at H06 is the first release milestone, not completion of the whole target. No implementation status is established by documentation.

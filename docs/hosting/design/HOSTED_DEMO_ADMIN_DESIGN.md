@@ -1,5 +1,7 @@
 # Hosted demo administration and additional operators
 
+> **Superseded Admin proposal — status clarified November 10, 2026.** Current direction: [Hosted MVP design](HOSTED_MVP_DESIGN.md). The body describes the older additional-operator proposal. Manual approvals, account expiry, fixed volumes, qualification counts and absent billing are not fresh-MVP requirements.
+
 Design proposal — October 27, 2026. No implementation or deployment is performed by this document. Existing two-operator qualification remains in force until the extension is accepted and tested.
 
 ## Can the current Google demo add a third operator?

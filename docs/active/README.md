@@ -4,13 +4,19 @@ This index lists active designs and remaining work. The [backlog](../FEATURE_BAC
 
 The [agent triage design](agent-triage-design.md) is the accepted direction for remaining assistant-related backlog. Its feature designs below own implementation details; the document does not describe shipped behavior.
 
+## Immediate hosted and portal delivery
+
+- [HOSTED-001 ordered slices](../hosting/design/HOSTED_MVP_DESIGN.md#implementation-slices): start H01; release the five-invited-Free-operator Pilot 0 at H06 before paid automation.
+- [PORTAL-001/002 and FIN-009 plan](PORTALS_IMPLEMENTATION_PLAN.md): tenant/owner workflows following hosting, shared late-fee source and cross-portal acceptance.
+- [PAY-001](PAY-001_DESIGN.md): qualified payment engine reused by the tenant portal; operator subscriptions are owned by HOSTED-001.
+
 ## Operator interface delivery
 
 Each functional backlog includes its own UI and browser acceptance. DATA-002/003 own import; INGEST-002 owns issue review; ASST-001 owns shared assistant setup with MCP-001/ASST-FILE-001 transport diagnostics and ASST-INTAKE-001 source controls; AI-DRAFT-001 owns drafting; LEGAL-001 and HOA-001 own their post-MVP workflows. The former UI-002/003/004 plans are archived as superseded allocation history, not separate delivery gates.
 
 ## Proposed domain and integration changes
 
-These retain their complete design contracts. Capability availability and backlog status govern when they can be implemented; older baseline observations are design-time context.
+These retain their domain contracts. HOSTED-001 and the portals above have immediate priority; other statuses/dependencies remain in the backlog. Local-only assumptions in older designs describe their original composition, not permission to expose their routes or file/credential paths in hosting. A feature needs explicit hosted actor, secret/storage, source-fence and recovery qualification before availability there; imports remain all-tier when delivered. Older baseline observations are design-time context.
 
 - [PAY-001](PAY-001_DESIGN.md): accepted hosted premium tenant rent-payment design; tenant/operator UI, identity and entitlement, processor qualification, Finance extensions, lifecycle/recovery and nine ordered slices. Design only.
 - [DATA-002](DATA-002_DESIGN.md).
@@ -25,8 +31,6 @@ These retain their complete design contracts. Capability availability and backlo
 - [ASST-FILE-001](ASST-FILE-001_DESIGN.md): proposed file transport and operator workflow, isolation/identity qualification, consistent exchange backup/restore, seven sequential slices and twelve open decisions.
 - [ASST-INTAKE-001](ASST-INTAKE-001_DESIGN.md): separately qualified scheduled source discovery and proposal admission.
 - [OBS-001](OBS-001_DESIGN.md): local diagnostics and opt-in, privacy-bounded product usage aggregation.
-- [Hosted demo public access](../hosting/qualification/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md): accepted design decisions and implementation slices for the bounded Google Cloud A/B demo, including operator UI, authorization/sessions, cost/latency gates, recovery and Cloudflare deployment. Protected deployment is in qualification, with remaining acceptance gates and invitations pending; this does not mark SAAS-001/SEC-001/SEC-002 delivered.
-- [Hosted demo administration proposal](../hosting/design/HOSTED_DEMO_ADMIN_DESIGN.md): additional isolated operators, private IAP Admin console, capacity-gated provisioning and access lifecycle, with seven ordered backend/UI slices. Design only; A/B remains the current qualified topology.
 
 Universal Reader has a [UR-001 baseline technical design](UR-001_DESIGN.md), with seven implementation slices and twelve proposed decisions, supported by [research](../research/universal-reader/UNIVERSAL_READER_RESEARCH.md); its parallel work does not replace DATA scopes/dependencies. See [backlog](../FEATURE_BACKLOG.md) for all undesigned/planned features and hard dependencies.
 
@@ -35,3 +39,7 @@ Universal Reader has a [UR-001 baseline technical design](UR-001_DESIGN.md), wit
 Dashboard snapshots and independent cron remain conditional post-MVP work. The measured live-read gate skipped snapshot Slices 19–20; the [completed Dashboard design](../archive/designs/DASH-001_DESIGN_COMPLETED_2026-10-14.md#post-mvp-optional-independent-dashboard-snapshot-cron-job) retains the separate performance gate and worker/maintenance requirements for any future proposal.
 
 Verify its retained criteria against implementation and focused tests, update the current guide and backlog, then archive the fulfilled design. Final UI acceptance and pending review findings remain explicit. Historical test counts do not establish a new test run.
+
+## Historical hosted references
+
+Earlier [synthetic demo qualification](../hosting/qualification/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md) and [Admin proposal](../hosting/design/HOSTED_DEMO_ADMIN_DESIGN.md) retain their named topology and evidence. They are superseded as implementation direction; use HOSTED-001, not their A/B layouts, activation or manual entitlement assumptions.

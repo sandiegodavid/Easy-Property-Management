@@ -54,3 +54,7 @@ LEASE-001 acceptance was completed on October 12, 2026. The [completed acceptanc
 - [leasing-inspections.spec.ts](../../application/apps/web/tests/leasing-inspections.spec.ts).
 
 Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Browser acceptance is recorded in [browser validation](../ui/validation.md). Separate Inspection and Finance backlog acceptance remains in [active work](../active/README.md).
+
+## Planned portal publication
+
+[PORTAL-001/002](../active/PORTALS_IMPLEMENTATION_PLAN.md) add operator-reviewed publication of authorized lease terms/documents to tenants and owners. A published read does not grant contractual editing or expose private participant evidence. Lease remains contractual authority; FIN-009 owns versioned late-fee calculation/assessment against confirmed terms and PAY-001/002 own payment execution. These follow HOSTED-001 and are not part of Pilot 0.

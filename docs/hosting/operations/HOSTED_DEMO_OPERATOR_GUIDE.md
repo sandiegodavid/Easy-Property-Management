@@ -1,5 +1,7 @@
 # Operator guide — hosted synthetic demo
 
+> **Historical demo user guide — status clarified November 10, 2026.** Current direction: [Hosted MVP design](../design/HOSTED_MVP_DESIGN.md). This describes older Access login, approval, expiry and fixed-volume behavior. It is not the current paid/free plan or operator onboarding guide and must not be sent as fresh-MVP instructions.
+
 For the two approved operators. The administrator supplies your assigned HTTPS link, sign-in
 email, expiry and support contact. Both approved accounts are now usable during acceptance;
 general invitations remain gated by the [qualification

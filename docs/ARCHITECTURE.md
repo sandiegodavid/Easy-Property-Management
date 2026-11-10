@@ -87,11 +87,17 @@ Research and planned feature designs separate an EPM-invoked draft action, a sha
 
 [Frontend architecture](ui/frontend-architecture.md) maps bootstrap, route/capability registry, server/form/recovery state and packaged delivery. The server serves trusted compiled assets and restricted HTML fallback on loopback. Development explicitly allows an exact loopback Vite origin. External workspace data never enters the public bundle or Git.
 
-A future hosted product requires tenant isolation, authentication, remote permissions, hosted storage and reauthorization. Those are planned capabilities, not current local access controls. Preserve portable stable identities and module ports without building speculative compatibility layers.
+## Planned hosted composition
+
+[HOSTED-001](hosting/design/HOSTED_MVP_DESIGN.md#implementation-slices) is the immediate delivery track. Reuse the modular business core in dedicated non-root operator containers with persistent private SQLite/files, one authoritative writer, registered subdomains and shared Cloudflare gateway/central managed login. Admin/control jobs, protected inventory/host agent and effective hosted-access authority remain distinct from each business workspace. PostgreSQL, Kubernetes, staff collaboration and local/cloud sync are not prerequisites.
+
+Pilot 0 releases at H06 to five invited Free operators after isolation, identity, usage safeguards and nightly verified off-host/control recovery proofs. Admin-lite supported manual completion is allowed; runtimes remain warm and updates use one announced maintenance window. No Stripe, individual scheduling or idle-wake automation. H07–H12 deliver broader automation and paid qualification. These are planned changes, not current runtime guarantees.
+
+PORTAL-001/002 add tenant/owner grants and scoped source compositions after hosting. No portal reuses the broad operator actor or opens another workspace/control database. Operator, tenant and owner rent/lease/payment views share source facts; Maintenance owns tenant issues, Owner management owns owner concerns and Finance owns rent/late-fee accounting. [Portal plan](active/PORTALS_IMPLEMENTATION_PLAN.md) defines UI/backend acceptance; FIN-009 adds reviewed late-fee assessment, not a client-side or automatic legal calculation.
 
 ## Planned hosted tenant payment boundary
 
-[PAY-001](active/PAY-001_DESIGN.md), accepted October 27, 2026, adds hosted-only premium tenant payments alongside free local and bounded hosted operator functionality. This is planned scope, not a change to current runtime capabilities. It owns the bounded tenant authentication, lease grants, entitlements, publication and real-data hosting qualification needed for its release; broader SaaS and role-platform work remains separate.
+[PAY-001](active/PAY-001_DESIGN.md) owns hosted tenant payment execution and its tenant/operator workflows; PORTAL-001 composes it with published lease terms, FIN-009 assessed fees and issue reporting. PAY-002 supports qualified owner/operator payment directions for PORTAL-002. HOSTED-001 owns operator authentication, effective subscriptions, quotas and recovery; Payments consumes those ports rather than building manual pilot entitlements. Stripe operator billing does not select or qualify the rent processor. No payments or tenant/owner access are included in Pilot 0.
 
 A new Payments module owns processor intent/reservation, mandate, event inbox/outbox, reconciliation and payment-help workflows. Finance remains authoritative for received rent, allocations, fees and corrections through source-owned transactional ports. Payment confirmation and recipient payout are separate. Tenant actors and scoped read/API routes cannot reuse broad operator authority. Processor-hosted screens handle bank details; credentials and live hosted identity/execution authority remain outside portable business data.
 

@@ -1,7 +1,10 @@
 # Supporting qualification reports
 
-These are dated technical records, not the current rollout checklist. Start with the
-[qualification register](../HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md) for current status.
+These are dated technical records for the earlier demo, not fresh-MVP acceptance.
+Start with the [MVP acceptance register](../HOSTED_MVP_ACCEPTANCE.md) and
+[current design](../../design/HOSTED_MVP_DESIGN.md). The
+[older demo register](../HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md) explains the historical
+results only; no report is promoted to the new topology by this alignment.
 
 | Report | What it establishes |
 | --- | --- |

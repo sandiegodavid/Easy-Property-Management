@@ -1,5 +1,7 @@
 # Cloudflare and VM deployment record
 
+> **Dated deployment evidence — status clarified November 10, 2026.** Current direction: [Hosted MVP design](../design/HOSTED_MVP_DESIGN.md). Names, inventory, account state, costs and results below are historical observations, not live inspection or proof of the new Docker/auth/billing/recovery topology. Preserve their original scope.
+
 Consolidated October 24, 2026. This is the cumulative record of the completed Google
 Cloud/Cloudflare/R2 setup and subsequent operations. Append new dated operations here; keep
 one current resume action in the [qualification

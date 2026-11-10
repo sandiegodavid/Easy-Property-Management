@@ -1,5 +1,7 @@
 # Google Cloud: operate and update the existing host
 
+> **Historical release/runbook reference — status clarified November 10, 2026.** Current direction: [Hosted MVP design](../design/HOSTED_MVP_DESIGN.md). The A/B process, package, volume, manual activation and reset instructions apply to the named older release. They do not implement immutable-container rollout, subscription policy or new automatic onboarding.
+
 Use this after setup. It covers the recorded `epm-demo` VM in `us-west1-b`, project
 `project-47b72bb7-ba90-42c9-910`, with hosted instances A and B. Confirm the actual
 inventory in the [deployment record](CLOUDFLARE_OPERATIONS.md) before proceeding.

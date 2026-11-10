@@ -1,8 +1,18 @@
 # Product Roadmap
 
-## Now — MVP foundation
+## Now — Hosted foundation and Pilot 0
 
-The pre-UI phase is backend/API and validation work only. Do not begin React screens, shared web packages, or other UI development until `UI-001`, immediately before `DASH-001`, begins.
+Start HOSTED-001 [H01–H12](hosting/design/HOSTED_MVP_DESIGN.md#implementation-slices), under the [backlog](FEATURE_BACKLOG.md). H01–H05 establish private container/storage, managed identity, Admin-lite onboarding, Free usage safeguards and nightly verified off-host recovery. H06 releases Pilot 0 to five invited Free operators, with a rehearsed restore, warm runtimes, one announced maintenance window and measurable manual operating cost. No Stripe, idle-wake automation or individual scheduling.
+
+Use observed repeat use, support time and before-credit spend to decide further investment. H07–H12 add automated provisioning, paid tiers/recovery, subscriptions, independent updates, idle-wake and paid/growth qualification. Launch/growth budgets are $250/$300 monthly before credits, subject to measured workloads; no 100-operator guarantee follows from a small pilot.
+
+## Next — Tenant and owner portals
+
+PORTAL-001 and PORTAL-002 follow HOSTED-001 in priority. [Their plan](active/PORTALS_IMPLEMENTATION_PLAN.md) includes rent, late-fee calculations/explanations, published lease terms and payments across operator/tenant/owner workflows, tenant issue reporting, and owner concerns/reports. Shared FIN-009 owns reviewed late-fee assessment; PAY-001/002 own payment execution. Complete their source prerequisites before acceptance. Portals are hosted paid features after qualification, not Pilot 0 work. Owner-tier inclusion remains provisional until commercial confirmation.
+
+## Local product scope and other functional work
+
+Current module/UI guides describe delivered local behavior. The following product areas retain the status and phase recorded in the backlog; this list is not a claim that they are all implemented or immediate prerequisites to hosting. Local operation remains free with no required hosted identity or synchronization.
 
 Deliver complete, understandable workflows for:
 
@@ -28,7 +38,7 @@ Deliver complete, understandable workflows for:
 
 Success means a small operator can complete monthly rent, vacancy-to-lease, and repair-to-completion workflows, review legal/HOA next actions, and migrate initial property/owner/provider records without maintaining a parallel tracking spreadsheet. Legal outcomes, actual move-out, repairs, and financial actions remain separately confirmed facts.
 
-## Next — Connect and assist locally
+## Other planned functional extensions
 
 - Broader HOA profiles, standing rules management, architectural approvals, assessments, and board administration; MVP includes violation notices and narrow coordination of HOA-covered common-element repairs.
 
@@ -48,12 +58,12 @@ Success means a small operator can complete monthly rent, vacancy-to-lease, and 
 - Live reputation integrations and vendor monitoring.
 - Custom reports, scheduled exports, advanced permissions, public API, and advanced lease/balance/history migration or update imports. Initial property/owner/provider create/link/skip intake is MVP scope.
 
-## Future SaaS — Share and collaborate
+## Later hosted extensions — Migration and collaboration
 
-- Cloud-hosted, tenant-isolated workspaces with authentication and user roles.
+- Advanced staff roles and collaboration beyond the immediate single-operator hosted foundation.
 - A guided migration that moves local records and attachments to the cloud while preserving stable IDs, history, and financial totals.
 - Migration of ingested-message history, voice-note transcripts and summaries, and AI review decisions, followed by explicit reauthorization of external accounts.
 - Migration validation, retry, and rollback safeguards.
 - Secure direct intake from owners and tenants.
-- Full tenant and owner portals.
+- General messaging, unrestricted document libraries and advanced portal dashboards beyond the initial scoped portals.
 - Advanced approval workflows, public API access, and event webhooks.
