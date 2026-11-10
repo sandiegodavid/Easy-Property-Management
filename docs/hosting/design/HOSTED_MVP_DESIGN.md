@@ -58,11 +58,38 @@ Local launch has no hosted login or subscription enforcement. Hosting-specific
 identity, control-plane and billing services are separate compositions. Do not add
 synchronization or require a cloud account to perform local manual workflows.
 
-Delivery begins with [Pilot 0](#pilot-0--five-invited-free-operators), before paid
+Delivery begins with [Pilot 0](#pilot-0--capacity-qualified-free-operators), before paid
 plans and broader automation. Its explicit operating rules override the later billing,
 update-scheduling and idle-wake defaults for that stage only. The remaining sections
 define the subsequent hosted MVP target, not prerequisites to build every automation
 before learning from the pilot.
+
+### Development and production deployment boundary
+
+| Portal | Local development | Production hosted | Production local installation |
+| --- | --- | --- | --- |
+| Admin | Supported | Supported | Not supported |
+| Operator | Supported | Supported | Supported, single operator |
+| Tenant | Supported | Supported after PORTAL-001 qualification | Not supported |
+| Owner | Supported | Supported after PORTAL-002 qualification | Not supported |
+
+Local development of Admin/Tenant/Owner is for building and testing their hosted
+workflows, not a customer-facing local deployment option. Retain separate actors,
+stores and authorization boundaries in the development composition. Use isolated
+synthetic workspaces, local test origins and explicit development configuration;
+any test identity/provider/mail/payment adapters must be development-only, with
+no production credentials, real payment dispatch or connection to production stores.
+The production local composition serves only the Operator portal and its supported
+local workflows; it must not register Admin/Tenant/Owner APIs or grant their roles.
+This restriction concerns portal-specific actors/endpoints; local Operator property,
+tenant and owner management workflows remain available.
+Hosted deployment serves the respective portals under their existing origin/identity
+boundaries; development does not weaken production login, MFA or grants.
+
+H02/H03 and each portal's detailed design must specify local launch/configuration,
+test-origin and fixture contracts plus production rejection tests. This development
+support does not add production tenant/owner portals to Pilot 0 or make unqualified
+payment features available locally.
 
 ## 2. Plans and financial envelope
 
@@ -104,7 +131,7 @@ recovery points and history, rather than charging for release of existing data.
   upgrades, and present measured alternatives. Do not silently exceed the envelope
   or reduce protection to claim the requested operator count fits.
 
-Validate interest before credits expire. Agreed pilot gate: five genuine invited
+Validate interest before credits expire. Agreed pilot gate: at least five genuine invited
 operators, at least three doing recurring work weekly for four consecutive weeks,
 at least one informed paid subscriber after paid plans launch, and no unresolved
 critical data-loss or cross-operator isolation defect. Pilot 0 measures activation,
@@ -130,10 +157,15 @@ flowchart TB
     CP --> H[Restricted privileged host agent]
     H --> D[Docker Engine and filesystem enforcement]
     D --> C
-    CP --> B[Backup / recovery and release workers]
-    W --> B
+    C --> K[Internal workspace backup and recovery engine]
+    K --> RC[(Private recovery store outside business data)]
+    K --> W
+    K --> R2[Encrypted off-host recovery in Cloudflare R2]
+    K -->|async protection summary| CP
+    CP --> B[Control backup and release tooling]
     DB --> B
-    B --> R2[Encrypted off-host recovery in Cloudflare R2]
+    B --> AR[(Separate Admin recovery SQLite)]
+    B --> R2
     CP --> Stripe[Stripe Checkout / Billing / Customer Portal]
     Stripe --> Inbox[Verified billing event inbox]
     Inbox --> CP
@@ -234,11 +266,12 @@ recovery authority means this offering must not claim zero-knowledge encryption.
 | --- | --- |
 | Managed identity provider | Verified external subject and authentication proof; EPM owns the assignment to an operator/workspace |
 | Stripe | Subscription/payment facts and provider transaction references |
-| Admin/control database | Operator metadata, stable IDs/slug, assignments, desired subscription settings, jobs, reservations, applied-result references and operational audit |
+| Main Admin/control database | Operator metadata, stable IDs/slug, assignments, desired subscription settings, jobs, reservations, applied-result references, operational audit and observed workspace protection summaries. No authoritative Admin recovery catalog/queue. |
+| Admin recovery database | Separate private SQLite owned by the Admin service: control backup catalog/checkpoint, recovery operations and audit; retained while the main Admin DB is restored. |
 | Protected host inventory/agent | Actual directory/container/image/host identities, physical enforcement and effect observations |
 | Operator hosted-access/control store | Effective account/session authority, source fences and command receipts; bounded hosted storage accounting/control state |
 | Operator business workspace | Domain records, files, revision conflicts, business receipts and audit |
-| Recovery catalog | Verified immutable recovery-point manifests, object references, encryption-key references, expiry and restore evidence |
+| Per-operator recovery store / immutable manifests | Operator service owns workspace backup checkpoints, verified catalog and restore operations outside the replaceable business DB. Admin receives non-authoritative protection summaries; separate control manifests protect the platform. |
 
 A small single-writer control-plane SQLite store is a reasonable initial candidate;
 qualify it with bounded workers/queries. This is not the operator business database,
@@ -381,8 +414,12 @@ A persistent gateway validates the intended assignment, starts the registered co
 once through a deduplicated wake operation, and shows a safe waking page. Private
 business content is unavailable until source checks pass. Target a few-second wake;
 measure it under cold starts, simultaneous demand, image availability and contention.
-On wake failure provide status/retry without resubmitting the original write. Scheduled
-backups and required work operate independently of whether the app is asleep.
+On wake failure provide status/retry without resubmitting the original write. Before a planned stop/suspension, finish protection of all admitted business/file
+changes and persist the checkpoint. No workspace writes occur while stopped; an
+unchanged stopped workspace needs no repeated full upload. On wake/restart reconcile
+actual source/file generations and catch up unprotected changes before claiming health.
+External monitoring alerts on stale/unknown dirty protection; it does not run routine
+workspace backups. H11 must qualify this stop/wake contract before enabling suspension.
 
 Multiple devices retain full permissions but not last-writer-wins behavior. Stale saves
 conflict, preserve input and provide comparison/review. Independent records remain
@@ -399,6 +436,32 @@ Choose a proven incremental/deduplicated encrypted backup implementation only af
 component proof; encrypting whole independent archives before deduplication can defeat
 the expected savings. Include GCP upload traffic and retained bytes in the cost model.
 
+### Internal workspace backup and recovery
+
+The operator service owns routine workspace backup and self-service restore. An internal
+background runner performs scheduled consistent capture, encryption/upload, verification
+and retention without holding the SQLite writer during slow transfer or blocking normal
+UI reads. It is not a second uncoordinated business writer. There is no always-running
+outside workspace-backup/recovery service or mandatory Admin dispatch per operation.
+
+A private per-operator recovery SQLite store, outside the business tree being restored,
+keeps operation receipts, verified points, backup checkpoint and restore progress. Its
+schema resources live under `application/database/recovery-migrations/`. The service
+reports bounded protection summaries asynchronously to Admin; Admin downtime does not
+stop backup or restore. Admin monitors/supports but does not own routine workspace jobs.
+Authentication/access state remains separately protected and is not restored with data.
+
+Track the protected business revision, retained-file generation and source incarnation,
+not an in-memory dirty bit alone. If consistent comparison proves no changes, reuse
+verified content instead of uploading another full copy; nightly verification/retention
+may reference the same immutable content. Keep actual capture/verification times and
+show “unchanged since verified point” separately from a fresh capture. Unknown or unreadable
+state never counts as unchanged. A crash can leave committed changes unprotected; startup
+must reconcile/catch up and surface degraded protection until destination verification.
+A planned stop/upgrade completes backup of unprotected changes before stopping. Retain
+seven nightly recovery points where produced, and never expire the only usable point
+just because no new data required a replacement. Retained object references govern cleanup.
+
 A recovery point is a completed, verified off-host database-and-file state with manifest,
 workspace identity, schema/release compatibility, exact content references, digest and
 key reference. Never copy an actively changing SQLite file as though it were a snapshot.
@@ -411,22 +474,171 @@ capture/upload/verification time; “cron every 15 minutes” alone cannot prove
 fine-grained paid points for 24 hours and thin older points to the daily history in the
 catalog. Do not promise every historical 15-minute point throughout 30/90 days.
 
-Monitor the age of the latest **completed recoverable off-host point** and test restores.
+Monitor the latest **completed recoverable off-host point**, current-versus-protected
+source/file generations and proof freshness, and test restores. Show genuinely verified
+unchanged state separately; never refresh capture time or infer unchanged merely because
+the container is stopped.
 On protection failure keep the workspace usable, mark degraded protection and alert Admin;
 never show a stale successful job as healthy. These are engineering objectives, not
 unconditional guarantees or a contractual SLA. Alert/recovery procedures must expose
 actual achieved protection and unresolved incidents.
 
-Operators request recovery; Admin initially selects a point and confirms an automated
-restore. Show point time and consequences, fence/drain the source, restore to a separate
-private destination, validate full retained data/files and ownership, then switch over.
-Retain the pre-restore state until acceptance. Reconcile current identity/subscription
-and revoke affected app sessions; an archive must not restore old sessions, old paid
-grants or a previously enabled access flag. Free receives recovery assistance too.
-Defer unrestricted operator-triggered rollback.
+Operators select and authorize recovery of their own workspace without Admin approval.
+Settings → Data & Backup lists verified eligible recovery points (latest selected by
+default), with capture time/property-independent display zone, protection status and
+clear warning that newer changes will be rolled back. Show a restore preview with
+workspace, selected point, current source revision and affected devices; require recent
+authentication and explicit confirmation bound to that exact preview. Never restore
+from a missing, corrupt, unverified, incompatible or different-workspace point.
+
+Admit one idempotent restore operation; present progress and original-result lookup
+across devices. The job validates capacity/keys/compatibility, fences and drains all
+workspace writers/background dispatch, retains the current state, restores
+to a separate private destination, validates complete data/files and ownership, then
+switches bindings. Preserve a healthy pre-state through consistent capture; if the business DB is damaged,
+keep the original tree intact as pre-restore/forensic state rather than requiring it to
+be a valid backup. If that preservation or safe destination allocation fails, stop and
+expose technical assistance; never overwrite the only source copy. Reject conflicting restore/upgrade jobs.
+Failures retain the original safe binding or a fenced Needs attention state, never an
+unvalidated destination. No automatic replay of user writes after restore.
+
+Reconcile current identity/subscription and revoke affected app sessions before
+reopening; an archive cannot restore old sessions, paid grants or enabled flags. The
+operator signs in again to inspect and accept the restored workspace. Retain pre-restore
+state until acceptance and the defined recovery cleanup; restoring that state requires
+another explicit reviewed operation if newer writes exist. Future payment collection
+stays fenced until provider/mandate reconciliation succeeds. Tenant/owner sessions
+have no authority to restore a workspace. This self-service capability applies to Free
+and paid plans alike; available recovery points follow their plan/retained history.
+
+### Authenticated recovery mode and failure handling
+
+Start a minimal recovery mode in the same operator service/image when business DB
+validation/open fails. Bootstrap authentication, the private recovery store, recovery UI,
+verified-backup list and original-operation status before business service composition;
+never require a healthy business DB to render them. It uses current hosted identity/access
+(or the existing local loopback/OS-owner boundary), not an authentication bypass. If auth
+or recovery metadata cannot be validated, fail closed: no restore or decryption bypass
+is offered. Support repairs the service/identity boundary before an operator can retry.
+
+The internal engine drains requests/jobs, closes all business DB connections and owns an
+exclusive workspace recovery gate during restore. A crash-safe locator/intent protocol
+switches a validated separate business directory inside the existing protected persistent
+mount; no Docker socket, generic host shell or mount privilege goes into the operator
+container. Unavoidable host binding changes use the restricted registered-ID helper,
+not an Admin approval/dispatch workflow for ordinary recovery. Restart inspects retained
+operation/phase/locator evidence before any normal business opening, so interrupted
+restore cannot silently initialize an empty workspace or start competing writers.
+
+The current hosting scope excludes a dedicated offline operator-workspace restore or
+decrypt/export command. Do not expose an offline-recovery endpoint, hidden Admin action,
+CLI flag or environment switch that impersonates an operator or skips authorization.
+If a container cannot start, support repairs/recreates its runtime from a qualified
+image while retaining private data/control directories, then the operator reauthenticates
+in recovery mode. If current identity/binding cannot be established, recovery stays
+unavailable rather than accepting historical credentials from a backup.
+
+#### Clean runtime rebuild, then authenticated restore
+
+When the Operator container cannot start, use **Repair runtime**, not “reset operator
+to empty.” Support/qualified host tooling performs this infrastructure operation; it
+cannot choose or authorize a business recovery point. The operator subsequently restores
+through the authenticated recovery screen:
+
+1. Record a retry-safe runtime-repair operation bound to the existing operator/workspace,
+   registered resource binding, qualified compatible release and expected source fence.
+   Stop/fence the former runtime; never start another writer on an uncertain stop.
+2. Retain the original business tree, access/recovery stores and protected key references.
+   Replace only the failed runtime/container from the qualified image. Preserve the
+   operator/workspace IDs, subscription and current disabled/enabled intent; do not run
+   Add operator, synthetic seed, business initialization or account re-enrollment as a
+   shortcut. Missing identity/control state first needs separately verified repair.
+3. Start minimal recovery mode without opening/migrating/initializing the business DB.
+   Revoke old app sessions and require current operator authentication and the same
+   strong-step-up/exact-action confirmation as any restore. Runtime-repair authority
+   never grants access to decrypted business records or authorizes rollback.
+4. The operator selects a verified own-workspace backup. Allocate an empty **separate
+   restore destination**, verify key/manifest/schema compatibility, then run the normal
+   internal restore/validation/switchover. Do not overwrite or delete the original tree.
+5. Reopen only after current authority and integrity checks pass; retain previous data
+   until acceptance and controlled cleanup. No automatic return to business service just
+   because a replacement container is healthy. Conflicts/failures remain inspectable
+   under the original repair/restore operation identities.
+
+Recovery requires a usable verified backup and available keys; runtime replacement
+cannot manufacture missing data. An empty staging directory is not a new empty portfolio
+and never changes workspace identity. H02/H05 must qualify this sequence, including
+container replacement, missing auth metadata, incompatible backups and interruption;
+H05 still needs its detailed design before implementation.
+
+For host loss, privileged platform tooling may rebuild infrastructure and protected
+control state, but cannot authorize a customer workspace rollback or provide a customer
+backup plaintext-export feature. Mount only the verified workspace/control resources
+into their registered operator runtime; any missing catalog reconstruction occurs there,
+after fresh operator authentication, through verified own-workspace manifests. No
+permanently running outside workspace recovery service is required.
+
+#### Recovery security release gate
+
+Require current own-workspace identity, recent strong step-up authentication qualified
+in H03/H05 and single-use confirmation bound to the exact point, workspace, source epoch
+and preview. A normal logged-in cookie or Admin session alone is insufficient. Reject
+cross-workspace points, expired/replayed confirmations, arbitrary filesystem/object/key
+references and untrusted redirect/download destinations. The service chooses destination
+roots and scoped key/object references; browser/API callers never supply them. Recovery
+produces only the registered workspace, not downloadable plaintext archives or attacker-
+selected storage. Use least-privilege own-prefix object access and protected key custody;
+no platform-wide decryption/bucket credentials in any portal/container.
+
+Audit every authorization/attempt/outcome without secrets or business contents. Test
+stolen-session-only attempts, forged Admin/user roles, cross-workspace object/key IDs,
+replay, path/symlink escape, development adapter enablement and tampered manifests. H05
+must pass an explicit security review and these negative tests before enabling restore;
+otherwise show it unavailable. Later offline customer-recovery capability requires a
+new explicit design/security decision, not a default H05 fallback.
+
+These controls reduce exposure; do not promise zero probability of attack or protection
+from a fully compromised host/platform administrator. Platform-managed keys retain a
+privileged trust boundary, as already disclosed; removing a command does not create
+zero-knowledge encryption. This limitation must remain clear in the security review.
+
+#### Separate Admin backup and recovery store
+
+Admin backup/recovery uses a separate private SQLite database/schema, owned by the
+Admin service and located outside the main Admin DB and its restore destinations.
+`application/database/admin-recovery-migrations/` exclusively defines its versioned
+schema; no runtime DDL. Its control_recovery_points, control_restore_operations,
+control_recovery_operations, checkpoint/meta and audit tables remain available when
+main Admin state is corrupt or being replaced. See the [schema master](../../DATABASE_SCHEMA.md#admin-recovery-database--h05).
+
+Normal Admin backup and authenticated recovery mode can run in the same Admin service;
+no additional service/VM is required. Bootstrap this store and the protected current
+recovery-authority binding before opening main Admin data. Strong Admin MFA/step-up and
+explicit point/target confirmation cannot depend on old principal/session rows from
+that damaged DB or its archive. H03/H05 must qualify current identity/revocation and
+protected bootstrap policy; otherwise Admin recovery is unavailable. Operator identities
+never grant platform recovery authority.
+
+The recovery DB owns operation identities/checkpoints/audit, with only local FKs; main
+Admin, inventory, principal and release IDs are logical references with owning validation.
+Do not require a main Admin operations/admin_audit transaction to admit or finish recovery.
+Restore main Admin into a separate destination, validate schema/data/source bindings,
+advance control fences, revoke historical sessions and reconcile providers/pending work
+before reopening. Keep prior main Admin data and this recovery DB until acceptance;
+never replace the recovery DB with the main Admin archive or replay old jobs/grants.
+
+If the Admin service cannot start, existing restricted platform recovery tooling uses
+the same protected store/engine with exclusive ownership and fresh recovery authority;
+this is not an offline customer-workspace restore/decrypt command. Whole-host loss still
+requires off-host manifests and independently protected bootstrap/key custody: initialize
+an explicit fresh recovery incarnation and reconstruct verified catalog evidence without
+automatically importing runnable operations. A separate local file alone is not host-loss
+protection. H05 rehearses both main-DB-only loss and loss of the recovery DB/entire host.
 
 The Admin registry, mappings, admitted versions/configuration, subscription references,
-operation history and recovery catalog need separate encrypted off-host control recovery.
+infrastructure operation history and the separate Admin recovery catalog need
+encrypted off-host protection/reconstruction evidence. Workspace recovery metadata is protected/reconstructible through
+its own manifests, not dependent on an Admin catalog of every workspace point.
 Keep keys/credentials and reproducible infrastructure recovery available outside the
 failed VM. A business archive alone cannot rebuild routing/ownership. Reconstruct and
 reconcile host/provider/source state before reopening access; never replay queued grants
@@ -447,8 +659,37 @@ Retained disabled data still consumes monitored capacity.
 
 ## 9. Independently scheduled release upgrades
 
-Admin approves one qualified immutable image/schema release, then automation rolls it
-out per operator. Start with an internal canary and bounded batches; failures stop further
+Admin, Operator, Tenant and Owner have independently versioned, qualified release
+artifacts and rollout operations. Upgrading one portal does not automatically upgrade
+the others. Admin approves a target component release; Operator deployment remains
+independent per operator workspace, while Admin and the initial Tenant/Owner portal
+assets have deployment-wide assignments. Tenant/Owner release delivery is future
+portal work, not Pilot 0 scope. Each artifact declares its API, source/runtime,
+authentication and owned/readable schema compatibility in a pinned manifest.
+All release assignments use the common component_deployments table described in the
+[schema master](../../DATABASE_SCHEMA.md); scope distinguishes per-workspace Operator
+rows from deployment-wide Admin/Tenant/Owner rows. Operator identity records do not
+carry a duplicate desired release.
+
+Retain the shared modular business backend and one writer per workspace. Independent
+portal releases do not require another writer, database copy or four microservices.
+Tenant/Owner assets may be deployed independently through their qualified serving
+boundary and call authorized source APIs; new server capabilities are delivered by
+the owning runtime release. Test each portal against every admitted backend version
+it may route to. Use compatible API evolution so component versions can coexist;
+reject an unsupported pairing rather than force a silent all-portal update.
+
+A schema change belongs to the store owner, not to a frontend artifact. Admin upgrades
+may change only their owning control schemas through the qualified runner; Operator
+runtime upgrades own business/access changes. Portal asset-only upgrades neither run
+schema DDL nor restore databases. A genuinely incompatible shared dependency needs an
+explicit reviewed prerequisite/maintenance plan and compatibility evidence; independent
+release selection is not a promise of arbitrary version mixing or zero downtime.
+
+The following scheduling workflow applies to Operator releases. Admin/portal component
+rollouts use their own canary, notices and bounded operation, without automatically
+changing operator update preferences or stopping unrelated workspace writers.
+Start with an internal canary and bounded batches; failures stop that component
 rollout. No arbitrary published-tag auto-updates. Operators may run different eligible
 versions temporarily; pin image/schema compatibility and retain needed rollback artifacts.
 
@@ -476,6 +717,14 @@ them and require a controlled forward fix or reviewed recovery; blindly restorin
 older DB would erase legitimate work. Merely running the old image is not a schema-safe
 rollback. An idle Free container can receive a new image assignment without starting
 solely for rollout, but required schema validation must occur before serving it again.
+
+Pilot 0 still uses one announced maintenance window and supported manual operations.
+Its Admin and Operator artifacts/assignments are separate from H02, even if deployed
+together in that window. H10 adds independent scheduling/automation; Tenant/Owner
+backlogs supply their independently deployable artifacts when implemented. For a
+component-only rollout, restore its prior compatible artifact without rolling back
+shared business data. Runtime/schema recovery retains the existing pre-write rollback
+and post-reopen data-preservation rules.
 
 ## 10. Monitoring, reliability and cost qualification
 
@@ -514,7 +763,7 @@ This sequence is scheduled as HOSTED-001 in the [backlog](../../FEATURE_BACKLOG.
 2. Prepare Admin-lite creation/invitations, Free nightly recovery, basic Settings
    usage and a full operator/control-plane restore rehearsal. Bounded manual operations
    may support this stage; complete automatic provisioning remains a subsequent target.
-3. Run **Pilot 0: five invited operators, Free plans only**, under the operating
+3. Run **Pilot 0: invited operators within qualified capacity, Free plans only**, under the operating
    rules and acceptance gates below. Observe real use and operational cost before
    investing in subscriptions and wider automation.
 4. Complete automated provisioning and verified quota enforcement, paid recent
@@ -526,27 +775,48 @@ This sequence is scheduled as HOSTED-001 in the [backlog](../../FEATURE_BACKLOG.
 6. Run the paid pilot, validate repeat use/payment/support effort, then expand
    admission toward measured 100-operator capacity within the spending envelope.
 
-### Pilot 0 — five invited Free operators
+### Pilot 0 — capacity-qualified Free operators
 
-Pilot 0 is an invitation-only learning stage, capped at five real operators. It uses
+Pilot 0 is an invitation-only learning stage. Five operators are an initial qualification
+target, not a hard-coded cap; Admin may add more dynamically within verified capacity. It uses
 the Free 50 MB workspace allowance, nightly verified off-host backups and seven
 nightly recovery points. No paid enrollment, Stripe integration, checkout or billing
 credentials are needed. Show **Free pilot**, usage and support/recovery information
 in Settings; do not expose paid upgrade controls as available.
 
+Admission is capacity-based, not an operator-count constant. Admin-lite Add operator
+checks current warm-runtime memory/CPU/IO headroom, physical byte/inode commitments,
+backup retention and restore staging capacity, support effort and the approved spend
+envelope. Count active, pending and unknown provisioning commitments; retained disabled
+data still consumes disk/backup capacity. Persist the reviewed capacity-profile/evidence
+reference and admitted resource commitment in the provisioning operation's typed request.
+Serialize admission in the control transaction so concurrent Add actions cannot spend
+the same headroom. Unknown effects retain their commitments until reconciled.
+
+Admin may invite another operator without a code/configuration change to a hard-coded
+cohort size when that admission fits the current qualified profile. If measurements no
+longer cover the proposed population or protection/support is degraded, show Capacity
+review required, keep the request pending and qualify additional capacity first. No
+silent overcommit, automatic VM purchase or broader H07 scheduler is required: Pilot 0
+may use a supported manual capacity review with recorded evidence. Extra operators
+remain Free, warm and in the same announced maintenance window. Five real invitees
+remain the minimum adoption-evidence target, not an admission ceiling; do not wait for
+paid automation or completion of the four-week demand review merely to add an operator
+that already fits qualified capacity.
+
 | Area | Pilot 0 delivery |
 | --- | --- |
 | Admin-lite provisioning | Admin records the verified operator assignment, slug, Free allowance and operation status, then runs a supported provisioning action/script. Show Pending/Ready/Needs attention and safe retry status. Manual completion is acceptable; no generic shell or Docker socket in the public Admin process. Retain original operation/resource identities so a retry cannot duplicate a workspace or enable an uncertain result. |
 | Onboarding and isolation | Keep dedicated containers/private SQLite/files, managed identity, registered-origin routing and host-only sessions. Business access stays disabled through preparation/seeding and readiness checks. Admin may manually verify readiness; the invited verified identity must still claim the correct assignment. |
-| Backups and recovery | Run nightly consistent database-and-file capture with verified off-host manifests and backup-age alerts. Rehearse operator and control-plane restore, including recovery without the failed host, before admitting real records. Admin may initiate and supervise recovery; retain the source, validate the restored destination and fence the old writer before reopening. |
-| Releases | Use one announced maintenance window for the whole cohort. Notify all five operators, preserve unfinished input, drain admitted work across devices, capture a verified pre-update recovery point and apply a pinned compatible release. No per-operator window preferences or scheduling automation. Preserve post-reopen writes; a maintenance window does not make destructive rollback safe. |
-| Runtime | Keep all five containers running within qualified host capacity. No idle suspension or wake automation; polling and concurrent devices do not trigger lifecycle changes. Monitor health and use documented restart handling. |
+| Backups and recovery | The operator service runs nightly consistent database-and-file capture with verified off-host manifests/checkpoints and external protection alerts. Rehearse operator and control-plane restore, including recovery without the failed host, before admitting real records. Operator chooses/authorizes workspace recovery; the internal engine executes it, through authenticated recovery mode with no offline operator restore/decrypt command and no separate approval; retain the source, validate the restored destination and fence the old writer before reopening. |
+| Releases | Use one announced maintenance window for the whole cohort. Notify all admitted operators, preserve unfinished input, drain admitted work across devices, capture a verified pre-update recovery point and apply a pinned compatible release. No per-operator window preferences or scheduling automation. Preserve post-reopen writes; a maintenance window does not make destructive rollback safe. |
+| Runtime | Keep all admitted containers running within qualified host capacity. No idle suspension or wake automation; polling and concurrent devices do not trigger lifecycle changes. Monitor health and use documented restart handling. |
 | Manual operations | Provisioning completion, exceptions, recovery and maintenance may be handled manually through restricted supported tools. Record who acted, result/unknown state, elapsed time and follow-up; manual handling does not bypass identity, isolation, source fences, safe retries or backup verification. |
 | Storage and cost | Show measured usage/freshness and enforce bounded storage admission through qualified limits or conservative supported write gates. Monitor physical headroom and alert before exhaustion; do not rely only on a scan after a write. Record gross cloud spend before credits, retained backup bytes/traffic, support incidents and Admin minutes per operator/task. Full automated tier changes and quota reconciliation follow in step 4. |
 
 Pilot admission requires the isolation/identity proofs from step 1, a successful
 nightly backup and rehearsed restore, supported safe provisioning/retry, sufficient
-capacity for five continuously running containers, and a named operational owner.
+capacity for the admitted continuously running container population, and a named operational owner.
 Manual work must be visible and repeatable through a short runbook, not unrecorded
 changes to authority or resource ownership.
 
@@ -559,27 +829,34 @@ follows from Pilot 0 alone.
 
 ### Implementation slices
 
-Implement sequentially as cohesive backend/UI/operations changes. Each row depends on
+Complete a detailed design for each slice before starting its implementation, covering schema, UI, infrastructure/setup and validation as applicable. H01 has a detailed design; later slices require their own before implementation. Implement sequentially as cohesive backend/UI/operations changes. Each row depends on
 its predecessor unless explicitly stated; no row is marked implemented here. Start with
 current-checkout evidence, not implementation claims or schema resources from another
 branch. Pilot 0 releases at H06; H07–H12 must not delay that learning milestone.
 
 | Slice | Delivery and implementation boundary | Acceptance before proceeding |
 | --- | --- | --- |
-| H01 | Baseline and deployment contracts. Inventory `application/apps/server/app/modules/hosted_access`, `application/deploy/hosted-demo`, workspace backup services and existing hosted browser tests. Design the store ownership map and complete Pilot 0 schema for the Admin registry, protected inventory, effective hosted-access authority and recovery catalog, reusing business schema ownership. Define typed host-agent commands. Document tables/columns, constraints, indexes and initialization ownership; defer paid/automation-only tables to their owning slices. Record proof choices for quotas, backups, keys, mail and image packaging. | Review the Pilot 0 ER/relationship diagram, store/data dictionary and schema-resource plan; document reuse/gaps, resource ownership, exact capacity/accounting definitions and reproducible component-proof commands. No live deployment required to begin. Reject generic shell/path selection and public Docker access. |
-| H02 | Dedicated container/storage foundation on GCP with Cloudflare gateway. Package pinned application assets and the owning schema resources; validate fresh initialization and schema identity without defining a second schema authority; persistent private workspace/control/scratch, registered subdomains and restricted host operations. Keep Pilot 0 runtimes warm. | Two isolated test operators, persistent data across replacement/reboot, unknown-host denial, one writer, bounded memory/disk/inodes and measured five-warm-container headroom. No customer records yet. |
+| H01 | [Baseline, schema and deployment contracts](HOSTED_MVP_H01_DESIGN.md). Inventory `application/apps/server/app/modules/hosted_access`, `application/deploy/hosted-demo`, workspace backup services and existing hosted browser tests. Design the store ownership map and complete Pilot 0 schema for the Admin registry, protected inventory, effective hosted-access authority, separate Admin recovery and per-operator recovery stores, reusing business schema ownership. Define typed host-agent commands. Document tables/columns, constraints, indexes and initialization ownership; defer paid/automation-only tables to their owning slices. Record proof choices for quotas, backups, keys, mail and image packaging. | Review the Pilot 0 ER/relationship diagram, store/data dictionary and schema-resource plan; document reuse/gaps, resource ownership, exact capacity/accounting definitions and reproducible component-proof commands. No live deployment required to begin. Reject generic shell/path selection and public Docker access. |
+| H02 | Dedicated container/storage foundation on GCP with Cloudflare gateway. Package pinned application assets and the owning schema resources; validate fresh initialization and schema identity without defining a second schema authority; persistent private workspace/control/scratch, registered subdomains and restricted host operations. Keep Pilot 0 runtimes warm. | Two isolated test operators, persistent data across replacement/reboot, unknown-host denial, one writer, bounded memory/disk/inodes and measured warm-container headroom for the admitted population (initial proof target: five). No customer records yet. |
 | H03 | Managed identity and central-login handoff. Admin MFA, exact invited-identity assignment, host-only app sessions, revocation, logout and simultaneous-device access with existing revision/draft fences. Own identity/session/invitation/revocation schema delivery and validation against H01. | Cross-origin/workspace/role denial; no identity-token URL leak; single-use handoff replay fails; stale saves preserve input. Local launch still works without cloud login. Pass the schema acceptance contract below. |
 | H04 | Admin-lite and Free usage. Add/list/detail operator UI, default empty/optional synthetic portfolio, pinned Free 50 MB allowance, operation identities/status and supported manual provisioning completion/retry. Operator Settings shows Free pilot, usage/freshness and support; hide unavailable upgrades. Own Admin-lite provisioning/status, operation-result and Free usage/allocation schema delivery. | Pending → Ready/claim → Active only after source checks; no business access during setup/failure. Retried/unknown results do not duplicate resources. Safe growth rejection, retained reads/export/cleanup and physical headroom. Pass the schema acceptance contract below. |
-| H05 | Nightly verified off-host recovery. Consistent SQLite/files capture, encrypted key custody/catalog, seven nightly points, stale-backup alerts, control-plane recovery and Admin-run separate-destination restore. Automate nightly capture; recovery may be supervised. Own recovery-point/manifest/catalog and restore-operation schema delivery. | Rehearsed data/files and host-loss/control restore, corrupt/missing-object rejection, new fences/session revocation, retained pre-restore state. Completed recoverable-point age drives health, not job start time. Pass the schema acceptance contract below. |
-| H06 | Pilot 0 release and operations. Admit only five genuine invited Free operators. One announced maintenance window, supported manual provisioning/recovery/exception handling, named support owner and cost/time worksheet. | H01–H05 proofs retained; before-credit spend and Admin time observable; backup alerts and restore runbook usable. No Stripe, paid plan controls, individual update scheduling or idle/wake automation. Observe four-week recurring-use evidence before deciding to expand investment. |
+| H05 | Nightly verified off-host recovery. Consistent SQLite/files capture, encrypted key custody/catalog, seven nightly points, stale-backup alerts, separate Admin recovery DB/schema with its own backup checkpoints/operations/audit and main-Admin-DB-independent authentication, plus internal operator-authorized restore, recovery-mode UI with strong step-up and no offline workspace restore/decrypt command. Keep catalog/checkpoints/restore operations in private recovery storage outside business data; Admin observes async summaries, without approval or routine dispatch. Include recent-auth preview/confirmation, safe locator switch and interruption handling. Own recovery-point/manifest/catalog and restore-operation schema delivery. | Rehearsed data/files and host-loss/control restore including damaged main Admin DB, damaged Admin recovery DB and retained restore evidence; reject cross-store FKs/old-session authority and corrupt/missing objects, new fences/session revocation, retained pre-restore state, cross-operator denial, duplicate/conflicting restore handling and verified operator authorization; Admin outage independence, corrupt business-DB startup, crash mid-switch and denial when identity/runtime cannot be established; clean-runtime repair preserves IDs/data and requires operator-authorized restore into separate staging, never empty reinitialization. Security review/negative tests gate restore availability. Verified point/commit coverage drives health, not job start time; proven unchanged state is shown separately from an unknown/stale source. Pass the schema acceptance contract below. |
+| H06 | Pilot 0 release and operations. Admit genuine invited Free operators within qualified capacity; five is the initial test target, not a cap. One announced maintenance window, supported manual provisioning/recovery/exception handling, named support owner and cost/time worksheet. | H01–H05 proofs retained; before-credit spend and Admin time observable; backup alerts and restore runbook usable. No Stripe, paid plan controls, individual update scheduling or idle/wake automation. Observe four-week recurring-use evidence before deciding to expand investment. |
 | H07 | Automated provisioning and control reconciliation. Durable jobs/reservations, typed restricted agent, verified source receipts, deduplicated invites and automatic claim/readiness activation; Admin retry/reconciliation UI. Own durable job/claim, reservation, effect-receipt and reconciliation schema additions. | Interrupted effects, duplicate clicks, stale workers and later disable preserve ownership and one outcome. No second manual Admin completion required on normal onboarding; no network/host operation under a DB writer lock. Pass the schema acceptance contract below. |
 | H08 | Full tier enforcement and paid recovery readiness. 50 MB/200 MB/1 GB logical usage, application reservations plus qualified kernel ceilings, downgrade overage handling, paid recovery cadence/retention, both-portal usage/health views. Use test entitlements until billing qualifies. Own tier-policy/allocation, usage/reservation, overage and paid-retention schema additions. | Reconcile metering/physical attribution; safe commit rollback and retained over-quota data; reserved operational headroom; verified 15-minute recent-point objective, 24-hour fine-grained and 30/90-day daily history. Do not sell unproven protection. Pass the schema acceptance contract below. |
 | H09 | Stripe operator subscriptions and Settings change/cancel UI. Checkout, verified inbox/provider reconciliation, desired/effective plan, prorated upgrades/capacity, compensation, scheduled downgrade/cancel and renewal grace. Own provider inbox, subscription projection, effective-entitlement and compensation-operation schema additions. | Sandbox duplicate/out-of-order events, lost browser return, delayed/failed payment, unapplied paid benefits and grace end all reconcile safely. No initial paid benefits without confirmed payment. Real charging requires explicit release approval and published qualified prices. Pass the schema acceptance contract below. |
-| H10 | Independent release operations. Admin qualified release/canary/bounded rollout, operator suggested window/time zone/deferral and notices, drain across devices, compatible image/schema checks, safe pre-upgrade recovery. Own release compatibility, update preference/schedule and rollout-operation schema additions. | Failed canary halts rollout; unfinished input survives; admitted work drains; no second writer; automatic data rollback only before post-reopen writes. Pass the schema acceptance contract below. |
+| H10 | Independent Admin and per-operator release operations; define future Tenant/Owner release contracts. Admin qualified release/canary/bounded rollout, operator suggested window/time zone/deferral and notices, drain across devices, compatible image/schema checks, safe pre-upgrade recovery. Own release compatibility, update preference/schedule and rollout-operation schema additions. | Qualify old/new component and API/schema combinations; one component update leaves other compatible assignments unchanged. Failed canary halts its rollout; unfinished input survives; admitted work drains; no second writer; automatic data rollback only before post-reopen writes. Pass the schema acceptance contract below. |
 | H11 | Free idle suspension/wake. All-device human activity, owned-work gates, gateway deduplicated wake, safe waking/error UI and independent due-work scheduling. Own runtime desired/observed state, wake-operation and bounded activity-state schema additions where durable state is required. | Polling never keeps a workspace alive; no suspended admitted work; wake/reboot storms bounded; no automatic write replay. Measure cold/warm latency; paid stays warm initially. Pass the schema acceptance contract below. |
-| H12 | Paid pilot and capacity qualification. Real-use/operator support evidence, complete monitoring/runbooks, measured admission/spending envelopes and staged growth toward 100. | Approve real charges separately; verify five genuine invitees/three weekly users for four weeks and at least one informed paid subscriber. Test approximately 20 active of 100 plus bursts, warm mix, restore and costs; do not claim unmeasured capacity. |
+| H12 | Paid pilot and capacity qualification. Real-use/operator support evidence, complete monitoring/runbooks, measured admission/spending envelopes and staged growth toward 100. | Approve real charges separately; verify at least five genuine invitees/three weekly users for four weeks and at least one informed paid subscriber. Test approximately 20 active of 100 plus bursts, warm mix, restore and costs; do not claim unmeasured capacity. |
 
 #### Schema ownership and acceptance contract
+
+The [database schema master](../../DATABASE_SCHEMA.md) is the single dictionary for
+store ownership, tables/columns, relationships, initialization and schema acceptance.
+[H01 detailed design](HOSTED_MVP_H01_DESIGN.md) defines the corresponding use cases,
+source inventory, typed contracts, UI handoff and proof plans. Both are design, not
+implemented schema resources. Keep later feature additions in the master rather than
+duplicating column lists in individual slices.
 
 H01 owns the logical schema design and store boundaries needed for Pilot 0, not
 implementation of all future tables. H03–H05 implement and refine their parts of
@@ -592,9 +869,10 @@ new domain tables merely for qualification.
 | Store/boundary | H01 Pilot 0 design | Later owning additions |
 | --- | --- | --- |
 | Admin/control registry | Stable operator/workspace/slug assignment, pinned Free allowance, readiness/provisioning status, operation identity/result and operational audit; H03/H04 implement their records. | H07 automation jobs/claims/reservations/effect references; H09 subscription desired state/provider references; H10 releases, schedules and rollout operations; H11 runtime lifecycle operations. |
+| Admin recovery store | Separate admin_recovery_meta, control backup checkpoint, control_recovery_operations, control_recovery_points, control_restore_operations and control_recovery_audit; H05 owns persistence/authenticated recovery mode while main Admin data is replaced. | H10 release/schema compatibility must include this store. Off-host manifests/bootstrap reconstruct a lost catalog with previous jobs inert. |
 | Protected inventory | Registered host/container/directory identities and resource ownership/limits; specify whether each fact is persisted in an owning store or generated as protected configuration. H02 initializes verified bindings; H04 records provisioning results. | H07 reconciliation observations; H08 physical allocation changes; H10/H11 verified release/runtime effects. No second editable registry in config files. |
 | Per-operator hosted-access/control | Effective account/identity assignment, invitation/session/revocation facts, source fences and bounded Free storage admission/operation receipts; H03/H04 deliver them. | H08 metering/reservations/overage; H09 effective subscription capability; H10/H11 applicable execution/runtime fences. Operator processes never open the Admin DB. |
-| Recovery catalog | Verified point identity, source/schema/release pins, manifests/object/key references, expiry, verification and restore-operation state; H05 delivers owning persistence. | H08 paid retention/thinning metadata; H10 pre-upgrade recovery links. A catalog may use qualified immutable manifests rather than a new SQL table for every fact; H01 identifies the authority and atomic publication rule. |
+| Per-operator recovery store | Private recovery_meta, checkpoint, operation/audit, recovery_points and restore_operations outside business data; H05 implements internal normal/authenticated recovery modes; no offline operator restore/decrypt entry point. Admin owns only summary projection and separate platform/control recovery. | H08 paid cadence/retention qualification; H10 pre-upgrade point links. Immutable manifests permit explicit catalog reconstruction without a central workspace catalog. |
 | Operator business workspace | Existing owning module tables remain domain authority; identify any required interface/schema changes explicitly. Keep live hosted credentials/session authority outside portable business records. | Portal/Finance/Payments changes belong to their functional backlogs, not HOSTED-001. Do not add billing or session tables to the business baseline. |
 
 For each persisted record, the owning slice must deliver:
@@ -606,8 +884,10 @@ For each persisted record, the owning slice must deliver:
   not unsupported cross-database foreign keys or atomic-commit claims.
 - One authoritative schema definition and reproducible initialization/version check
   per store, following the business workspace's versioned Alembic/resource pattern
-  where SQLite is used. Separate Admin and hosted-access schema resources from the
-  business baseline; do not define competing ad hoc runtime DDL. Document exact
+  where SQLite is used. Keep every executable definition under `application/database/`, with separate main Admin, Admin recovery,
+  host-inventory, hosted-access and per-operator recovery resource sets alongside the business baseline.
+  Runtime modules consume/validate these resources; no inline DDL, ORM `create_all`
+  or alternate startup schema definitions. Document exact
   resource/code paths as they are implemented and package them with the release.
 - Initial population ownership/order, transaction boundaries, revisions/fences,
   operation keys/semantic hashes and safe retries. Free policy/assignment must exist
@@ -640,15 +920,15 @@ cases as not applicable to Pilot 0 rather than claiming they passed.
 
 | Area | Required evidence |
 | --- | --- |
-| Happy paths | Admin creates/claims a Free workspace; independent devices work; paid checkout applies verified benefits; both portals agree on usage/status; scheduling/wake and restore succeed. |
-| Invalid combinations | Wrong host/identity, unknown/reserved slug, unready workspace, invalid tier, over-budget capacity, unsafe mount/path, invalid image/schema and forged billing/invitation/handoff are rejected. |
+| Happy paths | Admit an additional Pilot 0 operator (including a sixth) when qualified capacity permits; Admin creates/claims a Free workspace; independent devices work; paid checkout applies verified benefits; both portals agree on usage/status; scheduling/wake and restore succeed. |
+| Invalid combinations | Excess/unknown capacity held for review and concurrent admissions cannot double-spend commitments. Wrong host/identity, unknown/reserved slug, unready workspace, invalid tier, over-budget capacity, unsafe mount/path, invalid image/schema and forged billing/invitation/handoff are rejected. |
 | Idempotency/retry | Lost responses, duplicate clicks/events, out-of-order subscription updates, invitation resend, interrupted Docker/config publication and worker restart preserve one operation/effect. Changed input under the same key conflicts. |
 | Transactions and failure | Business/audit/receipt rollback, quota failure during commit, staged-file cleanup, unknown external effects, stale worker leases, later disable, schema-failure rollback and post-reopen write preservation. |
 | Persistence/schema | Current exact store schemas, separate authority, proper SQLite/WAL capture, one writer, committed runtime policy, supported image/schema combinations and no portable-backup credentials. |
-| Backup/restore | Database plus files, incremental chain/key availability, promised retention, actual off-host-point age, corrupted/missing objects, separate control recovery, host loss and no revival of historical sessions/grants. |
+| Backup/restore | Internal backup/restore independent of Admin availability; damaged-business-DB authenticated recovery mode; unavailable/auth-damaged runtime fails closed with no offline restore/decrypt bypass; checkpoint reconciliation after commit-before-crash and file-only changes; interrupted locator switch and no second writer. Database plus files, incremental chain/key availability, promised retention, actual off-host-point age, corrupted/missing objects, separate Admin recovery DB/catalog and current recovery-authority bootstrap, loss of main Admin without losing recovery state, loss of recovery store/whole host and no revival of historical sessions/grants. |
 | Authentication/isolation | Cross-subdomain login/CSRF/replay/open-redirect tests; host-only cookies; another operator's API/cache/file denial; container/host-agent authority and direct-origin access denial; MFA-protected Admin. |
 | Billing/storage | Payment-before-apply, capacity reservation expiry, confirmed versus unknown delivery/refund, grace/end-of-period changes, over-quota retention, request versus account limits, physical ceilings and no silent deletion. |
-| Multi-device/updates | Stale edits/takeover, visible/hidden tabs, refresh failure with stale values, scheduled/inactive upgrades, unfinished forms, active uploads and no automatic replay after interruption. |
+| Multi-device/updates | Independent Admin/Operator/Tenant/Owner version assignments, compatible old/new portal-to-runtime combinations, incompatible pairing rejection and component-only rollback without business-data rollback; stale edits/takeover, visible/hidden tabs, refresh failure with stale values, scheduled/inactive upgrades, unfinished forms, active uploads and no automatic replay after interruption. |
 | Query budget/performance | Bounded set-based Admin projections without per-row workspace/provider calls; bounded polling/reconciliation; headroom under admitted workload, sleeping/warm mix and simultaneous wake-up pressure. |
 | UX/accessibility | Clear Pending/Applied/Failed/Unknown/degraded states, retained input/focus/scroll, both themes, keyboard/narrow views, comprehensible quota/billing/update/recovery messages. |
 | Operational economics | Before-credit spend at launch and growth; realistic backup bytes/traffic; actionable external alerts, restart/boot behavior, operator/control recovery drill and a documented response when capacity/cost exceeds assumptions. |

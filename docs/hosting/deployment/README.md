@@ -1,6 +1,6 @@
 # Hosting deployment
 
-**First release: [Pilot 0 / H06](../design/HOSTED_MVP_DESIGN.md#pilot-0--five-invited-free-operators).** Five invited Free operators, Admin-lite/manual supported operations, nightly verified backups and rehearsed restore, always-running containers and one announced maintenance window. No Stripe, idle-wake or independent update scheduling. Later-stage requirements below apply when those features are admitted; they are not all Pilot 0 gates. No new executable deployment or passed proof is implied.
+**First release: [Pilot 0 / H06](../design/HOSTED_MVP_DESIGN.md#pilot-0--capacity-qualified-free-operators).** Invited Free operators within qualified capacity, Admin-lite/manual supported operations, nightly verified backups and rehearsed restore, always-running containers and one announced maintenance window. No Stripe, idle-wake or independent update scheduling. Later-stage requirements below apply when those features are admitted; they are not all Pilot 0 gates. No new executable deployment or passed proof is implied.
 
 The fresh target is specified in the
 [Hosted MVP design](../design/HOSTED_MVP_DESIGN.md#3-architecture-and-trust-boundaries).

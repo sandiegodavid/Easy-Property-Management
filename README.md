@@ -8,9 +8,11 @@ Delivered workflows cover portfolio and people, leases and inspections, maintena
 
 The [backlog](docs/FEATURE_BACKLOG.md#now--hosted-mvp-then-tenant-and-owner-portals) schedules HOSTED-001, followed by tenant PORTAL-001 and owner PORTAL-002. Start [hosted slice H01](docs/hosting/design/HOSTED_MVP_DESIGN.md#implementation-slices). These are planned capabilities, not deployed services.
 
-The first release milestone is **Pilot 0 at H06**: five invited operators, Free 50 MB workspaces, Admin-lite provisioning, nightly verified off-host backups and rehearsed restore. Keep containers running, use one announced maintenance window, and record manual operational time and gross cost. No Stripe, idle-wake automation or per-operator update scheduling in this pilot.
+The first release milestone is **Pilot 0 at H06**: invited operators within qualified capacity, Free 50 MB workspaces, Admin-lite provisioning, nightly verified off-host backups and rehearsed restore. Keep containers running, use one announced maintenance window, and record manual operational time and gross cost. No Stripe, idle-wake automation or per-operator update scheduling in this pilot.
 
 Later slices deliver automated provisioning, the provisional 50 MB / 200 MB / 1 GB freemium catalog, paid recovery, Stripe operator subscriptions and independent updates. Tenant/owner portals then add scoped rent, late-fee explanations, lease terms and payments; tenants report issues, and owners report concerns and view reports. [Portal delivery](docs/active/PORTALS_IMPLEMENTATION_PLAN.md) includes shared FIN-009 late-fee work and reuses PAY-001/002 for payment execution. Local single-operator use stays free and requires no hosted account or synchronization.
+
+All four portals support local development. In production, Admin/Tenant/Owner are hosted-only; Operator supports both hosted and local use. Local development support does not make unimplemented portals available to customers. See the [deployment matrix](docs/hosting/design/HOSTED_MVP_DESIGN.md#development-and-production-deployment-boundary).
 
 ## Start here
 

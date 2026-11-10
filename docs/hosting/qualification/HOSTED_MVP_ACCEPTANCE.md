@@ -22,8 +22,8 @@ native and deployed/end-user checks. A skipped test is not a passing gate.
 
 | Stage | Required evidence | Status |
 | --- | --- | --- |
-| H01–H05 preparation | Private container/storage and identity proofs; Admin-lite safe provisioning/claim/retry; Free 50 MB admission/usage; nightly verified off-host database/files and control recovery; rehearsed restore; five warm-container capacity. | Not established |
-| H06 — Pilot 0 | Only five invited Free operators; one announced maintenance window with safe drain/recovery; named support and manual-operation runbook; recorded gross spend/Admin minutes; monitored backup-point age. No Stripe, paid enrollment, idle-wake or individual scheduling. | Not established |
+| H01–H05 preparation | Private container/storage and identity proofs; Admin-lite safe provisioning/claim/retry; Free 50 MB admission/usage; nightly verified off-host database/files and control recovery; rehearsed restore; warm-container capacity for the admitted population (initial proof target: five). | Not established |
+| H06 — Pilot 0 | Invited Free operators within qualified capacity; prove a sixth operator can be admitted when capacity permits, concurrent admissions cannot reuse headroom, and insufficient/unknown capacity stays pending; one announced maintenance window with safe drain/recovery; named support and manual-operation runbook; recorded gross spend/Admin minutes; monitored backup-point age. No Stripe, paid enrollment, idle-wake or individual scheduling. | Not established |
 | H07–H12 — Full hosted target | Automatic onboarding, paid quota/recovery/billing, independent release scheduling, idle-wake, paid pilot and measured expansion. Apply the detailed gates below to each admitted capability. | Not established |
 | Portal follow-up | PORTAL-001/002, FIN-009 and PAY-001/002 source/privacy/payment/browser gates; not hosting completion or Pilot 0 scope. | Not established |
 
@@ -40,7 +40,7 @@ Pilot 0 proof cannot qualify a later automated effect without its own tests.
 | Gateway and identity | Registered flat subdomains, unknown-host denial, central Google/email callback, secure one-use handoff, host-only sessions and MFA-protected separate Admin. | Not established |
 | Small-host capacity/cost | Empty/representative data, background jobs, paid warm residency and Free wake measured; gross launch budget $250/month before credits, no unsupported admission. | Not established |
 | Admin onboarding | Add operator admits one durable job; readiness/verified backup precedes invitation; exact identity claim activates automatically; failures stay safely pending. | Not established |
-| Free recovery | Consistent database/file capture, nightly/seven-point policy, unattended keys, degraded-status alerts and successful separate-destination restore. | Not established |
+| Free recovery | Consistent database/file capture, nightly/seven-point policy, unattended keys, degraded-status alerts and successful operator-authorized separate-destination restore without Admin approval; preview/recent-auth, safe fencing/validation, scoped status and optional manual executor attribution. | Not established |
 | Control recovery | Off-host registry/ownership/configuration/release/billing references and recoverable keys; recovery works without hosted Admin and cannot revive sessions/stale grants. | Not established |
 | Metering/enforcement | Reproducible logical allowance, protected physical byte/inode limits, bounded reserves, quota/commit failure handling and safe over-allowance reads/cleanup. | Not established |
 | Paid recovery | Actual completed off-host-point age meets recent 15-minute objective; fine-grained 24 hours then daily 30/90-day history, valid incremental chains and measured retained bytes/traffic. | Not established |
@@ -49,7 +49,7 @@ Pilot 0 proof cannot qualify a later automated effect without its own tests.
 | Idle/multi-device behavior | Activity across devices, no polling-induced residency, independent backup jobs, deduplicated wake, stale-edit/takeover handling and no automatic command replay. | Not established |
 | Independent releases | Immutable approved canary/batches, operator schedule/default/time zone, activity/drain, schema checks, compatibility and recovery without erasing post-reopen writes. | Not established |
 | Operational handover | Executable installation/runbooks, scoped credentials, alerts/mail, incidents, deliberate retirement and support-access audit; restore-time objective measured without claiming a contractual SLA. | Not established |
-| Pilot demand | Pilot 0: five genuine invitees and three recurring weekly users for four weeks; later paid pilot: one informed paid subscriber; no unresolved critical isolation/data-loss defect. | No pilot evidence recorded here |
+| Pilot demand | Pilot 0: at least five genuine invitees and three recurring weekly users for four weeks; later paid pilot: one informed paid subscriber; no unresolved critical isolation/data-loss defect. | No pilot evidence recorded here |
 | Growth toward 100 | Measured paid/free/warm mix, approximately 20 active plus bursts/multi-device wake, safe commitments and $300/month gross target before credits. No hidden concurrency entitlement limit. | Not established; expand only as demand justifies |
 
 The [design validation matrix](../design/HOSTED_MVP_DESIGN.md#required-validation-matrix)

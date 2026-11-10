@@ -2,8 +2,24 @@
 
 Status: planned for implementation after HOSTED-001; not delivered. This plan expands
 PORTAL-001/002 in the [backlog](../FEATURE_BACKLOG.md). It does not add either portal
-to the five-operator Free-only Pilot 0. Use the [hosted foundation](../hosting/design/HOSTED_MVP_DESIGN.md),
+to the capacity-qualified Free-only Pilot 0. Use the [hosted foundation](../hosting/design/HOSTED_MVP_DESIGN.md),
 [current module ownership](../ARCHITECTURE.md) and [payment design](PAY-001_DESIGN.md).
+
+## Development and deployment
+
+Tenant and Owner portals must run locally for development/testing, while their customer-facing production deployment is hosted-only. Admin has the same boundary; Operator supports both hosted and single-operator local production. See the [deployment matrix](../hosting/design/HOSTED_MVP_DESIGN.md#development-and-production-deployment-boundary). Include isolated synthetic fixtures, local launch configuration and role/origin tests in each portal's detailed design before implementation. Development-only test adapters cannot authorize production access or real transfers. The production local application must not register tenant/owner APIs or expose these portals. This does not change paid-hosted entitlements or include portals in Pilot 0.
+
+## Independent portal releases
+
+Tenant and Owner have separate versioned artifacts and deployment assignments, independent
+of Admin and per-workspace Operator runtime releases. Their detailed designs must include
+standalone build/package/serve contracts, required API/auth/schema compatibility, canary
+and rollback/status handling. Reuse existing UI packages at build time without requiring
+all portals to ship the same version. Validate each portal against all admitted source
+versions it may reach; new shared backend capability needs an explicit compatible source
+upgrade, not another workspace writer. Asset-only rollback never restores business data.
+Active forms/payment attempts retain original identities across asset refresh; a refresh
+must not initiate another transfer. This remains future portal delivery, not Pilot 0.
 
 ## Shared experience and authority
 

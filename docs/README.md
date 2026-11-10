@@ -10,7 +10,7 @@ Read these in order for the whole project. Core UI-001 and DASH-001 Home deliver
 2. [Product brief](PRODUCT_BRIEF.md): intended users, operating vocabulary and product scope.
 3. [Architecture](ARCHITECTURE.md): current module/data boundaries and composition.
 4. [Current modules](#current-modules): implementation guides and code/test entry points.
-5. [Hosted implementation slices](hosting/design/HOSTED_MVP_DESIGN.md#implementation-slices): HOSTED-001 H01–H12, with five-operator Free Pilot 0 at H06.
+5. [Hosted implementation slices](hosting/design/HOSTED_MVP_DESIGN.md#implementation-slices): HOSTED-001 H01–H12, with capacity-qualified Free Pilot 0 at H06.
 6. [Portal plan](active/PORTALS_IMPLEMENTATION_PLAN.md) and [backlog](FEATURE_BACKLOG.md): tenant/owner follow-up, FIN-009 late fees and PAY-001/002 payment ownership.
 7. [Active work](active/README.md): other remaining delivery and proposed changes.
 
@@ -38,6 +38,8 @@ For a specific change, read its owning module, relevant shared platform contract
 | Browser interface | [Operator experience](ui/operator-experience.md), [Frontend architecture](ui/frontend-architecture.md) | [Workflows](ui/workflows.md), [validation](ui/validation.md), state and dispatch |
 
 ## Shared contracts
+
+- [Database schema master](DATABASE_SCHEMA.md): current business-schema ownership and proposed Pilot 0 Admin, host inventory and per-operator access tables; later-slice schema additions stay here.
 
 - [Persistence, transactions and validation](platform/persistence.md).
 - [API errors, reads and original-result recovery](platform/api-contracts.md).

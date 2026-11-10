@@ -30,7 +30,7 @@ future entitlement is decided. Their updated scope and dependencies are recorded
 
 ## First release: Pilot 0
 
-[HOSTED-001 H01–H12](design/HOSTED_MVP_DESIGN.md#implementation-slices) is now the immediate implementation plan. H06 releases Pilot 0 to five invited Free operators with Admin-lite provisioning, Free 50 MB usage safeguards, nightly verified off-host backups and rehearsed restore. Keep all containers running and use one announced maintenance window. No Stripe, paid enrollment, idle-wake or per-operator update scheduling. Manual completion/recovery/exception handling uses supported tools and records ownership, outcomes, Admin time and before-credit spend.
+[HOSTED-001 H01–H12](design/HOSTED_MVP_DESIGN.md#implementation-slices) is now the immediate implementation plan. H06 releases Pilot 0 to invited Free operators within qualified capacity with Admin-lite provisioning, Free 50 MB usage safeguards, nightly verified off-host backups and rehearsed restore. Keep all containers running and use one announced maintenance window. No Stripe, paid enrollment, idle-wake or per-operator update scheduling. Manual completion/recovery/exception handling uses supported tools and records ownership, outcomes, Admin time and before-credit spend.
 
 The full platform and catalog below describe subsequent H07–H12 targets. Pilot 0 must satisfy isolation, identity, safe retries, storage and recovery gates, but does not wait for those later automations. PORTAL-001/002 follow hosting and include rent/late fees/terms/payments, tenant issues and owner concerns/reports with shared source ownership.
 
@@ -99,8 +99,9 @@ not the cost of an otherwise running VM. Record actual gross unit economics.
   keys, using qualified consistent database/file capture and incremental retention.
   Alert on completed off-host-point age, not just job execution. Degraded protection
   remains visible while the workspace stays usable.
-- Admin confirms point-in-time restore through an automated, validated separate
-  destination/switchover workflow. Restore control-plane mappings and recovery
+- Operator selects and authorizes own-workspace restore with recent authentication
+  and confirmation, without Admin approval. Safety gates validate a separate
+  destination/switchover; Pilot 0 may use supported manual Admin execution. Restore control-plane mappings and recovery
   capability separately from business archives; never restore usable sessions or
   execute stale pending grants.
 - Admin approves immutable qualified releases once. Operators accept a suggested
@@ -120,7 +121,7 @@ The [MVP acceptance register](qualification/HOSTED_MVP_ACCEPTANCE.md) tracks the
 fresh target. Older demo qualification cannot qualify the new authentication,
 Docker, subscription, unattended recovery or quota boundaries.
 
-Pilot success: five genuine invitees, at least three doing recurring work weekly
+Pilot success: at least five genuine invitees, at least three doing recurring work weekly
 for four consecutive weeks, at least one informed paid subscriber after paid launch, and no unresolved
 critical isolation/data-loss defect. Track support effort and gross cost alongside
 adoption. Validate interest before credits expire; pivot or redesign based on results.
