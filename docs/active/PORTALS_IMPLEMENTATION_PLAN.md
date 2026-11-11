@@ -7,7 +7,7 @@ to the capacity-qualified Free-only Pilot 0. Use the [hosted foundation](../host
 
 ## Development and deployment
 
-Tenant and Owner portals must run locally for development/testing, while their customer-facing production deployment is hosted-only. Admin has the same boundary; Operator supports both hosted and single-operator local production. See the [deployment matrix](../hosting/design/HOSTED_MVP_DESIGN.md#development-and-production-deployment-boundary). Include isolated synthetic fixtures, local launch configuration and role/origin tests in each portal's detailed design before implementation. Development-only test adapters cannot authorize production access or real transfers. The production local application must not register tenant/owner APIs or expose these portals. This does not change paid-hosted entitlements or include portals in Pilot 0.
+Tenant and Owner portals must run locally for development/testing, while their customer-facing production deployment is hosted-only. Admin has the same boundary; Operator supports both hosted and single-operator local production. See the [deployment matrix](../hosting/design/mvp/scope.md#development-and-production-deployment-boundary). Include isolated synthetic fixtures, local launch configuration and role/origin tests in each portal's detailed design before implementation. Development-only test adapters cannot authorize production access or real transfers. The production local application must not register tenant/owner APIs or expose these portals. This does not change paid-hosted entitlements or include portals in Pilot 0.
 
 ## Independent portal releases
 

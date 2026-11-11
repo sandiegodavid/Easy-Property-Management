@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "proof": "recovery",
+  "owner": "H05",
+  "contributors": [
+    "H02",
+    "H03"
+  ],
+  "revision": 1,
+  "levels": [
+    "component",
+    "docker_linux",
+    "gcp",
+    "deployed_browser"
+  ],
+  "required_pins": [
+    "source",
+    "tool",
+    "image",
+    "schema",
+    "workload",
+    "configuration"
+  ],
+  "cases": [
+    "consistent_scheduled_capture",
+    "unchanged_file_only_checkpoints",
+    "source_commit_crash",
+    "encrypt_key_custody_readback",
+    "seven_points_incremental_retention",
+    "corrupt_missing_object_key",
+    "admin_outage_independence",
+    "corrupt_business_recovery_mode",
+    "clean_runtime_repair",
+    "operator_step_up_exact_confirmation",
+    "cross_workspace_replay_path_key_denial",
+    "crash_safe_locator_switch",
+    "forensic_prior_tree",
+    "separate_admin_recovery_loss",
+    "whole_host_control_loss",
+    "no_offline_workspace_bypass",
+    "point_age_duration_traffic"
+  ]
+}

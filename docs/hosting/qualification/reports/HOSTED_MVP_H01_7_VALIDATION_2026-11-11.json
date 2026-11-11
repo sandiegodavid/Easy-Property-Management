@@ -1,0 +1,531 @@
+{
+  "scope": "H01 contract/scaffold validation only; not native/cloud/provider/browser acceptance",
+  "recorded_date": "2026-11-11",
+  "branch": "hosted_mvp",
+  "implementation_start_commit": "f9d3707b966f664fe8037b5f1b557f72f74245ed",
+  "validation_start_commit": "46462673cb92df7bdc2e58e4b56d715ce381eadc",
+  "working_tree_at_task_start": "clean",
+  "environment": {
+    "system": "Darwin",
+    "release": "27.0.0",
+    "architecture": "arm64",
+    "python": "3.14.8",
+    "packages": {
+      "pytest": "8.4.2",
+      "pydantic": "2.14.0",
+      "SQLAlchemy": "2.1.4",
+      "alembic": "1.20.0"
+    },
+    "ruff": "ruff 0.16.10"
+  },
+  "python_files_relative_to_application": [
+    "apps/server/app/bootstrap/hosted_ui_contracts.py",
+    "apps/server/app/modules/host_agent/__init__.py",
+    "apps/server/app/modules/host_agent/application/__init__.py",
+    "apps/server/app/modules/host_agent/application/contracts.py",
+    "apps/server/app/modules/hosted_access/application/login_contracts.py",
+    "apps/server/app/modules/hosted_access/application/source_contracts.py",
+    "apps/server/app/modules/hosted_access/application/ui_contracts.py",
+    "apps/server/app/modules/hosted_admin/application/__init__.py",
+    "apps/server/app/modules/hosted_admin/application/pilot_contracts.py",
+    "apps/server/app/modules/hosted_admin/application/recovery_contracts.py",
+    "apps/server/app/modules/hosted_admin/application/ui_contracts.py",
+    "apps/server/app/modules/workspace/application/recovery_contracts.py",
+    "apps/server/app/platform/hosted_contracts/__init__.py",
+    "apps/server/app/platform/hosted_contracts/authority.py",
+    "apps/server/app/platform/hosted_contracts/compatibility.py",
+    "apps/server/app/platform/hosted_contracts/operations.py",
+    "apps/server/app/platform/hosted_contracts/reads.py",
+    "apps/server/app/platform/hosted_contracts/semantic.py",
+    "apps/server/app/platform/hosted_contracts/ui_states.py",
+    "apps/server/app/platform/hosted_contracts/values.py",
+    "apps/server/app/platform/hosted_proofs/__init__.py",
+    "apps/server/app/platform/hosted_proofs/__main__.py",
+    "apps/server/app/platform/hosted_proofs/cli.py",
+    "apps/server/app/platform/hosted_proofs/models.py",
+    "apps/server/app/platform/schema_resources.py",
+    "apps/server/app/platform/tests/test_hosted_contracts.py",
+    "apps/server/app/platform/tests/test_hosted_ports.py",
+    "apps/server/app/platform/tests/test_hosted_proofs.py",
+    "apps/server/app/platform/tests/test_hosted_ui_contracts.py",
+    "apps/server/app/platform/tests/test_schema_resources.py",
+    "database/admin-migrations/env.py",
+    "database/admin-recovery-migrations/env.py",
+    "database/host-inventory-migrations/env.py",
+    "database/hosted-access-migrations/env.py",
+    "database/recovery-migrations/env.py"
+  ],
+  "input_pins": [
+    {
+      "path": "application/apps/server/app/bootstrap/hosted_ui_contracts.py",
+      "sha256": "7400e85dfb9069b435fccdcd32647eb180420504bd0e0531af717bf56a17e738",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/apps/server/app/modules/host_agent/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/apps/server/app/modules/host_agent/application/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/apps/server/app/modules/host_agent/application/contracts.py",
+      "sha256": "2a2b9738a5e749c92b6e08fcc30b133c88126dcedf1e20deb0a69bf2c304a5de",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/application/login_contracts.py",
+      "sha256": "b3d2efd33ea8e1ef2fdf9a311af02834e2586c2541c9d69868a5e0b16f068f2d",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/application/source_contracts.py",
+      "sha256": "d99a31e74eac9b74de4d9f9face14e417eff086e87c2cced67713516fce86200",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/application/ui_contracts.py",
+      "sha256": "fefb9fcd804b7714a42a7a6a23a58c5dea3bc385edc655b9a075026e71dd95cc",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_admin/application/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_admin/application/pilot_contracts.py",
+      "sha256": "aa20bd2ed1f07e46e888c54f60121a4f87dd9a437927ccf883ac4a10139e12b7",
+      "matches_validation_start_commit": false
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_admin/application/recovery_contracts.py",
+      "sha256": "1c04ab8e12788dcf9d2244bb046ad8267f5bc66c9ed1be36123abd667e38d58e",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_admin/application/ui_contracts.py",
+      "sha256": "e5202f48b699bdd3f7d34df05664551a2fbe50525a1bc0f107fbeccd36ed3183",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/apps/server/app/modules/workspace/application/recovery_contracts.py",
+      "sha256": "6a58d23eccfb6c00aa0f77727955cd89d755870610f121fd51d1ef11c0341786",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/apps/server/app/platform/hosted_contracts/__init__.py",
+      "sha256": "5291729e66d64223a2d800ab3c75a9819100569c22a2b494d8ca7a42229f12ab",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/apps/server/app/platform/hosted_contracts/authority.py",
+      "sha256": "315c29d5f5cfd5707b2e26386b556f2d17e56611305920187d74efce7bb39239",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/apps/server/app/platform/hosted_contracts/compatibility.py",
+      "sha256": "2e1dc2e525a3a8900ec9362ce14f655e2e921d12f8358c668d5542645afa6c57",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/apps/server/app/platform/hosted_contracts/operations.py",
+      "sha256": "579810675045e27dfa6015fefb8553d5d7dd1264c4743d227178d5cad92075c4",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/apps/server/app/platform/hosted_contracts/reads.py",
+      "sha256": "65ecaeae05a76b0252bf28af2d7e512b1b4dbb1556026892341d5a5f6137bc8a",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/apps/server/app/platform/hosted_contracts/semantic.py",
+      "sha256": "66355e1eeedaa1cc68fd70e209bf66b068e8a23edca5ea6732682d6838a56665",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/apps/server/app/platform/hosted_contracts/ui_states.py",
+      "sha256": "a251f375e2d72eb09a66d4702030bf55281199abcf186b1c5509e746c5be6b24",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/apps/server/app/platform/hosted_contracts/values.py",
+      "sha256": "408efe8dd0e243771921e93cc7234a925a02b4b545404cff3d85adddcb390989",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/apps/server/app/platform/hosted_proofs/__init__.py",
+      "sha256": "7930c4155cc5a0da5a08fc12afec0aa43cc9ba7b7ae3b5acecc360d6d4b7434e",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/apps/server/app/platform/hosted_proofs/__main__.py",
+      "sha256": "b364b861be549eaccefd4ca3f571d412b8417063af10c3e4ff7f2873f27ac2ac",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/apps/server/app/platform/hosted_proofs/cli.py",
+      "sha256": "d8a8b77cb9bebb858079d23e865c28c8d00b45a7e08753888629852645e7b330",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/apps/server/app/platform/hosted_proofs/models.py",
+      "sha256": "8d4bec796e5d4d102e9f539d647177fc16b239a3390ab0f531cfde09add7e256",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/apps/server/app/platform/schema_resources.py",
+      "sha256": "c2f570c0781c6c3ba378664c87e576f37acea793684145f6d4d492bfce48f258",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/apps/server/app/platform/tests/test_hosted_contracts.py",
+      "sha256": "c3dcf3fd479e72fb4e259378f53693a078b23df1937d77712d9041b9d5a725ab",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/apps/server/app/platform/tests/test_hosted_ports.py",
+      "sha256": "72929cc53ed904ae980b7dc7c63334fc7b1cfcb1513b2fe863d5f56df8d35aea",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/apps/server/app/platform/tests/test_hosted_proofs.py",
+      "sha256": "3cdc867265d9e2260f227b31c892001037909999e2f9d28f4c0909972c6aded9",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/apps/server/app/platform/tests/test_hosted_ui_contracts.py",
+      "sha256": "e7f93153e15de938edb5ace79d3a9a83adaa62bc7f4ad94b84717d1b0926934c",
+      "matches_validation_start_commit": false
+    },
+    {
+      "path": "application/apps/server/app/platform/tests/test_schema_resources.py",
+      "sha256": "fbb3f9450652723b29a7aeee12492a3ca675716293015cff4ea3311b53443c92",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/database/admin-migrations/alembic.ini",
+      "sha256": "0cbec4b3770d738bb92141908471b246d377d7d490c7a069dd9b7069ca61fa54",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/database/admin-migrations/env.py",
+      "sha256": "d9983d627943e6cad5ff35be2288c0fde905f3d3b2b06bb3fabe6b0230a1c10c",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/database/admin-recovery-migrations/alembic.ini",
+      "sha256": "4312a4f420ff445e78eaffd642ca3cdf6733c582602c2138f3b4689a34a41a2c",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/database/admin-recovery-migrations/env.py",
+      "sha256": "9912751895812d17e13e9e6e56cfbc8586bea1368a74e8c335815b97000d75af",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/database/host-inventory-migrations/alembic.ini",
+      "sha256": "777d70dd3ca09a16d404354522cc4de0c961030b4c1e9911cf93dec8854fbff7",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/database/host-inventory-migrations/env.py",
+      "sha256": "4220f92f5d19a250b3a1379514de85e6c0600afe802f1ef94d3f2b58dd8085fd",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/database/hosted-access-migrations/alembic.ini",
+      "sha256": "06d7abbf332a08a22df77f9b654f0b3bdcae13efea0f34d4b0554d1398990352",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/database/hosted-access-migrations/env.py",
+      "sha256": "b4ff0893777256627df3dfe7b6034667d786668ff439068c80044796498bfc5a",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/database/recovery-migrations/alembic.ini",
+      "sha256": "a4fef467c2050c78d58d32e079888ce4e79b80731fdd3fdacf09645ff3af74de",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "application/database/recovery-migrations/env.py",
+      "sha256": "c09d41e121408639a08846662b1b3e932d0f247a52b9c6f326ceb834ec008eca",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/DATABASE_SCHEMA.md",
+      "sha256": "2152886b4586ac3456570b09fff0acb4646334d9f5f00f53cfee014aaac7b077",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/database/admin-identity.md",
+      "sha256": "eb7c7f5b9a71cadaa1f508c7d24a37991094ece1a673eb6b67d592be78486660",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/database/admin-operations.md",
+      "sha256": "ac81fabe521d47a8f8cd0d49c04ef779a781024c37e7b22c9fbfc2abdf6eb6f8",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/database/admin-recovery.md",
+      "sha256": "28ba42ee2a5327fc6f60f55052ba51edc411a511db708be9a5724c2f253c88d8",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/database/admin-registry.md",
+      "sha256": "021051bab3f0d0bdc740a1b87af471362b35f04f61a42c54a5220710447612c5",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/database/host-inventory.md",
+      "sha256": "a8c7a073b8664b95941d646e207586a916920054072c3754f2c0a2e5b9e46b33",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/database/lifecycle-and-validation.md",
+      "sha256": "fe4d6b67609f159d42cfb93c9a653c21aac7df5b9fb42aa6c99ce46070d7be0a",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/database/operator-access.md",
+      "sha256": "a05f66ac0311ea608085a6bbb43976b23928eb864d75f89401ce0dba7118449e",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/database/operator-recovery.md",
+      "sha256": "90c880aa207dd9ffe0c88018abdcc2fba7c86c27a33adf67786fc5b1b8a1f13b",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/database/overview.md",
+      "sha256": "d3a79d1d4a3fc4154c87e1060895d3ca12d8c37e8b267249e546d4d303195e37",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/hosting/qualification/fixtures/ACTION_MAP.md",
+      "sha256": "c9fda1e8c201789299135c09b1ec50c283207e3c2e7d57da174a36a407e491c5",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/hosting/qualification/fixtures/H01_UI_CONTRACTS.json",
+      "sha256": "14ceb940f5532ff98123bbcd122fde33296c656a3ad4c87682f701ab5a34f330",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/hosting/qualification/fixtures/README.md",
+      "sha256": "917fede104bb9b3bc0ea4b9db3fe1a34d7b2af007f3b64c1f06b4a3c4346a915",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/hosting/qualification/specifications/PACKAGING_HANDOFF.md",
+      "sha256": "dd5f78607c9e1f50c58ee585d2b7be67f1f38855190ce397d5b5414eab737286",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/hosting/qualification/specifications/README.md",
+      "sha256": "c482543fe4d44b5facb00fd5fab339beb21686a2961478e60f9901653bb8b7bb",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/hosting/qualification/specifications/REPORT_FORMAT.md",
+      "sha256": "3a0f2ceb3548b91d92dbde29a0790d94ebefb57323663e98597eb14bc050ff43",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/hosting/qualification/specifications/identity_handoff.json",
+      "sha256": "d9663e52345b35a204f6f365f82054986e1b6824f5902b4e92de193e662c84fc",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/hosting/qualification/specifications/identity_handoff.md",
+      "sha256": "9115e629c9aa3dc76402f05cb848813a9a762679e3a8e88e488ca13c84a819d2",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/hosting/qualification/specifications/image_schema.json",
+      "sha256": "399c40bdad17facbd79a6a01b7d7bcfd0b9d17f5a13d2e5730b51736a8610c31",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/hosting/qualification/specifications/image_schema.md",
+      "sha256": "fc89e3ab75688cc33a2374a56573f464776b6e0b6caa84fbc0e4479323518872",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/hosting/qualification/specifications/operations_economics.json",
+      "sha256": "f5c29b351c2af391614636445d05a1a6f732440f4bc644926244393e8d2099ad",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/hosting/qualification/specifications/operations_economics.md",
+      "sha256": "2ee73553dd7a62b586f4eb86131637cb7407cc9660fbe86fe778ebcf613cb909",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/hosting/qualification/specifications/recovery.json",
+      "sha256": "f885548589fa8f23228b13e82cd1759fcdd8a3d870b2456e6f463dd1af39422e",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/hosting/qualification/specifications/recovery.md",
+      "sha256": "b7400d5d572e86a55572160dc6bda310843cdb9f0b284787c114257ad774bbf6",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/hosting/qualification/specifications/runtime_limits.json",
+      "sha256": "9850c709497713a340c0ca6552d4cc0796f6dd5c6a4663c1b9d1114b577cddb0",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/hosting/qualification/specifications/runtime_limits.md",
+      "sha256": "a9de7073050ef646316068a9352ca6b53ea96b28d3100396880dc3ad0ef09643",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/hosting/qualification/specifications/usage_accounting.json",
+      "sha256": "ab9eb4dc3a5630441fd47fbd0bacd68ff1345b721c30c3259b0b697acba0cb31",
+      "matches_validation_start_commit": true
+    },
+    {
+      "path": "docs/hosting/qualification/specifications/usage_accounting.md",
+      "sha256": "fe94c3ad8a69db4cb399acdf1d6958ae8cd07775bfd35d67fcfbf63cbeaee3ff",
+      "matches_validation_start_commit": true
+    }
+  ],
+  "checks": {
+    "focused_tests": {
+      "passed": 423,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 1.14
+    },
+    "ruff_check": "passed",
+    "ruff_format_check": "passed",
+    "h01_python_files": 35,
+    "baseline_pins_verified": 78,
+    "unchanged_quota_inputs": 13,
+    "schema_table_ownership_mappings": 37,
+    "documentation_links": 379,
+    "proof_specifications": 6,
+    "proof_cases_planned_not_executed": 67,
+    "synthetic_ui_snapshots": 24,
+    "scoped_ddl_absence": "passed for new H01 non-test application Python only; legacy inline access schema remains H03/H04 work",
+    "diff_whitespace": "passed",
+    "frontend_checks": "not_applicable"
+  },
+  "validation_commands": [
+    [
+      ".venv/bin/python",
+      "-m",
+      "pytest",
+      "apps/server/app/platform/tests/test_schema_resources.py",
+      "apps/server/app/platform/tests/test_hosted_contracts.py",
+      "apps/server/app/platform/tests/test_hosted_ports.py",
+      "apps/server/app/platform/tests/test_hosted_proofs.py",
+      "apps/server/app/platform/tests/test_hosted_ui_contracts.py",
+      "apps/server/app/platform/tests/test_api_errors.py",
+      "-q",
+      "--tb=short"
+    ],
+    [
+      ".venv/bin/ruff",
+      "check",
+      "apps/server/app/bootstrap/hosted_ui_contracts.py",
+      "apps/server/app/modules/host_agent/__init__.py",
+      "apps/server/app/modules/host_agent/application/__init__.py",
+      "apps/server/app/modules/host_agent/application/contracts.py",
+      "apps/server/app/modules/hosted_access/application/login_contracts.py",
+      "apps/server/app/modules/hosted_access/application/source_contracts.py",
+      "apps/server/app/modules/hosted_access/application/ui_contracts.py",
+      "apps/server/app/modules/hosted_admin/application/__init__.py",
+      "apps/server/app/modules/hosted_admin/application/pilot_contracts.py",
+      "apps/server/app/modules/hosted_admin/application/recovery_contracts.py",
+      "apps/server/app/modules/hosted_admin/application/ui_contracts.py",
+      "apps/server/app/modules/workspace/application/recovery_contracts.py",
+      "apps/server/app/platform/hosted_contracts/__init__.py",
+      "apps/server/app/platform/hosted_contracts/authority.py",
+      "apps/server/app/platform/hosted_contracts/compatibility.py",
+      "apps/server/app/platform/hosted_contracts/operations.py",
+      "apps/server/app/platform/hosted_contracts/reads.py",
+      "apps/server/app/platform/hosted_contracts/semantic.py",
+      "apps/server/app/platform/hosted_contracts/ui_states.py",
+      "apps/server/app/platform/hosted_contracts/values.py",
+      "apps/server/app/platform/hosted_proofs/__init__.py",
+      "apps/server/app/platform/hosted_proofs/__main__.py",
+      "apps/server/app/platform/hosted_proofs/cli.py",
+      "apps/server/app/platform/hosted_proofs/models.py",
+      "apps/server/app/platform/schema_resources.py",
+      "apps/server/app/platform/tests/test_hosted_contracts.py",
+      "apps/server/app/platform/tests/test_hosted_ports.py",
+      "apps/server/app/platform/tests/test_hosted_proofs.py",
+      "apps/server/app/platform/tests/test_hosted_ui_contracts.py",
+      "apps/server/app/platform/tests/test_schema_resources.py",
+      "database/admin-migrations/env.py",
+      "database/admin-recovery-migrations/env.py",
+      "database/host-inventory-migrations/env.py",
+      "database/hosted-access-migrations/env.py",
+      "database/recovery-migrations/env.py"
+    ],
+    [
+      ".venv/bin/ruff",
+      "format",
+      "--check",
+      "apps/server/app/bootstrap/hosted_ui_contracts.py",
+      "apps/server/app/modules/host_agent/__init__.py",
+      "apps/server/app/modules/host_agent/application/__init__.py",
+      "apps/server/app/modules/host_agent/application/contracts.py",
+      "apps/server/app/modules/hosted_access/application/login_contracts.py",
+      "apps/server/app/modules/hosted_access/application/source_contracts.py",
+      "apps/server/app/modules/hosted_access/application/ui_contracts.py",
+      "apps/server/app/modules/hosted_admin/application/__init__.py",
+      "apps/server/app/modules/hosted_admin/application/pilot_contracts.py",
+      "apps/server/app/modules/hosted_admin/application/recovery_contracts.py",
+      "apps/server/app/modules/hosted_admin/application/ui_contracts.py",
+      "apps/server/app/modules/workspace/application/recovery_contracts.py",
+      "apps/server/app/platform/hosted_contracts/__init__.py",
+      "apps/server/app/platform/hosted_contracts/authority.py",
+      "apps/server/app/platform/hosted_contracts/compatibility.py",
+      "apps/server/app/platform/hosted_contracts/operations.py",
+      "apps/server/app/platform/hosted_contracts/reads.py",
+      "apps/server/app/platform/hosted_contracts/semantic.py",
+      "apps/server/app/platform/hosted_contracts/ui_states.py",
+      "apps/server/app/platform/hosted_contracts/values.py",
+      "apps/server/app/platform/hosted_proofs/__init__.py",
+      "apps/server/app/platform/hosted_proofs/__main__.py",
+      "apps/server/app/platform/hosted_proofs/cli.py",
+      "apps/server/app/platform/hosted_proofs/models.py",
+      "apps/server/app/platform/schema_resources.py",
+      "apps/server/app/platform/tests/test_hosted_contracts.py",
+      "apps/server/app/platform/tests/test_hosted_ports.py",
+      "apps/server/app/platform/tests/test_hosted_proofs.py",
+      "apps/server/app/platform/tests/test_hosted_ui_contracts.py",
+      "apps/server/app/platform/tests/test_schema_resources.py",
+      "database/admin-migrations/env.py",
+      "database/admin-recovery-migrations/env.py",
+      "database/host-inventory-migrations/env.py",
+      "database/hosted-access-migrations/env.py",
+      "database/recovery-migrations/env.py"
+    ]
+  ],
+  "qualification_promoted": false,
+  "h01_contract_review_acceptance": "not asserted",
+  "remaining_owners": {
+    "H02": "complete detailed design, immutable packaging and real native/Docker/GCP/private-agent evidence",
+    "H03": "managed identity, MFA/handoff/private transport and actual UI",
+    "H04": "real Admin/Free metering repositories, atomic admission, query-budget and usable UI",
+    "H05": "actual schemas/catalog/key/backup/strong-auth restore and recovery-mode UI",
+    "H06": "supported pilot operational/economic/end-user acceptance"
+  },
+  "h01_7_alignment": {
+    "change": "AdminObservation.setup_state now follows the master lifecycle rather than source-access labels; regression compares both Admin read DTOs with the owning dictionary.",
+    "tested_uncommitted_python_paths": [
+      "application/apps/server/app/modules/hosted_admin/application/pilot_contracts.py",
+      "application/apps/server/app/platform/tests/test_hosted_ui_contracts.py"
+    ]
+  }
+}

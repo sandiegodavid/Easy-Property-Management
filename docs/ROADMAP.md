@@ -2,7 +2,7 @@
 
 ## Now — Hosted foundation and Pilot 0
 
-Start HOSTED-001 [H01–H12](hosting/design/HOSTED_MVP_DESIGN.md#implementation-slices), under the [backlog](FEATURE_BACKLOG.md). H01–H05 establish private container/storage, managed identity, Admin-lite onboarding, Free usage safeguards and nightly verified off-host recovery. H06 releases Pilot 0 to invited Free operators within qualified capacity, with a rehearsed restore, warm runtimes, one announced maintenance window and measurable manual operating cost. No Stripe, idle-wake automation or individual scheduling.
+Start HOSTED-001 [H01–H12](hosting/design/mvp/delivery-plan.md#implementation-slices), under the [backlog](FEATURE_BACKLOG.md). H01–H05 establish private container/storage, managed identity, Admin-lite onboarding, Free usage safeguards and nightly verified off-host recovery. H06 releases Pilot 0 to invited Free operators within qualified capacity, with a rehearsed restore, warm runtimes, one announced maintenance window and measurable manual operating cost. No Stripe, idle-wake automation or individual scheduling.
 
 Use observed repeat use, support time and before-credit spend to decide further investment. H07–H12 add automated provisioning, paid tiers/recovery, subscriptions, independent updates, idle-wake and paid/growth qualification. Launch/growth budgets are $250/$300 monthly before credits, subject to measured workloads; no 100-operator guarantee follows from a small pilot.
 

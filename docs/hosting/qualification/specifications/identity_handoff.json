@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "proof": "identity_handoff",
+  "owner": "H03",
+  "contributors": [],
+  "revision": 1,
+  "levels": [
+    "component",
+    "deployed_browser"
+  ],
+  "required_pins": [
+    "source",
+    "tool",
+    "image",
+    "schema",
+    "workload",
+    "configuration"
+  ],
+  "cases": [
+    "google_email_identity",
+    "exact_invitation_claim",
+    "browser_origin_state_binding",
+    "single_use_handoff",
+    "cross_workspace_role_denial",
+    "host_only_cookie_csrf",
+    "mfa_step_up",
+    "disable_rebind_logout",
+    "no_secret_url_log",
+    "multi_device_draft_fences",
+    "local_mode_independent"
+  ]
+}

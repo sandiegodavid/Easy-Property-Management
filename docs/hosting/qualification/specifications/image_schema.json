@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "proof": "image_schema",
+  "owner": "H02",
+  "contributors": [],
+  "revision": 1,
+  "levels": [
+    "component",
+    "docker_linux"
+  ],
+  "required_pins": [
+    "source",
+    "tool",
+    "image",
+    "schema",
+    "workload",
+    "configuration"
+  ],
+  "cases": [
+    "build_separate_artifacts",
+    "inventory_resources",
+    "fresh_initialize_all_stores",
+    "existing_store_read_only",
+    "missing_wrong_resources",
+    "wrong_component_manifest",
+    "partial_initializer",
+    "asset_secret_exclusion",
+    "installed_without_checkout"
+  ]
+}

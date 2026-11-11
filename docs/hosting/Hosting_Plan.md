@@ -30,7 +30,7 @@ future entitlement is decided. Their updated scope and dependencies are recorded
 
 ## First release: Pilot 0
 
-[HOSTED-001 H01–H12](design/HOSTED_MVP_DESIGN.md#implementation-slices) is now the immediate implementation plan. H06 releases Pilot 0 to invited Free operators within qualified capacity with Admin-lite provisioning, Free 50 MB usage safeguards, nightly verified off-host backups and rehearsed restore. Keep all containers running and use one announced maintenance window. No Stripe, paid enrollment, idle-wake or per-operator update scheduling. Manual completion/recovery/exception handling uses supported tools and records ownership, outcomes, Admin time and before-credit spend.
+[HOSTED-001 H01–H12](design/mvp/delivery-plan.md#implementation-slices) is now the immediate implementation plan. H06 releases Pilot 0 to invited Free operators within qualified capacity with Admin-lite provisioning, Free 50 MB usage safeguards, nightly verified off-host backups and rehearsed restore. Keep all containers running and use one announced maintenance window. No Stripe, paid enrollment, idle-wake or per-operator update scheduling. Manual completion/recovery/exception handling uses supported tools and records ownership, outcomes, Admin time and before-credit spend.
 
 The full platform and catalog below describe subsequent H07–H12 targets. Pilot 0 must satisfy isolation, identity, safe retries, storage and recovery gates, but does not wait for those later automations. PORTAL-001/002 follow hosting and include rent/late fees/terms/payments, tenant issues and owner concerns/reports with shared source ownership.
 
@@ -126,6 +126,6 @@ for four consecutive weeks, at least one informed paid subscriber after paid lau
 critical isolation/data-loss defect. Track support effort and gross cost alongside
 adoption. Validate interest before credits expire; pivot or redesign based on results.
 
-Follow the [design's delivery and validation sequence](design/HOSTED_MVP_DESIGN.md#11-suggested-delivery-and-acceptance-order).
+Follow the [design's delivery and validation sequence](design/mvp/delivery-plan.md#suggested-delivery-and-acceptance-order).
 Code, schema, infrastructure and commercial readiness remain unproven until their
 own evidence is recorded. The backlog schedules this work; documentation does not establish completion.

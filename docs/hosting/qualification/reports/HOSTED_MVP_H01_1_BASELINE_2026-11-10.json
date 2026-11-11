@@ -1,0 +1,403 @@
+{
+  "scope": "H01.1 baseline and ownership inventory only; no runtime activation or native/cloud qualification",
+  "recorded_date": "2026-11-10",
+  "implementation_start_commit": "f9d3707b966f664fe8037b5f1b557f72f74245ed",
+  "branch": "hosted_mvp",
+  "working_tree_at_start": "clean",
+  "porcelain_v1_at_start": "",
+  "hash_algorithm": "sha256",
+  "hash_scope": "Exact tracked bytes at implementation-start commit, before H01.1 documentation edits",
+  "quota_import_manifest": "docs/hosting/qualification/PROJECT_QUOTA_IMPORT_MANIFEST.json",
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "git_blob": "8627e5eab2b94f14c53198b8fcfdfa1f5b13e0e8",
+      "sha256": "4c85c4125d4fe298263e242750eb3a568bf0b56e90e5e2b407b7f91bdbb5b8e1"
+    },
+    {
+      "path": "application/alembic.ini",
+      "git_blob": "78d609773a69c0e500f2f317f776fd552f9cf383",
+      "sha256": "5e87d7e81524ec4c058a086385e375af1182abf670fbcc20633409ea99549016"
+    },
+    {
+      "path": "application/apps/server/app/__main__.py",
+      "git_blob": "e8c6a651a184d4bb41f1a94e91db47f28bcacb90",
+      "sha256": "a5b96bc5c8e9dfa07458e1e0bce00102eee558dbb9d85ed0b2e2c8890ab8a399"
+    },
+    {
+      "path": "application/apps/server/app/bootstrap/api.py",
+      "git_blob": "a1b86349aeb07f1ae2a81798b5517e25709fe9df",
+      "sha256": "678ee7cb0bb8cffb215c7b02b6a153a7a62032c2036f16b951d8f23d0b3e44f6"
+    },
+    {
+      "path": "application/apps/server/app/bootstrap/hosted_access.py",
+      "git_blob": "5d27ee609ba10474ec120a25f54c7380754bfce6",
+      "sha256": "921df1e523df0b5da9f95cc93aae8945980d20408ebdf054a9584a84a2635e98"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/__init__.py",
+      "git_blob": "4509881f6ab5e9b830dc605ea6f8db3ea34858f4",
+      "sha256": "bf1be984a59d8c46ca41d27150b8ab7ca8a776ba2c313b3692d57b868929132f"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/api/__init__.py",
+      "git_blob": "c00d4cbf8b8b218829771768629e6b84582352bd",
+      "sha256": "968c4ec162303ccc90c124203c2604bf27ce4a97a70786a0bfca555f35343e99"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/api/draft_leases.py",
+      "git_blob": "84891fcb62ab64d3da7a7b8d25875c0403e11db8",
+      "sha256": "a5d37e5ccedc020dbb1548aa6e132a06477dd99b571680a4620e880265fc4619"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/api/middleware.py",
+      "git_blob": "760b141940f39353cca4f7a1576e82767f27db58",
+      "sha256": "a168fa9cbe014e03085d37b236e10de3c12f852608104d4ccb76637b229eead5"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/api/request_body.py",
+      "git_blob": "9f0ae8c14620aad5a5d914ddf2f50e0432dcfa7d",
+      "sha256": "0f39aa5e7412195086265e8e2a7c9a42b3b95f715eccaa49a86e4d0fc0a62c66"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/api/router.py",
+      "git_blob": "35fd19d78531868c183149c894ffa7580ea0a23e",
+      "sha256": "f3f8884e3adfa0695d0366b53fc5f3e40a16718830c1432474238f6e003caee2"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/application/__init__.py",
+      "git_blob": "cd06aa5f421d26136f99d5a0fb0feecceef7dabb",
+      "sha256": "2a07c6993e2515d21885d6228a70533d9ddb9340af166e973436aaa8c2263976"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/application/configuration.py",
+      "git_blob": "c64205dd56c8a9845ecdd4eed02b73cd481328b7",
+      "sha256": "0c499cef56d6de01b0e518fec4bb8ce4786b6703f536e073faf4cee07bd1772c"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/application/draft_leases.py",
+      "git_blob": "e9bc204308400bea77b9833cdc56cdd6dd5f37c1",
+      "sha256": "bd67ac2d38231682b177e10cbb65b48c0f213083fbb783eaba181807a3120a2e"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/application/ports.py",
+      "git_blob": "3bb944dfc0b0cb11d0557a87af691ea68a554239",
+      "sha256": "58a43fdc64916ced2128ec970a2516103f88f5064547351e4680030778eaad2d"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/application/recovery_publication.py",
+      "git_blob": "f4f0bb06e86b7f7faea1da30285b0e10aa01f62b",
+      "sha256": "a7f78a7fc64a59fb1f6b27dd1bd01769af10038665f5f2c86b145dcbd2f6b156"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/application/service.py",
+      "git_blob": "255d8db9ca97274fe6b2cd67c61350b01c8447ee",
+      "sha256": "55b72cd710a36a71d208dd3df5b0128f1837e674adf2d990c2ae3ee76f6dc5e8"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/application/storage_budget.py",
+      "git_blob": "f2e68500cfd29c87e994d4586941ca92d7d330f3",
+      "sha256": "030c6a2985872ad0768ed8d23aeb2e687d1eac31ac2c5469c0d5d6eb2e59fa8e"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/domain/__init__.py",
+      "git_blob": "67cbb57ad133e5b436b19dd20b0e5d0f263f7c64",
+      "sha256": "f5a4a23a3b7cde57a3d6e48a799c0af60b5fa585445453f8cf3d5273911bdce7"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/domain/models.py",
+      "git_blob": "cf92d0fb47c47144348875a1c0f0e4adcb796f28",
+      "sha256": "452c7169e1bfae5306e54bb5e73d209a48dd57d32bc87611e586c62b684a057f"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/infrastructure/__init__.py",
+      "git_blob": "fd0b21f5896451a1edd329eed25c75d357d5ed29",
+      "sha256": "9fa539906241797df3c973fbf7be5453a60fcc94d98b52001b1805bdac86a00c"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/infrastructure/admin.py",
+      "git_blob": "57c0a21f39c0624930cf43a6f582a812e7b5e847",
+      "sha256": "174a585bd0aece4433c73cd8245670405972c8612ffd15e3453d2e64d0fcc6d2"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/infrastructure/cloudflare_identity.py",
+      "git_blob": "1deda6693f0e830e9dbacf70be07ff41bd79b376",
+      "sha256": "3b553bdc3b5ab7e06e4db32b7e43dde4ae0997ac511f8a77accb45c893ec8c0d"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/infrastructure/configuration.py",
+      "git_blob": "659a30c4f3cc8a4b74470816872fda5410321038",
+      "sha256": "d2bf16ecae53a202261726aff9c4adc761944e9b9f60cc47ce9a4e4fe857fc05"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/infrastructure/draft_leases.py",
+      "git_blob": "40491b5f5521682285ba6db06b8d21541423f07a",
+      "sha256": "905ee123f3b612f0ee8330c6acd270a3de0fa53cef217361b2013c17144bd931"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/infrastructure/operations.py",
+      "git_blob": "c08d204085e1d3d76a8fe2a8a5069f6e59918cfa",
+      "sha256": "565d603c048c5c8737a77b14208339369375dd813c06d159cd33025d9fd2c915"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/infrastructure/recovery_bundle.py",
+      "git_blob": "786bb26ba2b44d0a72e654b9bc6182f81d0a7c7c",
+      "sha256": "b1342b9fd5599edca4c08795458b788acf6aa31d59d90fb769840d4443f5ba23"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/infrastructure/recovery_publication.py",
+      "git_blob": "82464a66700ad49353cffc90e9f6cb2a535a9587",
+      "sha256": "e8cac3c755cb2758579b7adebe58b91c3329172b3b329614f2d805d2f65441c2"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/infrastructure/schema.py",
+      "git_blob": "41d5ffa8b2aeccc432a4c6262c063a2f2e5799aa",
+      "sha256": "39f138a1c04e51ceb004374e21a2a88c6b04b16fadbf1d2ed132ed8eefd9894c"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/infrastructure/session_store.py",
+      "git_blob": "bcd090d99d83f642c6caf8cba86cfba8f32dae9e",
+      "sha256": "3cb4e7bcf70995686b88befa6af8cc59df92800bbe257e3345eb007f0623c439"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/infrastructure/storage_budget.py",
+      "git_blob": "2d9f1bab4190b1014346464e8709df4f1813bcba",
+      "sha256": "9923a24b835e057464682bfcc5d3dcde73dd8783bc70cfc233828c1e34bc005c"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/tests/__init__.py",
+      "git_blob": "cabb15383cf7d03989df9da2cea5440a0288125b",
+      "sha256": "5b4a1b02df4e61f894623146e8e95a5fabd9e0d7af690ddf938b7eba9f067369"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/tests/conftest.py",
+      "git_blob": "c123fd721742e85ac0eb5fc3a0cf6359ccd0245a",
+      "sha256": "531b9fd43294343eaada7a2c8f7b899b7629c8c3345fc0836b500e25d8026175"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/tests/test_admin_lifecycle.py",
+      "git_blob": "ee065b2a54a8692fa7c9c3d98bfe09be4203014c",
+      "sha256": "e326d34da8d5f8ee61d11b1b28c4de2b95140fa1e170db41ddc00f0b34ef2fd0"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/tests/test_cli.py",
+      "git_blob": "7648c4b7f64a8f8f3a440d9444a6360c67cf74bd",
+      "sha256": "deac226ca738031f88b4a9cc10883bf52bd79435850a0d82f498f27983ef6d70"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/tests/test_composition.py",
+      "git_blob": "af09791752a2be22333380984f1a63741d42f056",
+      "sha256": "8f1e927cd53e1fe6ac675ca6f4f6fa399cf707d94814c183ae70ec189d7bc8a2"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/tests/test_configuration.py",
+      "git_blob": "f8877c51b997c1875ea882b83da87f6544a40882",
+      "sha256": "484f6c69d626de6eebf684d8286971a77a1f5baadcba462ea415d8fc32bb9aee"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/tests/test_draft_leases.py",
+      "git_blob": "605de3279fcfc405e54c5a055f55a0315210a9d4",
+      "sha256": "87dc4c059aa1a81860d60d48f37ce5cc2e5c269e68c79efcb8152225ecd9d462"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/tests/test_identity.py",
+      "git_blob": "a2383ecd41e09dc4bb959a5a1022a130713c1514",
+      "sha256": "cc806b9071b06fab30cf2fbb7a61db8a59e1ca9b1c9347c822375ce5b69d25d7"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/tests/test_linux_storage_qualification.py",
+      "git_blob": "a55620cd045352e5adeef6249959cee252b208d9",
+      "sha256": "c308ce9889dc50bcf44b82b19c8d6b8dd5b313aedc93937e24f8f0abdd35576e"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/tests/test_offline_backup.py",
+      "git_blob": "c4880e0c1e28b41ad50a3d891d7e0c763671e566",
+      "sha256": "9098f3691d7abd54c85e709644dcae3a4b8319cc840d33e52a986a5d764ae7d5"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/tests/test_recovery_bundle.py",
+      "git_blob": "61c67865815c6b67098cf46539725095c88cc3c3",
+      "sha256": "6ac5bf5f07d08515e9544b02ac1a5f44c9182ebfa718096d5d6dc518c1e37206"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/tests/test_recovery_publication.py",
+      "git_blob": "481c688b0fde6a3c5935caaa5ec3189322a8dae5",
+      "sha256": "748e3f21b0b9114ea70ad96c6bc3b20c415bdb9f597d53dd69dbab7ee937208f"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/tests/test_request_body.py",
+      "git_blob": "93ca8ee3d01f4583f35afdd5752533e55f670bf8",
+      "sha256": "eb54de91bea18ae7f11d4682eec6eca90f427cdb3896e4348c2a540ce54f4ab9"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/tests/test_sessions.py",
+      "git_blob": "871b03bc95d28a19fea6f83e37f61248e27f69ff",
+      "sha256": "fa4a9453a4925e2e35c297257100e53bf00329328548e5adf33e6dfa8ba2974f"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/tests/test_storage_budget.py",
+      "git_blob": "dd16fb6102597f6897e0e1798859f657020ea5aa",
+      "sha256": "0f0b3ce6709590eb8bc8326491079f57641ad6c4d63d4729d27a129f6cf7f84d"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_access/tests/test_transport.py",
+      "git_blob": "273e4f8d018ef625d9fa0bcb6b6bd3ec5e44ead1",
+      "sha256": "74e5406730938b268f82b91d1d118a7091eb8f859ab0b4cf3e0cb58377df5c3e"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_admin/__init__.py",
+      "git_blob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_admin/infrastructure/__init__.py",
+      "git_blob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_admin/infrastructure/project_quota.py",
+      "git_blob": "d53eb9563501565f9425b0590a2af31419b8ab6f",
+      "sha256": "6157c6a7da151194c143463fc67b79a7b7021000abf6fcd0686daf6841b67719"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_admin/infrastructure/project_quota_qualification.py",
+      "git_blob": "b4367b5841f815f1dbc38d7ef3de322e470dc62a",
+      "sha256": "4fbf941cb7911d8de076436ea9f5d2a30bc20b59765319c15df448409e10d862"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_admin/infrastructure/project_sandbox.py",
+      "git_blob": "ce3b15d1706ba4790f3fc35a180ee2fee7995fc3",
+      "sha256": "8b940dd1a68e5a1447e98892f9172f2eb197703c9ca6dcbf5c2e71bdfc54d4fc"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_admin/infrastructure/quota_actor.py",
+      "git_blob": "e848a8222d45bafdc61bb1376ab4034cdf5462b5",
+      "sha256": "14b1db62d17d5d9974aee5740c1501770a90a115f80f85170ccdb0799c39c8bf"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_admin/infrastructure/quota_sandbox_exec.c",
+      "git_blob": "3ad765f25cad88e5b0baddbdef83d781f2e906b1",
+      "sha256": "851618b8dc4556b6b9b7d709648229b48127e3e8cfaa2add39d59db637bb9aa0"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_admin/tests/__init__.py",
+      "git_blob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_admin/tests/test_project_quota.py",
+      "git_blob": "15718539ade5df8a8dd8d832a2f9a80c68decf4b",
+      "sha256": "fa9581ed1228b967bbf08e8cb8ae127cf33dd3288a2f3a76f4414938980d8572"
+    },
+    {
+      "path": "application/apps/server/app/platform/product_migrations.py",
+      "git_blob": "50c3367c52d67503148b55a4cec1aceb07865f9d",
+      "sha256": "5d0d322b588a116cc12df801878b812cd4f12cc9f09524d265b11c23e741d5ca"
+    },
+    {
+      "path": "application/apps/web/src/app/hosted-session.tsx",
+      "git_blob": "eabaf4709deac13d9342f89cfc44773ef0689121",
+      "sha256": "8e67131f4e63f557d52e83648de936409feb32a519405e3b9cc8cf1984345254"
+    },
+    {
+      "path": "application/apps/web/tests-hosted/read-only.spec.ts",
+      "git_blob": "0479f11cc9736794bcf225b08f88efa851f240cd",
+      "sha256": "71b8fdb9bafaa4d00618e2a5d466b1389036e9863155498f26e775d89c847323"
+    },
+    {
+      "path": "application/apps/web/tests-hosted/session.spec.ts",
+      "git_blob": "348f814b1a853f3f952952dba02d82d16ca8b584",
+      "sha256": "bb61cefba35de0e94a226f02087d09fc7d9a2a0aa471bcab8772a44aaa53ca1e"
+    },
+    {
+      "path": "application/database/sqlite-migrations/env.py",
+      "git_blob": "4e776203091ee9a66be0aceffa75c405bf6c6a0b",
+      "sha256": "1356095970cdf05df58a0963753a4e8f7f8c22eb3ebf452f57345dfa1db1eb61"
+    },
+    {
+      "path": "application/database/sqlite-migrations/versions/0001_initial_schema.py",
+      "git_blob": "2c85adaa22b8727cfc1c0f089a0526e6177970d0",
+      "sha256": "31653067f79a62cab4f07903398be630146d5fe3c5d5dc20f632141443f729d6"
+    },
+    {
+      "path": "application/deploy/hosted-demo/epm-hosted@.service",
+      "git_blob": "415e731ffa428a81fe09043f0fb0c6cae3376f70",
+      "sha256": "740867871b0269318a0f2390bf4357865c7b7c607cf9c719a755ca4dfd802853"
+    },
+    {
+      "path": "application/pyproject.toml",
+      "git_blob": "0b44e781eada92a5b007b32155ca884c60f92e53",
+      "sha256": "1bd100e0c1905a84e8a7760fd1a24f5cee56796aeb9aa44c13b612f7ad21cd1c"
+    },
+    {
+      "path": "application/scripts/build_wheel.sh",
+      "git_blob": "3790d1bda58d87717ae51abf134d6bbbe235a5fb",
+      "sha256": "7bf1bec5a91676e6f3773cbadfd9c6d40de791b43c9cb21dbad1511acab8bee8"
+    },
+    {
+      "path": "application/scripts/hosted_browser_server.py",
+      "git_blob": "c4d7ea8e2d1f687b9584ea0135069d02a8d8c47c",
+      "sha256": "8cf10866ed0359818fcf17dc028662a8aad2335934b7141a71566acce36e519e"
+    },
+    {
+      "path": "application/scripts/stage_schema_resources.py",
+      "git_blob": "149c64ba1432a8310904b26e0873a21fdb900590",
+      "sha256": "8f1e209b1e2da5fbb5e2756f28c4e00cd5efae53539431847b98177add8bded9"
+    },
+    {
+      "path": "application/scripts/verify_installation.py",
+      "git_blob": "d74cdd6730d19cca45c7dce34f23373d7eee4de0",
+      "sha256": "e28124bcd553533701786f88a5400fdd92c3d07692477fdca503a0952c563af6"
+    },
+    {
+      "path": "docs/DATABASE_SCHEMA.md",
+      "git_blob": "7822fdd7aecdb73188ca9b8a73cd88a86a6b3fca",
+      "sha256": "74a61e94ef195b4f5594e907504e5eaed17a96d9c6c9c44e59e265248407ddbf"
+    },
+    {
+      "path": "docs/hosting/archive/project-quota-Admin_UI_Workflow/HOSTED_PROJECT_QUOTA_QUALIFICATION.md",
+      "git_blob": "260f8b095ea1d4c26b9b8be4c1e0ea07867432da",
+      "sha256": "204cb646d8b28c38feb9c958bad955b909d29a327702fc758cfff3931fecaab5"
+    },
+    {
+      "path": "docs/hosting/archive/project-quota-Admin_UI_Workflow/LOCAL_LINUX_VM.md",
+      "git_blob": "b66f8fe72fe0ea92e94da8c4138a729c2a76a7ed",
+      "sha256": "484efa56f9985155f275c2a3526f890d98bee3ca200e1eb7556bf7ec45064d79"
+    },
+    {
+      "path": "docs/hosting/design/HOSTED_MVP_DESIGN.md",
+      "git_blob": "2632369a8cd8b7fa14bc708cda543f383d64dc02",
+      "sha256": "e2e4a6be20b4f13941081ddaa11c88ddae8807491bed961ebb19e085f617914d"
+    },
+    {
+      "path": "docs/hosting/design/HOSTED_MVP_H01_DESIGN.md",
+      "git_blob": "832c4a05cbd36e30339f721acee962c223ea6016",
+      "sha256": "90bee32d2581adcb3593c2770d081cc8979ae9f267775550151878fdcde15069"
+    },
+    {
+      "path": "docs/hosting/qualification/HOSTED_MVP_ACCEPTANCE.md",
+      "git_blob": "f939217184fbc7b4b3bd775aad682227f50f6d4b",
+      "sha256": "44e5d4a9a9d34f9bf49224f31a6d2133c1f774775c94efab4e3df33570fb51bb"
+    },
+    {
+      "path": "docs/hosting/qualification/HOSTED_PROJECT_QUOTA_REUSE.md",
+      "git_blob": "e0404027795a286e9b0ffd6b89399881534999ba",
+      "sha256": "c54770fe068fcf08795d0044806ba560ef9db45f25ec4e4c5f4c43fed3fa5cb7"
+    },
+    {
+      "path": "docs/hosting/qualification/PROJECT_QUOTA_IMPORT_MANIFEST.json",
+      "git_blob": "2680845831e8aa9427850b103b4212091b8e556c",
+      "sha256": "23cdcacac4119b6de52accc4bd1040bef470602c762dcea902f2295dfb417e81"
+    },
+    {
+      "path": "docs/hosting/qualification/reports/HOSTED_ADMIN_8A_2026-11-01_AFTER_REBOOT.json",
+      "git_blob": "676351c65887800cbcee73bea2723d6cac57ce7c",
+      "sha256": "d52e9711832f15bfb0ec14f15f9678753fe167808cb98071da51fa24c03c97e5"
+    },
+    {
+      "path": "docs/hosting/qualification/reports/HOSTED_ADMIN_8A_2026-11-01_BEFORE_REBOOT.json",
+      "git_blob": "4fdd488a80515d0bc260a75cb301c833eab9c046",
+      "sha256": "9ce7aad358dfafdb313466a742e11aeef52f45576ca33b9c31bbff4e60b90aeb"
+    }
+  ]
+}

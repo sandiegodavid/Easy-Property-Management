@@ -6,6 +6,13 @@ identity, Admin/operator workflows, automation and validation gates. The
 [Hosting Plan](../Hosting_Plan.md) summarizes it; the
 [MVP acceptance register](../qualification/HOSTED_MVP_ACCEPTANCE.md) tracks proof.
 
+The MVP design is a navigation index backed by focused guides in `mvp/`. Start with
+[scope](mvp/scope.md), [architecture and access](mvp/architecture-and-access.md),
+then the [delivery plan](mvp/delivery-plan.md). Use [recovery](mvp/recovery.md),
+[storage/subscriptions](mvp/subscriptions-storage-and-runtime.md) and
+[releases](mvp/releases.md) for specific workflows. The
+[schema catalog](../../DATABASE_SCHEMA.md) links to separate per-store dictionaries.
+
 | Reference | Status |
 | --- | --- |
 | [Hosted MVP design](HOSTED_MVP_DESIGN.md) | Current design; implementation/deployment not established by documentation |

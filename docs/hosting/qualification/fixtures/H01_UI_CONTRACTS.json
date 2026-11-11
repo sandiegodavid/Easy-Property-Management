@@ -1,0 +1,1907 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "case_id": "admin_list_pending_source_disabled",
+      "deployment_id": "00000000-0000-4000-8000-000000000001",
+      "snapshot": {
+        "surface": "admin_list",
+        "query": {
+          "deployment_id": "00000000-0000-4000-8000-000000000001",
+          "scope": {
+            "kind": "deployment"
+          }
+        },
+        "directory": {
+          "state": "ready",
+          "data": {
+            "items": [
+              {
+                "operator_id": "00000000-0000-4000-8000-000000000002",
+                "workspace_id": "00000000-0000-4000-8000-000000000003",
+                "display_name": "Fictional operator",
+                "slug": "fixture-operator",
+                "setup_state": "pending",
+                "desired_enabled": true,
+                "access": {
+                  "state": "ready",
+                  "data": {
+                    "effective_enabled": false,
+                    "access_epoch": 1,
+                    "source_proof_ref": "fixture-source-proof"
+                  },
+                  "freshness": {
+                    "state": "known",
+                    "as_of": 1794441600000,
+                    "source_revision": "fixture-revision-1"
+                  }
+                },
+                "usage": {
+                  "state": "ready",
+                  "data": {
+                    "used_bytes": 0
+                  },
+                  "freshness": {
+                    "state": "known",
+                    "as_of": 1794441600000,
+                    "source_revision": "fixture-revision-1"
+                  }
+                },
+                "protection": {
+                  "state": "ready",
+                  "data": {
+                    "status": "protected",
+                    "last_verified_at": 1794441599000,
+                    "point_age_ms": 1000,
+                    "proof_ref": "fixture-point-proof"
+                  },
+                  "freshness": {
+                    "state": "known",
+                    "as_of": 1794441600000,
+                    "source_revision": "fixture-revision-1"
+                  }
+                },
+                "release_id": "00000000-0000-4000-8000-000000000005",
+                "operation": {
+                  "operation": {
+                    "deployment_id": "00000000-0000-4000-8000-000000000001",
+                    "scope": {
+                      "kind": "workspace",
+                      "operator_id": "00000000-0000-4000-8000-000000000002",
+                      "workspace_id": "00000000-0000-4000-8000-000000000003"
+                    },
+                    "kind": "provision",
+                    "operation_id": "00000000-0000-4000-8000-000000000004",
+                    "idempotency_key": "fixture-original-key",
+                    "request_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                  },
+                  "state": "pending",
+                  "revision": 1,
+                  "observed_at": 1794441600000,
+                  "result": null,
+                  "error_code": null,
+                  "action_required": null
+                },
+                "actions": [
+                  {
+                    "action": "admin_refresh_source",
+                    "enabled": true,
+                    "reason": null
+                  },
+                  {
+                    "action": "admin_check_operation",
+                    "enabled": true,
+                    "reason": null
+                  }
+                ]
+              }
+            ],
+            "matching_total": 1,
+            "freshness": {
+              "state": "known",
+              "as_of": 1794441600000,
+              "source_revision": "fixture-revision-1"
+            },
+            "continuation": null
+          },
+          "freshness": {
+            "state": "known",
+            "as_of": 1794441600000,
+            "source_revision": "fixture-revision-1"
+          }
+        },
+        "actions": [
+          {
+            "action": "admin_create_assignment",
+            "enabled": true,
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "admin_list_active_known_usage",
+      "deployment_id": "00000000-0000-4000-8000-000000000001",
+      "snapshot": {
+        "surface": "admin_list",
+        "query": {
+          "deployment_id": "00000000-0000-4000-8000-000000000001",
+          "scope": {
+            "kind": "deployment"
+          }
+        },
+        "directory": {
+          "state": "ready",
+          "data": {
+            "items": [
+              {
+                "operator_id": "00000000-0000-4000-8000-000000000002",
+                "workspace_id": "00000000-0000-4000-8000-000000000003",
+                "display_name": "Fictional operator",
+                "slug": "fixture-operator",
+                "setup_state": "active",
+                "desired_enabled": true,
+                "access": {
+                  "state": "ready",
+                  "data": {
+                    "effective_enabled": true,
+                    "access_epoch": 1,
+                    "source_proof_ref": "fixture-source-proof"
+                  },
+                  "freshness": {
+                    "state": "known",
+                    "as_of": 1794441600000,
+                    "source_revision": "fixture-revision-1"
+                  }
+                },
+                "usage": {
+                  "state": "ready",
+                  "data": {
+                    "used_bytes": 2048
+                  },
+                  "freshness": {
+                    "state": "known",
+                    "as_of": 1794441600000,
+                    "source_revision": "fixture-revision-1"
+                  }
+                },
+                "protection": {
+                  "state": "ready",
+                  "data": {
+                    "status": "protected",
+                    "last_verified_at": 1794441599000,
+                    "point_age_ms": 1000,
+                    "proof_ref": "fixture-point-proof"
+                  },
+                  "freshness": {
+                    "state": "known",
+                    "as_of": 1794441600000,
+                    "source_revision": "fixture-revision-1"
+                  }
+                },
+                "release_id": "00000000-0000-4000-8000-000000000005",
+                "operation": {
+                  "operation": {
+                    "deployment_id": "00000000-0000-4000-8000-000000000001",
+                    "scope": {
+                      "kind": "workspace",
+                      "operator_id": "00000000-0000-4000-8000-000000000002",
+                      "workspace_id": "00000000-0000-4000-8000-000000000003"
+                    },
+                    "kind": "provision",
+                    "operation_id": "00000000-0000-4000-8000-000000000004",
+                    "idempotency_key": "fixture-original-key",
+                    "request_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                  },
+                  "state": "pending",
+                  "revision": 1,
+                  "observed_at": 1794441600000,
+                  "result": null,
+                  "error_code": null,
+                  "action_required": null
+                },
+                "actions": [
+                  {
+                    "action": "admin_refresh_source",
+                    "enabled": true,
+                    "reason": null
+                  },
+                  {
+                    "action": "admin_check_operation",
+                    "enabled": true,
+                    "reason": null
+                  }
+                ]
+              }
+            ],
+            "matching_total": 1,
+            "freshness": {
+              "state": "known",
+              "as_of": 1794441600000,
+              "source_revision": "fixture-revision-1"
+            },
+            "continuation": null
+          },
+          "freshness": {
+            "state": "known",
+            "as_of": 1794441600000,
+            "source_revision": "fixture-revision-1"
+          }
+        },
+        "actions": [
+          {
+            "action": "admin_create_assignment",
+            "enabled": true,
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "admin_list_disabled_access",
+      "deployment_id": "00000000-0000-4000-8000-000000000001",
+      "snapshot": {
+        "surface": "admin_list",
+        "query": {
+          "deployment_id": "00000000-0000-4000-8000-000000000001",
+          "scope": {
+            "kind": "deployment"
+          }
+        },
+        "directory": {
+          "state": "ready",
+          "data": {
+            "items": [
+              {
+                "operator_id": "00000000-0000-4000-8000-000000000002",
+                "workspace_id": "00000000-0000-4000-8000-000000000003",
+                "display_name": "Fictional operator",
+                "slug": "fixture-operator",
+                "setup_state": "active",
+                "desired_enabled": false,
+                "access": {
+                  "state": "ready",
+                  "data": {
+                    "effective_enabled": false,
+                    "access_epoch": 1,
+                    "source_proof_ref": "fixture-source-proof"
+                  },
+                  "freshness": {
+                    "state": "known",
+                    "as_of": 1794441600000,
+                    "source_revision": "fixture-revision-1"
+                  }
+                },
+                "usage": {
+                  "state": "ready",
+                  "data": {
+                    "used_bytes": 2048
+                  },
+                  "freshness": {
+                    "state": "known",
+                    "as_of": 1794441600000,
+                    "source_revision": "fixture-revision-1"
+                  }
+                },
+                "protection": {
+                  "state": "ready",
+                  "data": {
+                    "status": "protected",
+                    "last_verified_at": 1794441599000,
+                    "point_age_ms": 1000,
+                    "proof_ref": "fixture-point-proof"
+                  },
+                  "freshness": {
+                    "state": "known",
+                    "as_of": 1794441600000,
+                    "source_revision": "fixture-revision-1"
+                  }
+                },
+                "release_id": "00000000-0000-4000-8000-000000000005",
+                "operation": {
+                  "operation": {
+                    "deployment_id": "00000000-0000-4000-8000-000000000001",
+                    "scope": {
+                      "kind": "workspace",
+                      "operator_id": "00000000-0000-4000-8000-000000000002",
+                      "workspace_id": "00000000-0000-4000-8000-000000000003"
+                    },
+                    "kind": "provision",
+                    "operation_id": "00000000-0000-4000-8000-000000000004",
+                    "idempotency_key": "fixture-original-key",
+                    "request_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                  },
+                  "state": "pending",
+                  "revision": 1,
+                  "observed_at": 1794441600000,
+                  "result": null,
+                  "error_code": null,
+                  "action_required": null
+                },
+                "actions": [
+                  {
+                    "action": "admin_refresh_source",
+                    "enabled": true,
+                    "reason": null
+                  },
+                  {
+                    "action": "admin_check_operation",
+                    "enabled": true,
+                    "reason": null
+                  }
+                ]
+              }
+            ],
+            "matching_total": 1,
+            "freshness": {
+              "state": "known",
+              "as_of": 1794441600000,
+              "source_revision": "fixture-revision-1"
+            },
+            "continuation": null
+          },
+          "freshness": {
+            "state": "known",
+            "as_of": 1794441600000,
+            "source_revision": "fixture-revision-1"
+          }
+        },
+        "actions": [
+          {
+            "action": "admin_create_assignment",
+            "enabled": true,
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "admin_list_independent_failed_access_stale_protection",
+      "deployment_id": "00000000-0000-4000-8000-000000000001",
+      "snapshot": {
+        "surface": "admin_list",
+        "query": {
+          "deployment_id": "00000000-0000-4000-8000-000000000001",
+          "scope": {
+            "kind": "deployment"
+          }
+        },
+        "directory": {
+          "state": "ready",
+          "data": {
+            "items": [
+              {
+                "operator_id": "00000000-0000-4000-8000-000000000002",
+                "workspace_id": "00000000-0000-4000-8000-000000000003",
+                "display_name": "Fictional operator",
+                "slug": "fixture-operator",
+                "setup_state": "pending",
+                "desired_enabled": true,
+                "access": {
+                  "state": "unavailable",
+                  "data": null,
+                  "freshness": {
+                    "state": "unavailable",
+                    "error_code": "source_unavailable"
+                  }
+                },
+                "usage": {
+                  "state": "ready",
+                  "data": {
+                    "used_bytes": 0
+                  },
+                  "freshness": {
+                    "state": "known",
+                    "as_of": 1794441600000,
+                    "source_revision": "fixture-revision-1"
+                  }
+                },
+                "protection": {
+                  "state": "stale",
+                  "data": {
+                    "status": "protected",
+                    "last_verified_at": 1794441599000,
+                    "point_age_ms": 1000,
+                    "proof_ref": "fixture-point-proof"
+                  },
+                  "freshness": {
+                    "state": "stale",
+                    "as_of": 1794441600000,
+                    "source_revision": "fixture-revision-1"
+                  }
+                },
+                "release_id": "00000000-0000-4000-8000-000000000005",
+                "operation": {
+                  "operation": {
+                    "deployment_id": "00000000-0000-4000-8000-000000000001",
+                    "scope": {
+                      "kind": "workspace",
+                      "operator_id": "00000000-0000-4000-8000-000000000002",
+                      "workspace_id": "00000000-0000-4000-8000-000000000003"
+                    },
+                    "kind": "provision",
+                    "operation_id": "00000000-0000-4000-8000-000000000004",
+                    "idempotency_key": "fixture-original-key",
+                    "request_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                  },
+                  "state": "pending",
+                  "revision": 1,
+                  "observed_at": 1794441600000,
+                  "result": null,
+                  "error_code": null,
+                  "action_required": null
+                },
+                "actions": [
+                  {
+                    "action": "admin_refresh_source",
+                    "enabled": true,
+                    "reason": null
+                  },
+                  {
+                    "action": "admin_check_operation",
+                    "enabled": true,
+                    "reason": null
+                  }
+                ]
+              }
+            ],
+            "matching_total": 1,
+            "freshness": {
+              "state": "known",
+              "as_of": 1794441600000,
+              "source_revision": "fixture-revision-1"
+            },
+            "continuation": null
+          },
+          "freshness": {
+            "state": "known",
+            "as_of": 1794441600000,
+            "source_revision": "fixture-revision-1"
+          }
+        },
+        "actions": [
+          {
+            "action": "admin_create_assignment",
+            "enabled": true,
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "admin_list_loading",
+      "deployment_id": "00000000-0000-4000-8000-000000000001",
+      "snapshot": {
+        "surface": "admin_list",
+        "query": {
+          "deployment_id": "00000000-0000-4000-8000-000000000001",
+          "scope": {
+            "kind": "deployment"
+          }
+        },
+        "directory": {
+          "state": "loading"
+        },
+        "actions": [
+          {
+            "action": "admin_create_assignment",
+            "enabled": true,
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "admin_list_unavailable_not_zero",
+      "deployment_id": "00000000-0000-4000-8000-000000000001",
+      "snapshot": {
+        "surface": "admin_list",
+        "query": {
+          "deployment_id": "00000000-0000-4000-8000-000000000001",
+          "scope": {
+            "kind": "deployment"
+          }
+        },
+        "directory": {
+          "state": "failed",
+          "data": null,
+          "freshness": {
+            "state": "unavailable",
+            "error_code": "registry_unavailable"
+          }
+        },
+        "actions": [
+          {
+            "action": "admin_create_assignment",
+            "enabled": true,
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "admin_list_bounded_page_one",
+      "deployment_id": "00000000-0000-4000-8000-000000000001",
+      "snapshot": {
+        "surface": "admin_list",
+        "query": {
+          "deployment_id": "00000000-0000-4000-8000-000000000001",
+          "scope": {
+            "kind": "deployment"
+          },
+          "limit": 1
+        },
+        "directory": {
+          "state": "ready",
+          "data": {
+            "items": [
+              {
+                "operator_id": "00000000-0000-4000-8000-000000000002",
+                "workspace_id": "00000000-0000-4000-8000-000000000003",
+                "display_name": "Fictional operator",
+                "slug": "fixture-operator",
+                "setup_state": "pending",
+                "desired_enabled": true,
+                "access": {
+                  "state": "ready",
+                  "data": {
+                    "effective_enabled": false,
+                    "access_epoch": 1,
+                    "source_proof_ref": "fixture-source-proof"
+                  },
+                  "freshness": {
+                    "state": "known",
+                    "as_of": 1794441600000,
+                    "source_revision": "fixture-revision-1"
+                  }
+                },
+                "usage": {
+                  "state": "ready",
+                  "data": {
+                    "used_bytes": 0
+                  },
+                  "freshness": {
+                    "state": "known",
+                    "as_of": 1794441600000,
+                    "source_revision": "fixture-revision-1"
+                  }
+                },
+                "protection": {
+                  "state": "ready",
+                  "data": {
+                    "status": "protected",
+                    "last_verified_at": 1794441599000,
+                    "point_age_ms": 1000,
+                    "proof_ref": "fixture-point-proof"
+                  },
+                  "freshness": {
+                    "state": "known",
+                    "as_of": 1794441600000,
+                    "source_revision": "fixture-revision-1"
+                  }
+                },
+                "release_id": "00000000-0000-4000-8000-000000000005",
+                "operation": {
+                  "operation": {
+                    "deployment_id": "00000000-0000-4000-8000-000000000001",
+                    "scope": {
+                      "kind": "workspace",
+                      "operator_id": "00000000-0000-4000-8000-000000000002",
+                      "workspace_id": "00000000-0000-4000-8000-000000000003"
+                    },
+                    "kind": "provision",
+                    "operation_id": "00000000-0000-4000-8000-000000000004",
+                    "idempotency_key": "fixture-original-key",
+                    "request_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                  },
+                  "state": "pending",
+                  "revision": 1,
+                  "observed_at": 1794441600000,
+                  "result": null,
+                  "error_code": null,
+                  "action_required": null
+                },
+                "actions": [
+                  {
+                    "action": "admin_refresh_source",
+                    "enabled": true,
+                    "reason": null
+                  },
+                  {
+                    "action": "admin_check_operation",
+                    "enabled": true,
+                    "reason": null
+                  }
+                ]
+              }
+            ],
+            "matching_total": 3,
+            "freshness": {
+              "state": "known",
+              "as_of": 1794441600000,
+              "source_revision": "fixture-revision-1"
+            },
+            "continuation": {
+              "context": {
+                "deployment_id": "00000000-0000-4000-8000-000000000001",
+                "scope": {
+                  "kind": "deployment"
+                },
+                "endpoint": "admin_operators",
+                "filter_hash": "249062c74f01bcf59aea19842bb7c8d03b18409141a3dea8ccb8f7e0f3c8fdb1",
+                "as_of": 1794441600000,
+                "source_revision": "fixture-revision-1",
+                "ordering_version": 1
+              },
+              "position": [
+                "fictional operator",
+                "00000000-0000-4000-8000-000000000002"
+              ],
+              "limit": 1
+            }
+          },
+          "freshness": {
+            "state": "known",
+            "as_of": 1794441600000,
+            "source_revision": "fixture-revision-1"
+          }
+        },
+        "actions": [
+          {
+            "action": "admin_create_assignment",
+            "enabled": true,
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "admin_list_bounded_page_two",
+      "deployment_id": "00000000-0000-4000-8000-000000000001",
+      "snapshot": {
+        "surface": "admin_list",
+        "query": {
+          "deployment_id": "00000000-0000-4000-8000-000000000001",
+          "scope": {
+            "kind": "deployment"
+          },
+          "limit": 1,
+          "cursor": {
+            "context": {
+              "deployment_id": "00000000-0000-4000-8000-000000000001",
+              "scope": {
+                "kind": "deployment"
+              },
+              "endpoint": "admin_operators",
+              "filter_hash": "249062c74f01bcf59aea19842bb7c8d03b18409141a3dea8ccb8f7e0f3c8fdb1",
+              "as_of": 1794441600000,
+              "source_revision": "fixture-revision-1",
+              "ordering_version": 1
+            },
+            "position": [
+              "fictional operator",
+              "00000000-0000-4000-8000-000000000002"
+            ],
+            "limit": 1
+          }
+        },
+        "directory": {
+          "state": "ready",
+          "data": {
+            "items": [
+              {
+                "operator_id": "00000000-0000-4000-8000-000000000005",
+                "workspace_id": "00000000-0000-4000-8000-000000000005",
+                "display_name": "Second fictional operator",
+                "slug": "fixture-operator",
+                "setup_state": "pending",
+                "desired_enabled": true,
+                "access": {
+                  "state": "ready",
+                  "data": {
+                    "effective_enabled": false,
+                    "access_epoch": 1,
+                    "source_proof_ref": "fixture-source-proof"
+                  },
+                  "freshness": {
+                    "state": "known",
+                    "as_of": 1794441600000,
+                    "source_revision": "fixture-revision-1"
+                  }
+                },
+                "usage": {
+                  "state": "ready",
+                  "data": {
+                    "used_bytes": 0
+                  },
+                  "freshness": {
+                    "state": "known",
+                    "as_of": 1794441600000,
+                    "source_revision": "fixture-revision-1"
+                  }
+                },
+                "protection": {
+                  "state": "ready",
+                  "data": {
+                    "status": "protected",
+                    "last_verified_at": 1794441599000,
+                    "point_age_ms": 1000,
+                    "proof_ref": "fixture-point-proof"
+                  },
+                  "freshness": {
+                    "state": "known",
+                    "as_of": 1794441600000,
+                    "source_revision": "fixture-revision-1"
+                  }
+                },
+                "release_id": "00000000-0000-4000-8000-000000000005",
+                "operation": {
+                  "operation": {
+                    "deployment_id": "00000000-0000-4000-8000-000000000001",
+                    "scope": {
+                      "kind": "workspace",
+                      "operator_id": "00000000-0000-4000-8000-000000000005",
+                      "workspace_id": "00000000-0000-4000-8000-000000000005"
+                    },
+                    "kind": "provision",
+                    "operation_id": "00000000-0000-4000-8000-000000000004",
+                    "idempotency_key": "fixture-original-key",
+                    "request_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                  },
+                  "state": "pending",
+                  "revision": 1,
+                  "observed_at": 1794441600000,
+                  "result": null,
+                  "error_code": null,
+                  "action_required": null
+                },
+                "actions": [
+                  {
+                    "action": "admin_refresh_source",
+                    "enabled": true,
+                    "reason": null
+                  },
+                  {
+                    "action": "admin_check_operation",
+                    "enabled": true,
+                    "reason": null
+                  }
+                ]
+              }
+            ],
+            "matching_total": 3,
+            "freshness": {
+              "state": "known",
+              "as_of": 1794441600000,
+              "source_revision": "fixture-revision-1"
+            },
+            "continuation": {
+              "context": {
+                "deployment_id": "00000000-0000-4000-8000-000000000001",
+                "scope": {
+                  "kind": "deployment"
+                },
+                "endpoint": "admin_operators",
+                "filter_hash": "249062c74f01bcf59aea19842bb7c8d03b18409141a3dea8ccb8f7e0f3c8fdb1",
+                "as_of": 1794441600000,
+                "source_revision": "fixture-revision-1",
+                "ordering_version": 1
+              },
+              "position": [
+                "second fictional operator",
+                "00000000-0000-4000-8000-000000000005"
+              ],
+              "limit": 1
+            }
+          },
+          "freshness": {
+            "state": "known",
+            "as_of": 1794441600000,
+            "source_revision": "fixture-revision-1"
+          }
+        },
+        "actions": [
+          {
+            "action": "admin_create_assignment",
+            "enabled": true,
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "admin_list_filter_change_discards_cursor",
+      "deployment_id": "00000000-0000-4000-8000-000000000001",
+      "snapshot": {
+        "surface": "admin_list",
+        "query": {
+          "deployment_id": "00000000-0000-4000-8000-000000000001",
+          "scope": {
+            "kind": "deployment"
+          },
+          "limit": 1,
+          "cursor": null
+        },
+        "directory": {
+          "state": "loading"
+        },
+        "actions": [
+          {
+            "action": "admin_create_assignment",
+            "enabled": true,
+            "reason": null
+          }
+        ],
+        "filters": {
+          "search": "new search"
+        }
+      }
+    },
+    {
+      "case_id": "admin_add_free_empty_defaults",
+      "deployment_id": "00000000-0000-4000-8000-000000000001",
+      "snapshot": {
+        "surface": "admin_add",
+        "draft": {},
+        "state": "editing",
+        "actions": [
+          {
+            "action": "admin_create_assignment",
+            "enabled": true,
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "admin_add_submitting_retains_original",
+      "deployment_id": "00000000-0000-4000-8000-000000000001",
+      "snapshot": {
+        "surface": "admin_add",
+        "draft": {},
+        "state": "submitting",
+        "actions": [
+          {
+            "action": "admin_create_assignment",
+            "enabled": false,
+            "reason": "submission_pending"
+          },
+          {
+            "action": "admin_check_operation",
+            "enabled": true,
+            "reason": null
+          }
+        ],
+        "original_outcome": {
+          "operation": {
+            "deployment_id": "00000000-0000-4000-8000-000000000001",
+            "scope": {
+              "kind": "deployment"
+            },
+            "kind": "create_assignment",
+            "operation_id": "00000000-0000-4000-8000-000000000004",
+            "idempotency_key": "fixture-original-key",
+            "request_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "state": "pending",
+          "revision": 1,
+          "observed_at": 1794441600000,
+          "result": null,
+          "error_code": null,
+          "action_required": null
+        }
+      }
+    },
+    {
+      "case_id": "admin_add_invalid_input_retained",
+      "deployment_id": "00000000-0000-4000-8000-000000000001",
+      "snapshot": {
+        "surface": "admin_add",
+        "draft": {
+          "display_name": "  Keep my entered name  ",
+          "email": "not an email",
+          "slug": "Invalid Slug",
+          "release_id": "00000000-0000-4000-8000-000000000005",
+          "support_contact": "support@example.invalid"
+        },
+        "state": "invalid",
+        "actions": [
+          {
+            "action": "admin_create_assignment",
+            "enabled": true,
+            "reason": null
+          }
+        ],
+        "issues": [
+          {
+            "field": "email",
+            "message": "Enter an email address."
+          },
+          {
+            "field": "slug",
+            "message": "Use lowercase letters, numbers or hyphens."
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "admin_add_conflict_retains_input",
+      "deployment_id": "00000000-0000-4000-8000-000000000001",
+      "snapshot": {
+        "surface": "admin_add",
+        "draft": {
+          "display_name": "  Keep my entered name  ",
+          "email": "not an email",
+          "slug": "Invalid Slug",
+          "release_id": "00000000-0000-4000-8000-000000000005",
+          "support_contact": "support@example.invalid"
+        },
+        "state": "conflicted",
+        "actions": [
+          {
+            "action": "admin_create_assignment",
+            "enabled": true,
+            "reason": null
+          }
+        ],
+        "issues": [
+          {
+            "field": "email",
+            "message": "Enter an email address."
+          },
+          {
+            "field": "slug",
+            "message": "Use lowercase letters, numbers or hyphens."
+          }
+        ],
+        "expected_revision": 1,
+        "current_revision": 2
+      }
+    },
+    {
+      "case_id": "admin_add_unknown_requires_original_lookup",
+      "deployment_id": "00000000-0000-4000-8000-000000000001",
+      "snapshot": {
+        "surface": "admin_add",
+        "draft": {
+          "display_name": "  Keep my entered name  ",
+          "email": "not an email",
+          "slug": "Invalid Slug",
+          "release_id": "00000000-0000-4000-8000-000000000005",
+          "support_contact": "support@example.invalid"
+        },
+        "state": "outcome_unknown",
+        "actions": [
+          {
+            "action": "admin_create_assignment",
+            "enabled": false,
+            "reason": "outcome_unknown"
+          },
+          {
+            "action": "admin_check_operation",
+            "enabled": true,
+            "reason": null
+          },
+          {
+            "action": "admin_retry_operation",
+            "enabled": false,
+            "reason": "check_original_first"
+          }
+        ],
+        "issues": [],
+        "expected_revision": 1,
+        "current_revision": 2,
+        "original_outcome": {
+          "operation": {
+            "deployment_id": "00000000-0000-4000-8000-000000000001",
+            "scope": {
+              "kind": "deployment"
+            },
+            "kind": "create_assignment",
+            "operation_id": "00000000-0000-4000-8000-000000000004",
+            "idempotency_key": "fixture-original-key",
+            "request_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "state": "unknown",
+          "revision": 1,
+          "observed_at": 1794441600000,
+          "result": null,
+          "error_code": "transport_timeout",
+          "action_required": "check_original_result"
+        }
+      }
+    },
+    {
+      "case_id": "admin_detail_refresh_is_pending_operation",
+      "deployment_id": "00000000-0000-4000-8000-000000000001",
+      "snapshot": {
+        "surface": "admin_detail",
+        "operator": {
+          "operator_id": "00000000-0000-4000-8000-000000000002",
+          "workspace_id": "00000000-0000-4000-8000-000000000003",
+          "display_name": "Fictional operator",
+          "slug": "fixture-operator",
+          "setup_state": "pending",
+          "desired_enabled": true,
+          "access": {
+            "state": "ready",
+            "data": {
+              "effective_enabled": false,
+              "access_epoch": 1,
+              "source_proof_ref": "fixture-source-proof"
+            },
+            "freshness": {
+              "state": "known",
+              "as_of": 1794441600000,
+              "source_revision": "fixture-revision-1"
+            }
+          },
+          "usage": {
+            "state": "ready",
+            "data": {
+              "used_bytes": 0
+            },
+            "freshness": {
+              "state": "known",
+              "as_of": 1794441600000,
+              "source_revision": "fixture-revision-1"
+            }
+          },
+          "protection": {
+            "state": "ready",
+            "data": {
+              "status": "protected",
+              "last_verified_at": 1794441599000,
+              "point_age_ms": 1000,
+              "proof_ref": "fixture-point-proof"
+            },
+            "freshness": {
+              "state": "known",
+              "as_of": 1794441600000,
+              "source_revision": "fixture-revision-1"
+            }
+          },
+          "release_id": "00000000-0000-4000-8000-000000000005",
+          "operation": {
+            "operation": {
+              "deployment_id": "00000000-0000-4000-8000-000000000001",
+              "scope": {
+                "kind": "workspace",
+                "operator_id": "00000000-0000-4000-8000-000000000002",
+                "workspace_id": "00000000-0000-4000-8000-000000000003"
+              },
+              "kind": "provision",
+              "operation_id": "00000000-0000-4000-8000-000000000004",
+              "idempotency_key": "fixture-original-key",
+              "request_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "state": "pending",
+            "revision": 1,
+            "observed_at": 1794441600000,
+            "result": null,
+            "error_code": null,
+            "action_required": null
+          },
+          "actions": [
+            {
+              "action": "admin_refresh_source",
+              "enabled": true,
+              "reason": null
+            },
+            {
+              "action": "admin_check_operation",
+              "enabled": true,
+              "reason": null
+            }
+          ]
+        },
+        "readiness": {
+          "state": "ready",
+          "data": {
+            "state": "ready",
+            "checks": [
+              {
+                "name": "isolation",
+                "state": "passed",
+                "evidence_ref": "fixture-proof"
+              },
+              {
+                "name": "schema",
+                "state": "passed",
+                "evidence_ref": "fixture-proof"
+              },
+              {
+                "name": "routing",
+                "state": "passed",
+                "evidence_ref": "fixture-proof"
+              },
+              {
+                "name": "protection",
+                "state": "passed",
+                "evidence_ref": "fixture-proof"
+              },
+              {
+                "name": "binding",
+                "state": "passed",
+                "evidence_ref": "fixture-proof"
+              }
+            ]
+          },
+          "freshness": {
+            "state": "known",
+            "as_of": 1794441600000,
+            "source_revision": "fixture-revision-1"
+          }
+        },
+        "refresh_operation": {
+          "operation": {
+            "deployment_id": "00000000-0000-4000-8000-000000000001",
+            "scope": {
+              "kind": "workspace",
+              "operator_id": "00000000-0000-4000-8000-000000000002",
+              "workspace_id": "00000000-0000-4000-8000-000000000003"
+            },
+            "kind": "refresh_source",
+            "operation_id": "00000000-0000-4000-8000-000000000004",
+            "idempotency_key": "fixture-original-key",
+            "request_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "state": "pending",
+          "revision": 1,
+          "observed_at": 1794441600000,
+          "result": null,
+          "error_code": null,
+          "action_required": null
+        },
+        "actions": [
+          {
+            "action": "admin_provision",
+            "enabled": true,
+            "reason": null
+          },
+          {
+            "action": "admin_enable",
+            "enabled": true,
+            "reason": null
+          },
+          {
+            "action": "admin_disable",
+            "enabled": true,
+            "reason": null
+          },
+          {
+            "action": "admin_reissue_invitation",
+            "enabled": true,
+            "reason": null
+          },
+          {
+            "action": "admin_rebind",
+            "enabled": true,
+            "reason": null
+          },
+          {
+            "action": "admin_prepare_retirement",
+            "enabled": true,
+            "reason": null
+          },
+          {
+            "action": "admin_confirm_retirement",
+            "enabled": true,
+            "reason": null
+          },
+          {
+            "action": "admin_repair_runtime",
+            "enabled": true,
+            "reason": null
+          },
+          {
+            "action": "admin_announce_maintenance",
+            "enabled": true,
+            "reason": null
+          },
+          {
+            "action": "admin_maintenance_release",
+            "enabled": true,
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "admin_detail_unknown_usage_unavailable_enable",
+      "deployment_id": "00000000-0000-4000-8000-000000000001",
+      "snapshot": {
+        "surface": "admin_detail",
+        "operator": {
+          "operator_id": "00000000-0000-4000-8000-000000000002",
+          "workspace_id": "00000000-0000-4000-8000-000000000003",
+          "display_name": "Fictional operator",
+          "slug": "fixture-operator",
+          "setup_state": "pending",
+          "desired_enabled": true,
+          "access": {
+            "state": "unavailable",
+            "data": null,
+            "freshness": {
+              "state": "unavailable",
+              "error_code": "source_unavailable"
+            }
+          },
+          "usage": {
+            "state": "unavailable",
+            "data": null,
+            "freshness": {
+              "state": "unknown",
+              "error_code": "usage_unknown"
+            }
+          },
+          "protection": {
+            "state": "ready",
+            "data": {
+              "status": "protected",
+              "last_verified_at": 1794441599000,
+              "point_age_ms": 1000,
+              "proof_ref": "fixture-point-proof"
+            },
+            "freshness": {
+              "state": "known",
+              "as_of": 1794441600000,
+              "source_revision": "fixture-revision-1"
+            }
+          },
+          "release_id": "00000000-0000-4000-8000-000000000005",
+          "operation": {
+            "operation": {
+              "deployment_id": "00000000-0000-4000-8000-000000000001",
+              "scope": {
+                "kind": "workspace",
+                "operator_id": "00000000-0000-4000-8000-000000000002",
+                "workspace_id": "00000000-0000-4000-8000-000000000003"
+              },
+              "kind": "provision",
+              "operation_id": "00000000-0000-4000-8000-000000000004",
+              "idempotency_key": "fixture-original-key",
+              "request_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "state": "pending",
+            "revision": 1,
+            "observed_at": 1794441600000,
+            "result": null,
+            "error_code": null,
+            "action_required": null
+          },
+          "actions": [
+            {
+              "action": "admin_refresh_source",
+              "enabled": true,
+              "reason": null
+            },
+            {
+              "action": "admin_check_operation",
+              "enabled": true,
+              "reason": null
+            }
+          ]
+        },
+        "readiness": {
+          "state": "unavailable",
+          "data": null,
+          "freshness": {
+            "state": "unavailable",
+            "error_code": "readiness_unavailable"
+          }
+        },
+        "refresh_operation": null,
+        "actions": [
+          {
+            "action": "admin_enable",
+            "enabled": false,
+            "reason": "readiness_unavailable"
+          },
+          {
+            "action": "admin_refresh_source",
+            "enabled": true,
+            "reason": null
+          },
+          {
+            "action": "admin_repair_runtime",
+            "enabled": true,
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "operator_settings_independent_protection_failure",
+      "deployment_id": "00000000-0000-4000-8000-000000000001",
+      "snapshot": {
+        "surface": "operator_settings",
+        "scope": {
+          "kind": "workspace",
+          "operator_id": "00000000-0000-4000-8000-000000000002",
+          "workspace_id": "00000000-0000-4000-8000-000000000003"
+        },
+        "usage": {
+          "state": "ready",
+          "data": {
+            "used_bytes": 1024
+          },
+          "freshness": {
+            "state": "known",
+            "as_of": 1794441600000,
+            "source_revision": "fixture-revision-1"
+          }
+        },
+        "protection": {
+          "state": "failed",
+          "data": null,
+          "freshness": {
+            "state": "unavailable",
+            "error_code": "backup_unavailable"
+          }
+        },
+        "support_contact": "support@example.invalid",
+        "maintenance": {
+          "state": "ready",
+          "data": {
+            "message": "Fictional announced maintenance window.",
+            "starts_at": 1794441601000,
+            "ends_at": 1794441602000
+          },
+          "freshness": {
+            "state": "known",
+            "as_of": 1794441600000,
+            "source_revision": "fixture-revision-1"
+          }
+        },
+        "actions": [
+          {
+            "action": "operator_read_settings",
+            "enabled": true,
+            "reason": null
+          },
+          {
+            "action": "operator_list_points",
+            "enabled": true,
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "operator_settings_unknown_usage_not_zero",
+      "deployment_id": "00000000-0000-4000-8000-000000000001",
+      "snapshot": {
+        "surface": "operator_settings",
+        "scope": {
+          "kind": "workspace",
+          "operator_id": "00000000-0000-4000-8000-000000000002",
+          "workspace_id": "00000000-0000-4000-8000-000000000003"
+        },
+        "usage": {
+          "state": "unavailable",
+          "data": null,
+          "freshness": {
+            "state": "unknown",
+            "error_code": "usage_unknown"
+          }
+        },
+        "protection": {
+          "state": "ready",
+          "data": {
+            "status": "protected",
+            "last_verified_at": 1794441599000,
+            "point_age_ms": 1000,
+            "proof_ref": "fixture-point-proof"
+          },
+          "freshness": {
+            "state": "known",
+            "as_of": 1794441600000,
+            "source_revision": "fixture-revision-1"
+          }
+        },
+        "support_contact": "support@example.invalid",
+        "maintenance": {
+          "state": "ready",
+          "data": {
+            "message": "Fictional announced maintenance window.",
+            "starts_at": 1794441601000,
+            "ends_at": 1794441602000
+          },
+          "freshness": {
+            "state": "known",
+            "as_of": 1794441600000,
+            "source_revision": "fixture-revision-1"
+          }
+        },
+        "actions": [
+          {
+            "action": "operator_read_settings",
+            "enabled": true,
+            "reason": null
+          },
+          {
+            "action": "operator_list_points",
+            "enabled": true,
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "operator_settings_stale_over_allowance_retains_reads",
+      "deployment_id": "00000000-0000-4000-8000-000000000001",
+      "snapshot": {
+        "surface": "operator_settings",
+        "scope": {
+          "kind": "workspace",
+          "operator_id": "00000000-0000-4000-8000-000000000002",
+          "workspace_id": "00000000-0000-4000-8000-000000000003"
+        },
+        "usage": {
+          "state": "stale",
+          "data": {
+            "used_bytes": 50000001
+          },
+          "freshness": {
+            "state": "stale",
+            "as_of": 1794441600000,
+            "source_revision": "fixture-revision-1"
+          }
+        },
+        "protection": {
+          "state": "ready",
+          "data": {
+            "status": "protected",
+            "last_verified_at": 1794441599000,
+            "point_age_ms": 1000,
+            "proof_ref": "fixture-point-proof"
+          },
+          "freshness": {
+            "state": "known",
+            "as_of": 1794441600000,
+            "source_revision": "fixture-revision-1"
+          }
+        },
+        "support_contact": "support@example.invalid",
+        "maintenance": {
+          "state": "loading"
+        },
+        "actions": [
+          {
+            "action": "operator_read_settings",
+            "enabled": true,
+            "reason": null
+          },
+          {
+            "action": "operator_list_points",
+            "enabled": true,
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "operator_restore_unqualified",
+      "deployment_id": "00000000-0000-4000-8000-000000000001",
+      "snapshot": {
+        "surface": "operator_recovery",
+        "scope": {
+          "kind": "workspace",
+          "operator_id": "00000000-0000-4000-8000-000000000002",
+          "workspace_id": "00000000-0000-4000-8000-000000000003"
+        },
+        "mode": "normal",
+        "state": "unavailable",
+        "availability_reason": "restore_unqualified",
+        "gates": [
+          {
+            "name": "current_identity",
+            "state": "unavailable",
+            "evidence_ref": null
+          },
+          {
+            "name": "qualified_engine",
+            "state": "unavailable",
+            "evidence_ref": null
+          },
+          {
+            "name": "verified_catalog",
+            "state": "unavailable",
+            "evidence_ref": null
+          },
+          {
+            "name": "runtime_ready",
+            "state": "unavailable",
+            "evidence_ref": null
+          },
+          {
+            "name": "strong_step_up",
+            "state": "unavailable",
+            "evidence_ref": null
+          }
+        ],
+        "catalog": {
+          "state": "unavailable",
+          "data": null,
+          "freshness": {
+            "state": "unavailable",
+            "error_code": "restore_unqualified"
+          }
+        },
+        "actions": [
+          {
+            "action": "operator_list_points",
+            "enabled": false,
+            "reason": "restore_unqualified"
+          },
+          {
+            "action": "operator_preview_restore",
+            "enabled": false,
+            "reason": "restore_unqualified"
+          },
+          {
+            "action": "operator_confirm_restore",
+            "enabled": false,
+            "reason": "restore_unqualified"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "operator_recovery_mode_auth_unavailable",
+      "deployment_id": "00000000-0000-4000-8000-000000000001",
+      "snapshot": {
+        "surface": "operator_recovery",
+        "scope": {
+          "kind": "workspace",
+          "operator_id": "00000000-0000-4000-8000-000000000002",
+          "workspace_id": "00000000-0000-4000-8000-000000000003"
+        },
+        "mode": "recovery",
+        "state": "unavailable",
+        "availability_reason": "current_identity_unavailable",
+        "gates": [
+          {
+            "name": "current_identity",
+            "state": "unavailable",
+            "evidence_ref": null
+          },
+          {
+            "name": "qualified_engine",
+            "state": "unavailable",
+            "evidence_ref": null
+          },
+          {
+            "name": "verified_catalog",
+            "state": "unavailable",
+            "evidence_ref": null
+          },
+          {
+            "name": "runtime_ready",
+            "state": "unavailable",
+            "evidence_ref": null
+          },
+          {
+            "name": "strong_step_up",
+            "state": "unavailable",
+            "evidence_ref": null
+          }
+        ],
+        "catalog": {
+          "state": "unavailable",
+          "data": null,
+          "freshness": {
+            "state": "unavailable",
+            "error_code": "restore_unqualified"
+          }
+        },
+        "actions": [
+          {
+            "action": "operator_list_points",
+            "enabled": false,
+            "reason": "restore_unqualified"
+          },
+          {
+            "action": "operator_preview_restore",
+            "enabled": false,
+            "reason": "restore_unqualified"
+          },
+          {
+            "action": "operator_confirm_restore",
+            "enabled": false,
+            "reason": "restore_unqualified"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "operator_restore_choose_point_step_up_pending",
+      "deployment_id": "00000000-0000-4000-8000-000000000001",
+      "snapshot": {
+        "surface": "operator_recovery",
+        "scope": {
+          "kind": "workspace",
+          "operator_id": "00000000-0000-4000-8000-000000000002",
+          "workspace_id": "00000000-0000-4000-8000-000000000003"
+        },
+        "mode": "normal",
+        "state": "choose_point",
+        "availability_reason": null,
+        "gates": [
+          {
+            "name": "current_identity",
+            "state": "passed",
+            "evidence_ref": "fixture-proof"
+          },
+          {
+            "name": "qualified_engine",
+            "state": "passed",
+            "evidence_ref": "fixture-proof"
+          },
+          {
+            "name": "verified_catalog",
+            "state": "passed",
+            "evidence_ref": "fixture-proof"
+          },
+          {
+            "name": "runtime_ready",
+            "state": "passed",
+            "evidence_ref": "fixture-proof"
+          },
+          {
+            "name": "strong_step_up",
+            "state": "pending"
+          }
+        ],
+        "catalog": {
+          "state": "ready",
+          "data": {
+            "items": [
+              {
+                "resource_id": "00000000-0000-4000-8000-000000000005",
+                "revision": 1,
+                "freshness": {
+                  "state": "known",
+                  "as_of": 1794441600000,
+                  "source_revision": "fixture-revision-1"
+                },
+                "captured_at": 1794441598000,
+                "verified_at": 1794441599000,
+                "manifest_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "eligible": true
+              }
+            ],
+            "matching_total": 1,
+            "freshness": {
+              "state": "known",
+              "as_of": 1794441600000,
+              "source_revision": "fixture-revision-1"
+            },
+            "continuation": null
+          },
+          "freshness": {
+            "state": "known",
+            "as_of": 1794441600000,
+            "source_revision": "fixture-revision-1"
+          }
+        },
+        "actions": [
+          {
+            "action": "operator_list_points",
+            "enabled": true,
+            "reason": null
+          },
+          {
+            "action": "operator_preview_restore",
+            "enabled": true,
+            "reason": null
+          },
+          {
+            "action": "operator_recent_authenticate",
+            "enabled": true,
+            "reason": null
+          },
+          {
+            "action": "operator_confirm_restore",
+            "enabled": false,
+            "reason": "strong_step_up_required"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "operator_restore_exact_confirmation",
+      "deployment_id": "00000000-0000-4000-8000-000000000001",
+      "snapshot": {
+        "surface": "operator_recovery",
+        "scope": {
+          "kind": "workspace",
+          "operator_id": "00000000-0000-4000-8000-000000000002",
+          "workspace_id": "00000000-0000-4000-8000-000000000003"
+        },
+        "mode": "normal",
+        "state": "confirm",
+        "availability_reason": null,
+        "gates": [
+          {
+            "name": "current_identity",
+            "state": "passed",
+            "evidence_ref": "fixture-proof"
+          },
+          {
+            "name": "qualified_engine",
+            "state": "passed",
+            "evidence_ref": "fixture-proof"
+          },
+          {
+            "name": "verified_catalog",
+            "state": "passed",
+            "evidence_ref": "fixture-proof"
+          },
+          {
+            "name": "runtime_ready",
+            "state": "passed",
+            "evidence_ref": "fixture-proof"
+          },
+          {
+            "name": "strong_step_up",
+            "state": "passed",
+            "evidence_ref": "fixture-proof"
+          }
+        ],
+        "catalog": {
+          "state": "ready",
+          "data": {
+            "items": [
+              {
+                "resource_id": "00000000-0000-4000-8000-000000000005",
+                "revision": 1,
+                "freshness": {
+                  "state": "known",
+                  "as_of": 1794441600000,
+                  "source_revision": "fixture-revision-1"
+                },
+                "captured_at": 1794441598000,
+                "verified_at": 1794441599000,
+                "manifest_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "eligible": true
+              }
+            ],
+            "matching_total": 1,
+            "freshness": {
+              "state": "known",
+              "as_of": 1794441600000,
+              "source_revision": "fixture-revision-1"
+            },
+            "continuation": null
+          },
+          "freshness": {
+            "state": "known",
+            "as_of": 1794441600000,
+            "source_revision": "fixture-revision-1"
+          }
+        },
+        "actions": [
+          {
+            "action": "operator_confirm_restore",
+            "enabled": true,
+            "reason": null
+          }
+        ],
+        "selected_point_id": "00000000-0000-4000-8000-000000000005",
+        "preview_id": "00000000-0000-4000-8000-000000000004",
+        "exact_request_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    {
+      "case_id": "operator_restore_unknown_retains_original",
+      "deployment_id": "00000000-0000-4000-8000-000000000001",
+      "snapshot": {
+        "surface": "operator_recovery",
+        "scope": {
+          "kind": "workspace",
+          "operator_id": "00000000-0000-4000-8000-000000000002",
+          "workspace_id": "00000000-0000-4000-8000-000000000003"
+        },
+        "mode": "normal",
+        "state": "outcome_unknown",
+        "availability_reason": null,
+        "gates": [
+          {
+            "name": "current_identity",
+            "state": "passed",
+            "evidence_ref": "fixture-proof"
+          },
+          {
+            "name": "qualified_engine",
+            "state": "passed",
+            "evidence_ref": "fixture-proof"
+          },
+          {
+            "name": "verified_catalog",
+            "state": "passed",
+            "evidence_ref": "fixture-proof"
+          },
+          {
+            "name": "runtime_ready",
+            "state": "passed",
+            "evidence_ref": "fixture-proof"
+          },
+          {
+            "name": "strong_step_up",
+            "state": "passed",
+            "evidence_ref": "fixture-proof"
+          }
+        ],
+        "catalog": {
+          "state": "ready",
+          "data": {
+            "items": [
+              {
+                "resource_id": "00000000-0000-4000-8000-000000000005",
+                "revision": 1,
+                "freshness": {
+                  "state": "known",
+                  "as_of": 1794441600000,
+                  "source_revision": "fixture-revision-1"
+                },
+                "captured_at": 1794441598000,
+                "verified_at": 1794441599000,
+                "manifest_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "eligible": true
+              }
+            ],
+            "matching_total": 1,
+            "freshness": {
+              "state": "known",
+              "as_of": 1794441600000,
+              "source_revision": "fixture-revision-1"
+            },
+            "continuation": null
+          },
+          "freshness": {
+            "state": "known",
+            "as_of": 1794441600000,
+            "source_revision": "fixture-revision-1"
+          }
+        },
+        "actions": [
+          {
+            "action": "operator_confirm_restore",
+            "enabled": false,
+            "reason": "outcome_unknown"
+          },
+          {
+            "action": "operator_check_restore",
+            "enabled": true,
+            "reason": null
+          }
+        ],
+        "selected_point_id": "00000000-0000-4000-8000-000000000005",
+        "preview_id": "00000000-0000-4000-8000-000000000004",
+        "exact_request_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "original_outcome": {
+          "operation": {
+            "deployment_id": "00000000-0000-4000-8000-000000000001",
+            "scope": {
+              "kind": "workspace",
+              "operator_id": "00000000-0000-4000-8000-000000000002",
+              "workspace_id": "00000000-0000-4000-8000-000000000003"
+            },
+            "kind": "confirm_restore",
+            "operation_id": "00000000-0000-4000-8000-000000000004",
+            "idempotency_key": "fixture-original-key",
+            "request_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "state": "unknown",
+          "revision": 1,
+          "observed_at": 1794441600000,
+          "result": null,
+          "error_code": "transport_timeout",
+          "action_required": "check_original_result"
+        }
+      }
+    }
+  ]
+}

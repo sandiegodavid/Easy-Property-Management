@@ -1,7 +1,14 @@
 # HOSTED-001 H01 — Baseline, ownership and deployment contracts
 
-Status: design ready for implementation review; no code/deployment/tests performed by
-this document. Implements the H01 design obligation in the [hosted MVP slices](HOSTED_MVP_DESIGN.md#implementation-slices).
+Status: H01.1–H01.7 contracts/scaffolding and focused validation delivered; ready
+for contract-review handoff. Fresh hosted runtime/deployment acceptance is not established.
+See the [pinned H01.1 evidence report](../qualification/reports/HOSTED_MVP_H01_1_BASELINE_2026-11-10.md)
+for current-code reassessment, delivery ownership and focused regression results.
+The [H01.2 evidence report](../qualification/reports/HOSTED_MVP_H01_2_RESOURCES_2026-11-10.md)
+records the unavailable scaffolds and initialization/packaging handoff.
+The [H01.3 evidence report](../qualification/reports/HOSTED_MVP_H01_3_CONTRACTS_2026-11-10.md)
+records bounded values, semantic hash vectors and pure original-outcome comparison.
+No fresh hosted runtime or deployment is established. Implements the H01 design obligation in the [hosted MVP slices](mvp/delivery-plan.md#implementation-slices).
 The [database schema master](../../DATABASE_SCHEMA.md) owns all table/column definitions.
 This document owns use-case boundaries, initialization/order, interfaces and proof tasks.
 
@@ -45,7 +52,7 @@ than linked as if they already exist.
 ## Schema definition placement
 
 All executable schema definitions belong under `application/database/`, using the
-separate resource sets in the [schema master](../../DATABASE_SCHEMA.md#required-schema-definition-location).
+separate resource sets in the [schema master](../../database/overview.md#required-schema-definition-location).
 Application/agent modules must contain no inline schema DDL, table-creation operations,
 ORM `create_all` or alternate initialization fallback. Existing database Alembic Python
 revisions remain a valid resource format. Runtime adapters consume those resources;
@@ -55,7 +62,7 @@ uses the same owning resources and no competing runtime schema creator remains.
 
 ## Development versus production composition
 
-Follow the [portal deployment matrix](HOSTED_MVP_DESIGN.md#development-and-production-deployment-boundary): Admin, Operator, Tenant and Owner all support local development; production Admin/Tenant/Owner are hosted-only, and production Operator supports hosted and local use. Development uses separate synthetic stores and explicit local test origins/identity adapters. It does not merge Admin/access/business schemas, reuse production credentials or bypass production actor checks. H02/H03 define executable local development setup; later portal designs add their own local launch/fixtures. Production local registers only Operator routes; reject attempts to enable hosted roles or development adapters there. H01 defines this contract without implementing development tooling.
+Follow the [portal deployment matrix](mvp/scope.md#development-and-production-deployment-boundary): Admin, Operator, Tenant and Owner all support local development; production Admin/Tenant/Owner are hosted-only, and production Operator supports hosted and local use. Development uses separate synthetic stores and explicit local test origins/identity adapters. It does not merge Admin/access/business schemas, reuse production credentials or bypass production actor checks. H02/H03 define executable local development setup; later portal designs add their own local launch/fixtures. Production local registers only Operator routes; reject attempts to enable hosted roles or development adapters there. H01 defines this contract without implementing development tooling.
 
 ### Development environment handoff to H02
 
@@ -122,13 +129,13 @@ decrypt/export command is included; damaged auth/control fails closed. H05 must
 specify phase/switch crash recovery, identity checks, scoped key/object permissions and
 local-versus-hosted backup adapters in its detailed design before implementation.
 
-The failure-recovery path is [clean-runtime rebuild, then authenticated restore](HOSTED_MVP_DESIGN.md#clean-runtime-rebuild-then-authenticated-restore). A retry-safe Admin/host **Repair runtime** operation replaces only a stopped/fenced container with a compatible qualified image; retain operator/workspace IDs, account/tier authority, business tree, private access/recovery stores and protected key references. It must not initialize an empty business DB, seed data, allocate a new operator identity or bypass current authentication. Bootstrap recovery mode, revoke old sessions and let the operator select/confirm a verified point into a separate empty staging directory. Repair and restore have different actors/operations. If trusted identity or backup/key material is unavailable, stop rather than recreate authority or overwrite data.
+The failure-recovery path is [clean-runtime rebuild, then authenticated restore](mvp/recovery.md#clean-runtime-rebuild-then-authenticated-restore). A retry-safe Admin/host **Repair runtime** operation replaces only a stopped/fenced container with a compatible qualified image; retain operator/workspace IDs, account/tier authority, business tree, private access/recovery stores and protected key references. It must not initialize an empty business DB, seed data, allocate a new operator identity or bypass current authentication. Bootstrap recovery mode, revoke old sessions and let the operator select/confirm a verified point into a separate empty staging directory. Repair and restore have different actors/operations. If trusted identity or backup/key material is unavailable, stop rather than recreate authority or overwrite data.
 
-H05 restore enablement requires the [recovery security gate](HOSTED_MVP_DESIGN.md#recovery-security-release-gate): current operator identity, qualified strong step-up, exact-action confirmation, source-selected own-workspace destinations/keys and no recovery-specific plaintext export. An Admin session, replayed request or ordinary stolen cookie alone must not authorize restore. If the required proof/review is incomplete, keep restore unavailable. Fully compromised host/platform authority remains a disclosed residual risk; no zero-risk claim.
+H05 restore enablement requires the [recovery security gate](mvp/recovery.md#recovery-security-release-gate): current operator identity, qualified strong step-up, exact-action confirmation, source-selected own-workspace destinations/keys and no recovery-specific plaintext export. An Admin session, replayed request or ordinary stolen cookie alone must not authorize restore. If the required proof/review is incomplete, keep restore unavailable. Fully compromised host/platform authority remains a disclosed residual risk; no zero-risk claim.
 
 ## Separate Admin recovery schema and bootstrap
 
-The [Admin recovery database](../../DATABASE_SCHEMA.md#admin-recovery-database--h05) is
+The [Admin recovery database](../../database/admin-recovery.md#admin-recovery-database--h05) is
 a separate private persistent store, not tables in main Admin. Its versioned resources
 live in `application/database/admin-recovery-migrations/`. H01 defines ownership and
 record contracts; H05 implements catalog, checkpoint, local recovery operations/audit,
@@ -158,7 +165,7 @@ corrupt-recovery-DB, crash-during-switchover and whole-host loss before enableme
 Admin, Operator and future Tenant/Owner releases are separate qualified artifacts with
 independent assignments in the common component_deployments table: per-workspace
 Operator rows and deployment-wide Admin/Tenant/Owner rows. Operator identities do not
-store a second desired release. See the [release policy](HOSTED_MVP_DESIGN.md#9-independently-scheduled-release-upgrades)
+store a second desired release. See the [release policy](mvp/releases.md#independently-scheduled-release-upgrades)
 and master release tables. H02 must package Admin and Operator separately, with pinned
 API/schema/agent compatibility manifests, even while Pilot 0 uses one maintenance
 window. H10 adds independent rollout automation; portal backlogs add their own assets.
@@ -254,12 +261,12 @@ H01 defines these states; H03/H04 implement and test the actual screens:
 
 | Proof | Reproducible setup and pass criteria | Owner |
 | --- | --- | --- |
-| Image/schema packaging | Build separate immutable Admin/Operator artifacts from pinned source; inspect their compatibility manifests and owning schema resources/frontend assets, no secrets/live workspaces. Fresh-init every store, validate exact revision/structure; reject missing/wrong schema rather than silently recreate. | H02 |
-| Private runtime/physical limits | Two test operators on qualified filesystem; attempt cross-mount/API/host escape and byte/inode exhaustion including WAL/staging/control/scratch. Record actual quota mechanism, ceilings, ownership, kernel/filesystem version and safe failed-write rollback. Warm-container memory/IO headroom measured for the admitted population, initially targeting five. | H02/H04 |
-| Identity/handoff | Test managed Google/email-link subject, fixed callback, browser/state/origin binding, duplicate claim/handoff, revoked assignment and Admin MFA. Verify no tokens in URLs/logs and cross-subdomain cookie/CSRF isolation. | H03 |
-| Usage accounting | Fixed committed DB/file fixtures, duplicate content, retained versions, freelist/WAL, interrupted reservation/source commit and restart. Compare exact logical allowance with separately observed physical reserves; unknown cannot admit unbounded writes. | H04 |
-| Recovery | Internal scheduled capture, unchanged/file-only/commit-before-crash checkpoint reconciliation, Admin outage, corrupt-business-DB recovery-mode startup and crash-safe locator switch; clean-runtime rebuild preserves IDs/account/data and requires fresh operator-selected restore; strong-step-up confirmation and rejected stolen-session/cross-workspace/replay/path/key attacks; runtime/auth failures remain closed with no offline customer restore/decrypt command; nightly consistent database/file fixtures with changes; off-host readback, missing/corrupt object and unavailable key; separate main-Admin/Admin-recovery DB loss and whole-host restore with old source fenced, local recovery evidence retained and current privileged authentication independent of the damaged main DB and no permanently running outside recovery service. Record achieved point age, duration, retained bytes/traffic and outside-host recovery inputs. | H05 |
-| Operations/economics | Manual add/retry/seed failure, one maintenance window, restart and support rehearsal. Capture original effect identities, Admin minutes and gross before-credit cost; no billing/wake scheduler required. | H04–H06 |
+| [Image/schema packaging](../qualification/specifications/image_schema.md) | Build separate immutable Admin/Operator artifacts from pinned source; inspect their compatibility manifests and owning schema resources/frontend assets, no secrets/live workspaces. Fresh-init every store, validate exact revision/structure; reject missing/wrong schema rather than silently recreate. | H02 |
+| [Private runtime/physical limits](../qualification/specifications/runtime_limits.md) | Two test operators on qualified filesystem; attempt cross-mount/API/host escape and byte/inode exhaustion including WAL/staging/control/scratch. Record actual quota mechanism, ceilings, ownership, kernel/filesystem version and safe failed-write rollback. Warm-container memory/IO headroom measured for the admitted population, initially targeting five. | H02/H04 |
+| [Identity/handoff](../qualification/specifications/identity_handoff.md) | Test managed Google/email-link subject, fixed callback, browser/state/origin binding, duplicate claim/handoff, revoked assignment and Admin MFA. Verify no tokens in URLs/logs and cross-subdomain cookie/CSRF isolation. | H03 |
+| [Usage accounting](../qualification/specifications/usage_accounting.md) | Fixed committed DB/file fixtures, duplicate content, retained versions, freelist/WAL, interrupted reservation/source commit and restart. Compare exact logical allowance with separately observed physical reserves; unknown cannot admit unbounded writes. | H04 |
+| [Recovery](../qualification/specifications/recovery.md) | Internal scheduled capture, unchanged/file-only/commit-before-crash checkpoint reconciliation, Admin outage, corrupt-business-DB recovery-mode startup and crash-safe locator switch; clean-runtime rebuild preserves IDs/account/data and requires fresh operator-selected restore; strong-step-up confirmation and rejected stolen-session/cross-workspace/replay/path/key attacks; runtime/auth failures remain closed with no offline customer restore/decrypt command; nightly consistent database/file fixtures with changes; off-host readback, missing/corrupt object and unavailable key; separate main-Admin/Admin-recovery DB loss and whole-host restore with old source fenced, local recovery evidence retained and current privileged authentication independent of the damaged main DB and no permanently running outside recovery service. Record achieved point age, duration, retained bytes/traffic and outside-host recovery inputs. | H05 |
+| [Operations/economics](../qualification/specifications/operations_economics.md) | Manual add/retry/seed failure, one maintenance window, restart and support rehearsal. Capture original effect identities, Admin minutes and gross before-credit cost; no billing/wake scheduler required. | H04–H06 |
 
 Select the supported host quota mechanism and physical reserve sizes only from the
 native proof; no per-operator OS/image is needed solely for a storage tier. Prefer a
@@ -271,13 +278,16 @@ starting the schema/contracts work; all block live admission at their relevant s
 
 ## Ordered H01 implementation plan
 
-Status: planned, not implemented. Execute H01.1–H01.7 in order; these are work units
+Status: H01.1–H01.7 delivered at contract/scaffold level; H01 review acceptance and H02–H05 feature proofs are not asserted. Execute H01.1–H01.7 in order; these are work units
 within H01, not new backlog items. Keep them in one cohesive change where practical,
 with separately reviewable commits if needed. H01 is complete when its contracts,
 resource scaffolding and proof specifications are executable/reviewable. It does not
 complete any H02–H05 feature or authorize a live deployment.
 
 ### H01.1 — Pin the implementation baseline and ownership inventory
+
+Delivered November 10, 2026: [baseline, hashes and ownership checklist](../qualification/reports/HOSTED_MVP_H01_1_BASELINE_2026-11-10.md).
+Only inventory/evidence work is complete; later contract and feature gates remain open.
 
 Record the implementation-start commit, clean/dirty state and relevant source hashes
 in a new H01 evidence report under `docs/hosting/qualification/reports/`. Recheck every
@@ -295,6 +305,10 @@ Exit: all Pilot 0 contracts have one owner; missing implementation is explicitly
 listed rather than inferred from old tests or the imported `hosted_admin` namespace.
 
 ### H01.2 — Establish independent schema-resource scaffolding
+
+Delivered November 10, 2026: [resource and failure-contract evidence](../qualification/reports/HOSTED_MVP_H01_2_RESOURCES_2026-11-10.md).
+All five resource sets remain deliberately unavailable for initialization; no owning
+tables, production runner, resource packaging or runtime rewiring is delivered here.
 
 Under `application/database/`, create the proposed `admin-migrations/`,
 `admin-recovery-migrations/`, `host-inventory-migrations/`,
@@ -323,6 +337,10 @@ and actual fresh-store proofs remain H02–H05 acceptance obligations.
 
 ### H01.3 — Implement bounded shared values and operation envelopes
 
+Delivered November 10, 2026: [contract implementation and focused evidence](../qualification/reports/HOSTED_MVP_H01_3_CONTRACTS_2026-11-10.md).
+These are shared values and pure comparison helpers, not durable deduplication,
+owning action payloads, authorization or production transport integration.
+
 Add a small consumer-neutral hosted-contract package under
 `application/apps/server/app/platform/` for the values genuinely shared across owners:
 canonical IDs, revisions/epochs, operation identity, request hash, component name,
@@ -346,6 +364,10 @@ Exit: strict value/result validation and hash/retry contract tests pass, without
 claiming a durable operation repository or actual host-effect deduplication exists.
 
 ### H01.4 — Define owning application ports and compatibility manifests
+
+Delivered November 11, 2026: [typed-port and compatibility evidence](../qualification/reports/HOSTED_MVP_H01_4_PORTS_2026-11-10.md).
+No production adapter, authentication proof, schema readiness or effect deduplication
+is established by these contract fixtures.
 
 Define typed command/observation protocols in the owning application boundaries for
 Admin, restricted host operations, hosted source, login, operator recovery and Admin
@@ -371,6 +393,10 @@ unsupported pairings and caller-selected paths/images fail before effect dispatc
 
 ### H01.5 — Specify proof inputs, reports and packaging handoff
 
+Delivered November 11, 2026: [proof specifications and report/harness evidence](../qualification/reports/HOSTED_MVP_H01_5_PROOFS_2026-11-11.md).
+The [six proof specifications](../qualification/specifications/README.md) cover all
+families above; executable report validation does not perform target qualification.
+
 Create reproducible proof specifications under `docs/hosting/qualification/`, linked
 from the acceptance register. Each specification names setup, safety prerequisites,
 exact invocation interface, workload, negative controls, expected observations and
@@ -395,6 +421,11 @@ owner; the register still shows native/cloud/end-user acceptance as not establis
 
 ### H01.6 — Freeze UI/API state fixtures and delivery mapping
 
+Delivered November 11, 2026: [fixture validation and delivery evidence](../qualification/reports/HOSTED_MVP_H01_6_UI_CONTRACTS_2026-11-11.md).
+The [24 strict synthetic snapshots](../qualification/fixtures/README.md) and
+[action-to-port mapping](../qualification/fixtures/ACTION_MAP.md) freeze states,
+field defaults and UI delivery obligations, not rendered workflows or live grants.
+
 Write strict synthetic contract fixtures for Admin list/add/detail and Operator
 Settings/recovery states. Cover pending versus effective access, known/stale/unknown
 usage, independent section loading/failure, unknown operation outcome, disabled
@@ -411,6 +442,12 @@ Exit: fixtures agree with the master/H01 contracts and have named end-to-end del
 owners; fixture validation alone does not mark any usable workflow complete.
 
 ### H01.7 — Validate, record evidence and hand off to H02
+
+Delivered November 11, 2026: [consolidated validation and handoff](../qualification/reports/HOSTED_MVP_H01_7_HANDOFF_2026-11-11.md)
+and [tested source/command pins](../qualification/reports/HOSTED_MVP_H01_7_VALIDATION_2026-11-11.json).
+423 focused tests and Ruff checks for all 35 H01 Python files passed. This is ready
+for contract review; no native/cloud/provider/browser acceptance or live capability
+is established. H02 still needs accepted H01 contract review and its own detailed design.
 
 Run focused tests for new values, manifests, port fixtures, report validation and
 schema-scaffold failure behavior. Test doubles may prove local transaction contract
@@ -445,7 +482,7 @@ later feature implementations or native/cloud qualification from unit fixtures.
 | Idempotency/retry | Canonical request hashes stable, changed payload conflicts, original effect lookup survives lost response. |
 | Rollback | Owning transaction rolls record/audit/receipt back together; cross-store outcomes remain explicit unknown. |
 | Persistence | Independent release/component assignments and allowed schema/API pairings validate; master matches initial schema resources/models/validators and exact current-store checks; protected bootstrap creates no operator/session automatically. |
-| Recovery | Local recovery metadata survives business replacement; Admin is an async observer, not workspace catalog/queue authority; internal/authenticated-recovery ownership and forbidden offline-bypass absence tested; schema/identity pins retained in manifests; sessions/enabled flags are not blindly revived; separate Admin recovery state/authentication survives main Admin replacement; keys/control pointer recover outside host and no cross-store FKs/old runnable grants are introduced. |
+| [Recovery](../qualification/specifications/recovery.md) | Local recovery metadata survives business replacement; Admin is an async observer, not workspace catalog/queue authority; internal/authenticated-recovery ownership and forbidden offline-bypass absence tested; schema/identity pins retained in manifests; sessions/enabled flags are not blindly revived; separate Admin recovery state/authentication survives main Admin replacement; keys/control pointer recover outside host and no cross-store FKs/old runnable grants are introduced. |
 | Query budget | Indexed source session lookup; bounded Admin list/progress/catalog; no per-row source/provider call. |
 | UI | Reviewable fields/states/error/action contracts; actual accessible async UI acceptance assigned H03/H04, not marked complete by H01. |
 

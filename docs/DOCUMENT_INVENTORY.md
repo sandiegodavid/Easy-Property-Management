@@ -6,7 +6,7 @@ Consolidated October 11, 2026. Existing backlog status is preserved; source/mode
 
 | Reference | Scope and status |
 | --- | --- |
-| [HOSTED_MVP_DESIGN.md](hosting/design/HOSTED_MVP_DESIGN.md#implementation-slices) | HOSTED-001 planned H01–H12; Pilot 0 releases at H06; no deployment acceptance implied |
+| [HOSTED_MVP_DESIGN.md](hosting/design/HOSTED_MVP_DESIGN.md) | HOSTED-001 design index and focused topic guides; H01–H12 delivery plan, Pilot 0 at H06; no deployment acceptance implied |
 | [PORTALS_IMPLEMENTATION_PLAN.md](active/PORTALS_IMPLEMENTATION_PLAN.md) | Planned PORTAL-001/002 and FIN-009, with PAY-001/002 source dependencies; not Pilot 0 |
 | [Hosted acceptance register](hosting/qualification/HOSTED_MVP_ACCEPTANCE.md) | Stage-specific proof; earlier demo evidence does not qualify the fresh target |
 

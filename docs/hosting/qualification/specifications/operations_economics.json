@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "proof": "operations_economics",
+  "owner": "H04",
+  "contributors": [
+    "H06"
+  ],
+  "revision": 1,
+  "levels": [
+    "manual",
+    "gcp",
+    "deployed_browser"
+  ],
+  "required_pins": [
+    "source",
+    "tool",
+    "image",
+    "schema",
+    "workload",
+    "configuration"
+  ],
+  "cases": [
+    "manual_add_claim_disable",
+    "lost_response_retry_original",
+    "seed_failure_disabled",
+    "announced_maintenance_restart",
+    "runtime_repair_support",
+    "backup_alert_support",
+    "gross_spend_admin_minutes",
+    "sixth_capacity_not_cap",
+    "unknown_capacity_pending"
+  ]
+}

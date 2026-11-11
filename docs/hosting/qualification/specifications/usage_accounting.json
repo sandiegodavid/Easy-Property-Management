@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "proof": "usage_accounting",
+  "owner": "H04",
+  "contributors": [
+    "H02"
+  ],
+  "revision": 1,
+  "levels": [
+    "component",
+    "docker_linux",
+    "gcp"
+  ],
+  "required_pins": [
+    "source",
+    "tool",
+    "image",
+    "schema",
+    "workload",
+    "configuration"
+  ],
+  "cases": [
+    "exact_free_usage",
+    "duplicate_retained_versions",
+    "sqlite_freelist_wal",
+    "atomic_reservation_source_commit",
+    "interrupted_restart_reconciliation",
+    "concurrent_admission",
+    "quota_commit_cleanup_failure",
+    "unknown_never_unbounded",
+    "over_allowance_read_cleanup",
+    "backup_separate_capacity"
+  ]
+}

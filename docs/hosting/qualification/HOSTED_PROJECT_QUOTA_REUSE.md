@@ -2,7 +2,7 @@
 
 Imported November 10, 2026 from `Admin_UI_Workflow` at
 `cba6a7bf2561de06634abbddff0b60782949e6fc`, staying on `hosted_mvp`.
-This is a selective import for [H02](../design/HOSTED_MVP_DESIGN.md#implementation-slices),
+This is a selective import for [H02](../design/mvp/delivery-plan.md#implementation-slices),
 not H02 implementation or runtime activation. Complete H02's detailed design before
 adapting or integrating these components.
 

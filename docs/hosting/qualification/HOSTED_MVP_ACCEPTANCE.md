@@ -1,9 +1,10 @@
 # Fresh hosted MVP acceptance register
 
-Updated November 10, 2026. **Design accepted; fresh-MVP implementation and deployment
+Updated November 11, 2026. **Design accepted; fresh-MVP implementation and deployment
 acceptance not established.** This register follows the
 [Hosted MVP design](../design/HOSTED_MVP_DESIGN.md), not the older demo checkpoint.
-HOSTED-001 now schedules implementation; documentation establishes no code, cloud resource or passed test.
+HOSTED-001 schedules implementation; H01 preparation evidence does not establish
+fresh runtime, cloud resources or deployment acceptance.
 
 ## Evidence baseline
 
@@ -13,10 +14,24 @@ manual recovery tests apply to their named releases only. They do not establish
 this design's Docker isolation, central login/subdomains, subscription lifecycle,
 unattended incremental recovery or automated provisioning/upgrades.
 
-No fresh-MVP checks were run by the documentation task. Record new proof below
+H01 establishes no fresh-target runtime/native/cloud/end-user proof. Record new proof below
 only with exact code/image/schema, host/storage/runtime, provider configuration,
 dataset/workload, time, actual results and remaining limits. Separate component,
 native and deployed/end-user checks. A skipped test is not a passing gate.
+
+H01.1's [implementation baseline and ownership inventory](reports/HOSTED_MVP_H01_1_BASELINE_2026-11-10.md)
+pins the clean implementation-start checkout, source hashes and H02–H05 delivery
+owners. Its 42 passing existing hosted-access regressions establish only that focused
+old-composition baseline; it establishes no fresh-target release gate.
+
+H01.2's [schema-resource evidence](reports/HOSTED_MVP_H01_2_RESOURCES_2026-11-10.md)
+establishes independent unavailable scaffolds and initialization/packaging contracts,
+not owning tables or fresh-store readiness.
+
+H01.3's [shared contract evidence](reports/HOSTED_MVP_H01_3_CONTRACTS_2026-11-10.md)
+establishes bounded intent/outcome/read envelopes and deterministic hash/replay
+comparisons only. H01.1–H01.3 are delivered. No durable effect deduplication, identity authorization or usable
+hosted workflow is established by these unit contracts.
 
 ## Stage-specific release gates
 
@@ -52,7 +67,7 @@ Pilot 0 proof cannot qualify a later automated effect without its own tests.
 | Pilot demand | Pilot 0: at least five genuine invitees and three recurring weekly users for four weeks; later paid pilot: one informed paid subscriber; no unresolved critical isolation/data-loss defect. | No pilot evidence recorded here |
 | Growth toward 100 | Measured paid/free/warm mix, approximately 20 active plus bursts/multi-device wake, safe commitments and $300/month gross target before credits. No hidden concurrency entitlement limit. | Not established; expand only as demand justifies |
 
-The [design validation matrix](../design/HOSTED_MVP_DESIGN.md#required-validation-matrix)
+The [design validation matrix](../design/mvp/validation.md#required-validation-matrix)
 owns detailed happy-path, invalid-combination, idempotency, rollback, schema,
 backup/restore, query-budget and UI cases. Apply it across the gates instead of
 creating a second conflicting checklist. Host size, quota/backup tool and mail
@@ -72,3 +87,46 @@ and recovery gates. Before charging, additionally complete paid automation, bill
 benefit application and protection gates. Launch only
 benefits that can be delivered. Growth gates can follow measured demand; they
 are not a reason to pre-provision for 100 operators.
+
+## H01.4 contract evidence
+
+[Owning ports and compatibility fixtures](reports/HOSTED_MVP_H01_4_PORTS_2026-11-10.md)
+cover Pilot 0 actions, separate recovery authority, registered host IDs and exact
+manifest/schema/qualification comparisons. H01.1–H01.4 contract work is delivered;
+every fresh-target release gate remains open. Contract fixtures are not native,
+provider, persistence, private-transport authentication or end-user qualification.
+
+## H01.5 proof specification handoff
+
+[Six reproducible proof plans](specifications/README.md), their 67-case manifests,
+[report format](specifications/REPORT_FORMAT.md) and
+[packaging handoff](specifications/PACKAGING_HANDOFF.md) assign exact setup/workload/
+negative-control/cleanup and input/evidence requirements to H02–H06. The
+[H01.5 implementation evidence](reports/HOSTED_MVP_H01_5_PROOFS_2026-11-11.md) records
+only focused document-contract/tooling tests. No proof executor, VM/provider/cloud
+run, installed hosted artifact or usable UI is qualified. H01.1–H01.5 preparation work is delivered;
+all stage-specific release gates remain open.
+
+## H01.6 UI/API fixture handoff
+
+[Strict synthetic state fixtures](fixtures/README.md) cover Admin list/add/detail
+and Operator Settings/recovery, with [22 action mappings](fixtures/ACTION_MAP.md)
+to owning commands/reads, authority, confirmation and H03/H04/H05 UI delivery.
+[H01.6 evidence](reports/HOSTED_MVP_H01_6_UI_CONTRACTS_2026-11-11.md) records only
+focused contract tests. No screen, browser acceptance, current grant, real read/query
+budget or end-to-end workflow is established. H01.1–H01.6 preparation is delivered;
+every fresh-target release gate remains open.
+
+## H01.7 consolidated preparation handoff
+
+[H01.7 validation and H02 handoff](reports/HOSTED_MVP_H01_7_HANDOFF_2026-11-11.md)
+records **423 focused tests passed**, Ruff check/format check on all **35 H01 Python
+files**, current schema ownership/documentation checks and unchanged historical
+inputs. [Exact commands and tested source pins](reports/HOSTED_MVP_H01_7_VALIDATION_2026-11-11.json)
+identify the local contract scope and two lifecycle-alignment source changes.
+H01.1–H01.7 implementation preparation is delivered and ready for review; acceptance
+of that implementation contract review is not asserted by this task. H02 may begin
+its detailed design after that acceptance, and implementation requires its own
+completed design. Every stage-specific runtime/native/cloud/provider/end-user gate
+above remains **Not established**. No admission, restore, quota, billing or UI control
+is enabled by H01 results.

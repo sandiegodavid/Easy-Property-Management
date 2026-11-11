@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "proof": "runtime_limits",
+  "owner": "H02",
+  "contributors": [
+    "H04"
+  ],
+  "revision": 1,
+  "levels": [
+    "native_linux",
+    "docker_linux",
+    "gcp"
+  ],
+  "required_pins": [
+    "source",
+    "tool",
+    "image",
+    "schema",
+    "workload",
+    "configuration"
+  ],
+  "cases": [
+    "private_registered_mounts",
+    "cross_operator_denial",
+    "byte_inode_exhaustion",
+    "wal_commit_fsync_failure",
+    "control_scratch_bounds",
+    "sandbox_escape_denial",
+    "disabled_enforcement_control",
+    "remount_reboot_replace",
+    "one_writer_and_drain",
+    "warm_population_capacity",
+    "concurrent_admission_commitments"
+  ]
+}

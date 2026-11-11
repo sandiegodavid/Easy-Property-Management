@@ -22,7 +22,7 @@ Launch and 100-operator gross budget targets are $250 and $300/month before cred
 
 ## Implement first
 
-Start [HOSTED-001 H01](design/HOSTED_MVP_DESIGN.md#implementation-slices). Pilot 0 releases at H06 to invited Free operators within qualified capacity: Admin-lite, verified nightly off-host backups/rehearsed restore, warm runtimes, one maintenance window and recorded manual operating cost. No Stripe, idle-wake or per-operator scheduling. H07–H12 deliver the subsequent full platform described above. [PORTAL-001/002](../active/PORTALS_IMPLEMENTATION_PLAN.md) follow it, with shared FIN-009 and PAY-001/002 sources.
+Start [HOSTED-001 H01](design/mvp/delivery-plan.md#implementation-slices). Pilot 0 releases at H06 to invited Free operators within qualified capacity: Admin-lite, verified nightly off-host backups/rehearsed restore, warm runtimes, one maintenance window and recorded manual operating cost. No Stripe, idle-wake or per-operator scheduling. H07–H12 deliver the subsequent full platform described above. [PORTAL-001/002](../active/PORTALS_IMPLEMENTATION_PLAN.md) follow it, with shared FIN-009 and PAY-001/002 sources.
 
 ## Find the right document
 
@@ -45,7 +45,7 @@ before drawing conclusions about its present state; old prose is not live invent
 
 [Deployment record](operations/CLOUDFLARE_OPERATIONS.md),
 [demo checkpoint](qualification/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md),
-[supporting reports](qualification/reports/README.md) and [raw evidence](evidence/)
+[supporting reports](qualification/reports/README.md) and [raw evidence](evidence)
 remain available with their original tested scope. Do not silently relabel evidence
 or alter historical fixtures to make them match the new design.
 
