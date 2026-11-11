@@ -16,13 +16,14 @@ from app.modules.hosted_admin.application.ui_contracts import (
     AdminDetail,
     AdminList,
     OperatorSummary,
+    Readiness,
 )
 from app.modules.hosted_access.application import login_contracts as login
 from app.modules.hosted_access.application.source_contracts import SourcePort
 from app.modules.hosted_access.application.ui_contracts import Recovery, Settings
 from app.modules.workspace.application import recovery_contracts as recovery
 from app.platform.hosted_contracts.semantic import SemanticRequest
-from app.platform.hosted_contracts.ui_states import UIAction
+from app.platform.hosted_contracts.ui_states import ActionState, Section, UIAction
 from app.platform.hosted_contracts.values import CanonicalId, Contract, SafeCode
 
 
@@ -295,14 +296,19 @@ def _validate_action_group(value, actions, allowed):
             raise ValueError(
                 "Every action needs an owning command/authority/confirmation contract."
             )
-    if isinstance(value, (AdminAdd, Recovery)) and value.state == "outcome_unknown":
+    unresolved_add = isinstance(value, AdminAdd) and value.state in {
+        "submitting",
+        "outcome_unknown",
+    }
+    unknown_restore = isinstance(value, Recovery) and value.state == "outcome_unknown"
+    if unresolved_add or unknown_restore:
         checks = (
             {A.CHECK_OPERATION, A.RETRY_OPERATION}
             if isinstance(value, AdminAdd)
             else {A.CHECK_RESTORE}
         )
         if any(action.enabled and action.action not in checks for action in actions):
-            raise ValueError("Unknown submission can only check/retry its original identity.")
+            raise ValueError("Unresolved submission can only check/retry its original identity.")
 
 
 def _validate_admin_operation(value: AdminAdd | OperatorSummary, deployment_id):
@@ -333,6 +339,19 @@ def _validate_admin_operation(value: AdminAdd | OperatorSummary, deployment_id):
 ADMIN_ACTIONS = frozenset(key for key, rule in RULES.items() if rule.port is admin.AdminPort)
 
 
+def _require_enable_readiness(
+    actions: tuple[ActionState, ...], readiness: Section[Readiness] | None
+) -> None:
+    if any(action.enabled and action.action == A.ENABLE for action in actions):
+        if (
+            readiness is None
+            or readiness.state != "ready"
+            or readiness.data is None
+            or readiness.data.state != "ready"
+        ):
+            raise ValueError("Enable requires complete fresh readiness in operator detail.")
+
+
 def _validate_list(case: FixtureCase) -> None:
     view = case.snapshot
     if view.query.deployment_id != case.deployment_id:
@@ -341,6 +360,7 @@ def _validate_list(case: FixtureCase) -> None:
     if view.directory.data is not None:
         for row in view.directory.data.items:
             _validate_action_group(row, row.actions, ADMIN_ACTIONS - {A.CREATE_ASSIGNMENT})
+            _require_enable_readiness(row.actions, None)
             _validate_admin_operation(row, case.deployment_id)
 
 
@@ -369,9 +389,7 @@ def _validate_detail(case: FixtureCase) -> None:
             or ref.scope.workspace_id != view.operator.workspace_id
         ):
             raise ValueError("Refresh must retain the asynchronous source-refresh operation.")
-    if any(a.enabled and a.action == A.ENABLE for a in view.actions):
-        if view.readiness.state != "ready" or view.readiness.data.state != "ready":
-            raise ValueError("Enable requires complete fresh readiness.")
+    _require_enable_readiness((*view.actions, *view.operator.actions), view.readiness)
 
 
 def _validate_settings(case: FixtureCase) -> None:

@@ -36,6 +36,18 @@ claim. Render setup in context (“Setup pending”, “Preparing”, “Ready t
 “Enabled”/“Disabled”, or “Unavailable” when unknown. Do not turn desired intent or
 an old successful operation into a current access assertion.
 
+The browser-facing `Access` DTO carries only the safe `effective_enabled` status;
+its surrounding section supplies safe observation freshness. Internal access epochs,
+source verification references, generations and binding/identity-proof metadata remain
+behind authenticated private source ports and must never be serialized into this
+projection. Observation revision tokens must not be internal access fences. Private
+source evidence is verified before building the projection, not forwarded to browsers.
+
+Enable is governed by the same fresh, complete readiness requirement in both the
+Admin detail action row and its nested operator action row. List rows carry no
+readiness evidence, so Enable there must be omitted or disabled with a reason directing
+the Admin to operator detail. A known disabled source status alone is not readiness.
+
 `ready`/`stale` sections carry data with their actual capture/source context. A
 `refreshing` section retains the previous known/stale snapshot; it does not claim a
 new verified read. Initial loading carries no invented capture. Failed/unavailable
@@ -48,7 +60,10 @@ Only the owning submit command validates consequential normalized values. Preser
 exact input, focus and scroll across independent refreshes, conflicts, failed reads
 and unknown writes. In-flight/unknown submissions retain original operation identity;
 checking/retrying cannot allocate a new key, reconstruct changed intent or replay
-silently. A form/button state is convenience, not the server duplicate/authority guard.
+silently. While Add is submitting (pending/running original operation), Create is
+also unavailable; only original-operation status/retry controls may remain enabled.
+A matching retry retains the original identity and intent, not a new assignment
+command. A form/button state is convenience, not the server duplicate/authority guard.
 
 ## Action, authority and confirmation handoff
 

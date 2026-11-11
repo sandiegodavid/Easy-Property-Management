@@ -367,3 +367,98 @@ def test_unknown_restore_cannot_substitute_another_intent_hash():
     case["snapshot"]["exact_request_hash"] = "d" * 64
     with pytest.raises(ValidationError):
         validate_case(case)
+
+
+@pytest.mark.parametrize(
+    "case_id", ["admin_list_active_known_usage", "admin_detail_refresh_is_pending_operation"]
+)
+def test_admin_access_serialization_excludes_private_source_metadata(case_id):
+    view = validate_case(fixture(case_id))
+    serialized = view.model_dump_json()
+    assert '"access_epoch"' not in serialized
+    assert '"source_proof_ref"' not in serialized
+    row = view.directory.data.items[0] if view.surface == "admin_list" else view.operator
+    assert row.access.data.model_dump() == {"effective_enabled": row.access.data.effective_enabled}
+
+
+@pytest.mark.parametrize("field", ["access_epoch", "source_proof_ref"])
+def test_private_access_fields_are_rejected_at_presentation_boundary(field):
+    case = fixture("admin_detail_refresh_is_pending_operation")
+    case["snapshot"]["operator"]["access"]["data"][field] = (
+        7 if field == "access_epoch" else "private-source-evidence"
+    )
+    with pytest.raises(ValidationError):
+        validate_case(case)
+
+
+@pytest.mark.parametrize("placement", ["actions", "operator_actions"])
+@pytest.mark.parametrize("readiness", ["unavailable", "loading", "stale", "refreshing"])
+def test_enable_requires_fresh_readiness_in_both_detail_action_groups(placement, readiness):
+    case = fixture("admin_detail_refresh_is_pending_operation")
+    view = case["snapshot"]
+    view["actions"] = [a for a in view["actions"] if a["action"] != UIAction.ENABLE]
+    if readiness == "loading":
+        view["readiness"] = {"state": "loading"}
+    elif readiness == "unavailable":
+        view["readiness"] = fixture("admin_detail_unknown_usage_unavailable_enable")["snapshot"][
+            "readiness"
+        ]
+    else:
+        view["readiness"]["state"] = readiness
+        if readiness == "stale":
+            view["readiness"]["freshness"]["state"] = "stale"
+    group = view["actions"] if placement == "actions" else view["operator"]["actions"]
+    group.append({"action": UIAction.ENABLE, "enabled": True})
+    with pytest.raises(ValidationError, match="Enable requires complete fresh readiness"):
+        validate_case(case)
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_nested_enable_is_valid_only_with_ready_evidence_or_disabled_control(enabled):
+    case_id = (
+        "admin_detail_refresh_is_pending_operation"
+        if enabled
+        else "admin_detail_unknown_usage_unavailable_enable"
+    )
+    case = fixture(case_id)
+    case["snapshot"]["actions"] = [
+        a for a in case["snapshot"]["actions"] if a["action"] != UIAction.ENABLE
+    ]
+    case["snapshot"]["operator"]["actions"].append(
+        {
+            "action": UIAction.ENABLE,
+            "enabled": enabled,
+            "reason": None if enabled else "readiness_unavailable",
+        }
+    )
+    assert validate_case(case)
+
+
+@pytest.mark.parametrize("case_id", ["admin_list_active_known_usage", "admin_list_disabled_access"])
+def test_list_row_enable_has_no_readiness_evidence_and_cannot_be_enabled(case_id):
+    case = fixture(case_id)
+    row = case["snapshot"]["directory"]["data"]["items"][0]
+    row["actions"].append({"action": UIAction.ENABLE, "enabled": True})
+    with pytest.raises(ValidationError, match="Enable requires complete fresh readiness"):
+        validate_case(case)
+    row["actions"][-1].update(enabled=False, reason="review_readiness_in_detail")
+    assert validate_case(case)
+
+
+@pytest.mark.parametrize("operation_state", ["pending", "running"])
+def test_inflight_add_submission_rejects_a_new_create_identity(operation_state):
+    case = fixture("admin_add_submitting_retains_original")
+    view = case["snapshot"]
+    view["original_outcome"]["state"] = operation_state
+    original = deepcopy(view["original_outcome"]["operation"])
+    create = next(a for a in view["actions"] if a["action"] == UIAction.CREATE_ASSIGNMENT)
+    create.update(enabled=True, reason=None)
+    with pytest.raises(ValidationError, match="Unresolved submission"):
+        validate_case(case)
+    create.update(enabled=False, reason="submission_pending")
+    view["actions"].append({"action": UIAction.RETRY_OPERATION, "enabled": True})
+    checked = validate_case(case)
+    assert checked.original_outcome.operation.model_dump(mode="json") == original
+    for action in checked.actions:
+        if action.enabled:
+            assert RULES[action.action].identity == "existing_original"

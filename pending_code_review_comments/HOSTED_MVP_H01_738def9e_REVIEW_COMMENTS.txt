@@ -2,18 +2,34 @@ Commit: 738def9e0acfbe34625eb60d20656122a66ace3e
 Review date: 2026-11-11
 Scope: implementation introduced by this commit; documentation used as specification.
 
+Open findings: none.
+
+Resolved findings (2026-11-11)
+
 Admin presentation boundary
 
 1. [P2] Remove the internal access fence from the browser-facing presentation contract.
+   Status: resolved (2026-11-11).
+   Resolution: Access now exposes only effective_enabled; access_epoch and source_proof_ref were removed from the presentation DTO and synthetic corpus. Private source ports remain unchanged. List/detail serialization and extra-field rejection regressions cover the boundary.
    File: application/apps/server/app/modules/hosted_admin/application/ui_contracts.py:29-32
    Access includes access_epoch and source_proof_ref and is embedded in the Admin list/detail OperatorSummary.access projection. Serializing a validated detail fixture emits these fields, including the internal access epoch. The access-store contract explicitly excludes internal fences from all portal projections, including Admin (docs/database/operator-access.md, access_meta). Separate private source verification evidence from the presentation DTO and expose only the safe applied-access status and freshness. Add a serialization test proving internal access fields do not appear. These contracts are not registered runtime routes yet; this finding concerns the implemented presentation contract, not a demonstrated deployed disclosure.
 
 Admin UI action validation
 
 2. [P2] Enforce readiness for every placement of the Enable action.
+   Status: resolved (2026-11-11).
+   Resolution: A single readiness guard covers top-level and nested detail actions. Enabled list-row Enable is rejected because list rows have no readiness evidence; disabled controls remain valid. Regressions cover unavailable/loading/stale/refreshing detail readiness, ready nested controls, and list rows.
    File: application/apps/server/app/bootstrap/hosted_ui_contracts.py:372-374
    The readiness guard inspects only view.actions, although view.operator.actions also permits admin_enable. Starting with admin_detail_unknown_usage_unavailable_enable, remove the top-level Enable and place an enabled admin_enable in operator.actions: validate_fixture_json accepts it despite unavailable readiness. The strict fixture validator therefore permits an unsafe Enable control through a second supported placement. Apply the same readiness guard to both action groups; either prohibit list-row Enable without readiness evidence or define an equivalent safe rule there. Add negative coverage for nested/list-row controls. This enforces the H01 requirement that action/state fixtures reflect current readiness rather than relying on button placement.
 
 3. [P2] Reject a new Create action while the original Add submission is in flight.
+   Status: resolved (2026-11-11).
+   Resolution: Submitting Add forms use the same original-only action constraint as unknown submissions. Pending/running mutation tests reject Create, retain the original reference, and permit only existing-original status/retry actions.
    File: application/apps/server/app/bootstrap/hosted_ui_contracts.py:347-352
    _validate_add validates allowed action names and the retained operation, but does not prevent an enabled admin_create_assignment while state=submitting and the original operation is pending/running. Changing that action to enabled in admin_add_submitting_retains_original still validates. Because this action maps to new_original, the accepted state offers a second assignment submission instead of retaining the unresolved original identity. Reject enabled Create during submitting; permit only appropriate original-operation status/retry actions until the outcome is resolved. Add a negative fixture mutation test. Server-side idempotency remains necessary; this finding is the missing state constraint in the delivered H01 UI contract.
+
+Fix validation (2026-11-11; current branch, no broader review):
+- 84 focused UI-contract tests passed.
+- Ruff check and Ruff format --check passed on all three changed Python files using application/pyproject.toml.
+- No runtime route, database schema, private source fence, frontend code or deployed authorization was changed.
+- Coverage: serialization/privacy, invalid control placement/readiness, pending/running retry identity. Transaction, persistence, backup/restore and query-plan proofs remain the owning H02-H05 gates; these changes perform no such effects.

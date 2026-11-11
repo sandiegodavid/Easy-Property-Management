@@ -20,16 +20,15 @@ from app.platform.hosted_contracts.values import (
     CanonicalId,
     Contract,
     DisplayName,
-    Reference,
     PublicSlug,
     Revision,
 )
 
 
 class Access(Contract):
+    """Safe applied status only; source fences/evidence remain behind private ports."""
+
     effective_enabled: bool
-    access_epoch: Revision
-    source_proof_ref: Reference
 
 
 class OperatorSummary(Contract):
