@@ -16,3 +16,7 @@ billing, new quota or unattended recovery acceptance without new proofs.
 Mocked/component/native/deployed tests must remain distinguishable. New operational
 records need explicit dates, artifact identities, outcomes and remaining limits;
 provider reachability or a successful login does not establish complete readiness.
+
+## Project-quota reuse input
+
+[H02 project-quota reuse](HOSTED_PROJECT_QUOTA_REUSE.md) inventories the selected code/harness/tests and historical reboot reports imported from Admin_UI_Workflow. Three current Python source pins differ from the historical 8A run; native Docker/GCP qualification remains pending. This import does not activate runtime quotas or replace H02 design.

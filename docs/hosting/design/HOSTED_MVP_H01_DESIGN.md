@@ -57,6 +57,17 @@ uses the same owning resources and no competing runtime schema creator remains.
 
 Follow the [portal deployment matrix](HOSTED_MVP_DESIGN.md#development-and-production-deployment-boundary): Admin, Operator, Tenant and Owner all support local development; production Admin/Tenant/Owner are hosted-only, and production Operator supports hosted and local use. Development uses separate synthetic stores and explicit local test origins/identity adapters. It does not merge Admin/access/business schemas, reuse production credentials or bypass production actor checks. H02/H03 define executable local development setup; later portal designs add their own local launch/fixtures. Production local registers only Operator routes; reject attempts to enable hosted roles or development adapters there. H01 defines this contract without implementing development tooling.
 
+### Development environment handoff to H02
+
+Routine hosted-container development uses Docker Desktop on the Mac; native Python/Vite
+Operator development remains supported. Retain Lima `epm-quota-test` separately for
+native ext4/kernel/sandbox/reboot qualification, stopped when unused. Preserve its
+recorded baseline before any Docker/kernel/tool installation and record/requalify the
+changed environment. H02's detailed design owns build/launch settings, any lab changes
+and the Docker-specific qualification plan; this decision does not implement them or
+permit replacing Linux/GCP evidence with Desktop-only tests. See the [current reuse
+guide](../qualification/HOSTED_PROJECT_QUOTA_REUSE.md#development-versus-native-qualification).
+
 ## Trust and persistence composition
 
 ```mermaid
@@ -237,6 +248,9 @@ H01 defines these states; H03/H04 implement and test the actual screens:
   wake page. Multiple devices have full business permission within source fences.
 
 ## Proof plans and remaining implementation gates
+
+[Imported project-quota qualification inputs](../qualification/HOSTED_PROJECT_QUOTA_REUSE.md) are available for H02 design. Reuse is selective: low-level primitives/sandbox/harness and original reports only. Current source differs from three historical pins; re-prove the complete boundary under Docker/GCP before runtime activation.
+
 
 | Proof | Reproducible setup and pass criteria | Owner |
 | --- | --- | --- |

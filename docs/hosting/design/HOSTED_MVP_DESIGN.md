@@ -91,6 +91,26 @@ test-origin and fixture contracts plus production rejection tests. This developm
 support does not add production tenant/owner portals to Pilot 0 or make unqualified
 payment features available locally.
 
+### Local development and Linux qualification environments
+
+Use Docker Desktop on the Mac for routine hosted-container development and browser/API
+integration testing. Existing native Python/Vite local-Operator development remains
+supported. Container build/launch configuration still requires H02's detailed design;
+this environment choice does not imply those workflows are already implemented.
+
+Retain the separate Lima ARM64 `epm-quota-test` VM as the isolated native Linux
+qualification lab for filesystem quotas, privileged host-agent boundaries, sandbox
+escape tests and actual reboot persistence. Keep it stopped when unused. No extra VM
+is needed for ordinary portal work, and Docker Desktop tests do not replace native
+quota or exact Google-host qualification. See the [quota reuse guide](../qualification/HOSTED_PROJECT_QUOTA_REUSE.md#development-versus-native-qualification).
+
+Preserve upstream evidence/source pins and existing lab trees. Before installing
+Docker, changing the kernel/filesystem/tooling or otherwise altering the retained lab,
+retain a recoverable baseline and record a new environment/source identity; rerun the
+applicable native tests. H02 must specify any such changes before implementation.
+Use synthetic data and isolated source snapshots; do not share production workspaces,
+cloud credentials or Mac virtual environments with the qualification guest.
+
 ## 2. Plans and financial envelope
 
 ### Provisional product catalog
@@ -375,7 +395,9 @@ usage reproducible and reconcilable, not a rounded `du -sh` scan after each edit
 Exclude backups, scratch, hosted authentication/control and physical database/allocation
 headroom from advertised usable storage, but reserve and monitor them in host budgets.
 Use bounded application growth reservations plus qualified filesystem hard byte/inode
-limits for private persistent trees; ext4 project quotas are a candidate mechanism.
+limits for private persistent trees. Ext4 project quotas are the preferred candidate
+for H02 evaluation based on the selectively imported qualification work below, subject
+to fresh native Docker/GCP proof; historical success is not runtime qualification.
 Docker memory/CPU limits do not enforce bind-mounted workspace storage. Do not create
 an OS/filesystem/image per operator solely to express a tier. Qualify the chosen host
 quota mechanism, attribution, restart/restore and escape prevention before activation.
@@ -837,7 +859,7 @@ branch. Pilot 0 releases at H06; H07–H12 must not delay that learning mileston
 | Slice | Delivery and implementation boundary | Acceptance before proceeding |
 | --- | --- | --- |
 | H01 | [Baseline, schema and deployment contracts](HOSTED_MVP_H01_DESIGN.md). Inventory `application/apps/server/app/modules/hosted_access`, `application/deploy/hosted-demo`, workspace backup services and existing hosted browser tests. Design the store ownership map and complete Pilot 0 schema for the Admin registry, protected inventory, effective hosted-access authority, separate Admin recovery and per-operator recovery stores, reusing business schema ownership. Define typed host-agent commands. Document tables/columns, constraints, indexes and initialization ownership; defer paid/automation-only tables to their owning slices. Record proof choices for quotas, backups, keys, mail and image packaging. | Review the Pilot 0 ER/relationship diagram, store/data dictionary and schema-resource plan; document reuse/gaps, resource ownership, exact capacity/accounting definitions and reproducible component-proof commands. No live deployment required to begin. Reject generic shell/path selection and public Docker access. |
-| H02 | Dedicated container/storage foundation on GCP with Cloudflare gateway. Package pinned application assets and the owning schema resources; validate fresh initialization and schema identity without defining a second schema authority; persistent private workspace/control/scratch, registered subdomains and restricted host operations. Keep Pilot 0 runtimes warm. | Two isolated test operators, persistent data across replacement/reboot, unknown-host denial, one writer, bounded memory/disk/inodes and measured warm-container headroom for the admitted population (initial proof target: five). No customer records yet. |
+| H02 | Dedicated container/storage foundation on GCP with Cloudflare gateway. Package pinned application assets and the owning schema resources; validate fresh initialization and schema identity without defining a second schema authority; persistent private workspace/control/scratch, registered subdomains and restricted host operations. Keep Pilot 0 runtimes warm. Reuse the imported ext4 quota primitives/sandbox/harness through the [H02 reuse contract](#h02-project-quota-reuse-contract), adapting only after detailed design. | Fresh source-pinned native Linux, Docker and exact GCP quota/isolation/reboot proofs required; historical 8A pass is input only. Two isolated test operators, persistent data across replacement/reboot, unknown-host denial, one writer, bounded memory/disk/inodes and measured warm-container headroom for the admitted population (initial proof target: five). No customer records yet. |
 | H03 | Managed identity and central-login handoff. Admin MFA, exact invited-identity assignment, host-only app sessions, revocation, logout and simultaneous-device access with existing revision/draft fences. Own identity/session/invitation/revocation schema delivery and validation against H01. | Cross-origin/workspace/role denial; no identity-token URL leak; single-use handoff replay fails; stale saves preserve input. Local launch still works without cloud login. Pass the schema acceptance contract below. |
 | H04 | Admin-lite and Free usage. Add/list/detail operator UI, default empty/optional synthetic portfolio, pinned Free 50 MB allowance, operation identities/status and supported manual provisioning completion/retry. Operator Settings shows Free pilot, usage/freshness and support; hide unavailable upgrades. Own Admin-lite provisioning/status, operation-result and Free usage/allocation schema delivery. | Pending → Ready/claim → Active only after source checks; no business access during setup/failure. Retried/unknown results do not duplicate resources. Safe growth rejection, retained reads/export/cleanup and physical headroom. Pass the schema acceptance contract below. |
 | H05 | Nightly verified off-host recovery. Consistent SQLite/files capture, encrypted key custody/catalog, seven nightly points, stale-backup alerts, separate Admin recovery DB/schema with its own backup checkpoints/operations/audit and main-Admin-DB-independent authentication, plus internal operator-authorized restore, recovery-mode UI with strong step-up and no offline workspace restore/decrypt command. Keep catalog/checkpoints/restore operations in private recovery storage outside business data; Admin observes async summaries, without approval or routine dispatch. Include recent-auth preview/confirmation, safe locator switch and interruption handling. Own recovery-point/manifest/catalog and restore-operation schema delivery. | Rehearsed data/files and host-loss/control restore including damaged main Admin DB, damaged Admin recovery DB and retained restore evidence; reject cross-store FKs/old-session authority and corrupt/missing objects, new fences/session revocation, retained pre-restore state, cross-operator denial, duplicate/conflicting restore handling and verified operator authorization; Admin outage independence, corrupt business-DB startup, crash mid-switch and denial when identity/runtime cannot be established; clean-runtime repair preserves IDs/data and requires operator-authorized restore into separate staging, never empty reinitialization. Security review/negative tests gate restore availability. Verified point/commit coverage drives health, not job start time; proven unchanged state is shown separately from an unknown/stale source. Pass the schema acceptance contract below. |
@@ -848,6 +870,62 @@ branch. Pilot 0 releases at H06; H07–H12 must not delay that learning mileston
 | H10 | Independent Admin and per-operator release operations; define future Tenant/Owner release contracts. Admin qualified release/canary/bounded rollout, operator suggested window/time zone/deferral and notices, drain across devices, compatible image/schema checks, safe pre-upgrade recovery. Own release compatibility, update preference/schedule and rollout-operation schema additions. | Qualify old/new component and API/schema combinations; one component update leaves other compatible assignments unchanged. Failed canary halts its rollout; unfinished input survives; admitted work drains; no second writer; automatic data rollback only before post-reopen writes. Pass the schema acceptance contract below. |
 | H11 | Free idle suspension/wake. All-device human activity, owned-work gates, gateway deduplicated wake, safe waking/error UI and independent due-work scheduling. Own runtime desired/observed state, wake-operation and bounded activity-state schema additions where durable state is required. | Polling never keeps a workspace alive; no suspended admitted work; wake/reboot storms bounded; no automatic write replay. Measure cold/warm latency; paid stays warm initially. Pass the schema acceptance contract below. |
 | H12 | Paid pilot and capacity qualification. Real-use/operator support evidence, complete monitoring/runbooks, measured admission/spending envelopes and staged growth toward 100. | Approve real charges separately; verify at least five genuine invitees/three weekly users for four weeks and at least one informed paid subscriber. Test approximately 20 active of 100 plus bursts, warm mix, restore and costs; do not claim unmeasured capacity. |
+
+#### H02 project-quota reuse contract
+
+Use the [selective quota import](../qualification/HOSTED_PROJECT_QUOTA_REUSE.md),
+from `Admin_UI_Workflow` at `cba6a7bf2561de06634abbddff0b60782949e6fc`, as an
+implementation input rather than rebuilding the low-level Linux quota work. The
+[import manifest](../qualification/PROJECT_QUOTA_IMPORT_MANIFEST.json) records exact
+upstream blobs/hashes and unchanged historical evidence. Importing these files did
+not implement H02, register a runtime capability or qualify project-backed sources.
+
+| Imported material | H02 treatment |
+| --- | --- |
+| `project_quota.py` | Reuse protected ext4 filesystem/binding checks, inheritance, hard byte/inode limit operations and observations behind the restricted host-agent port. Actual resource IDs/roots come from protected inventory, never browser requests. |
+| `project_sandbox.py` plus `quota_sandbox_exec.c` | Preserve the combined sandbox/security intent and ioctl escape protections. The old systemd profile and launcher are not a ready-made Docker policy; design and requalify the complete container/host boundary. |
+| `quota_actor.py` and `project_quota_qualification.py` | Reuse adversarial UID workloads and disposable native harness for EDQUOT, deleted-open usage, unsafe binding/enforcement rejection, isolation/escape, remount and actual reboot tests. Keep explicit root-Linux opt-in and fresh disposable-image guards. |
+| Focused tests and historical reports | Keep regression inputs and evidence byte-for-byte with original pins. The current import's 23 passing contract tests/Ruff checks are not a new native quota pass. |
+
+The historical post-reboot run passed only for its local ARM64 Linux kernel,
+filesystem, tools, sources and systemd/seccomp boundary. Imported `project_quota.py`,
+`project_quota_qualification.py` and `project_sandbox.py` differ from that report's
+source hashes; `quota_actor.py` and the C launcher match. Never relabel the historical
+pass as proof of the current files, Google VM or Docker runtime. Preserve failed runs
+and exact source/tool/configuration pins when producing new qualification evidence.
+
+H02 detailed design must define these steps before integration:
+
+1. Map ProjectBinding/host operations to the current inventory, project-ID uniqueness,
+   source fences and private resource roots in the [schema master](../../DATABASE_SCHEMA.md).
+   Retaining the old package namespace for import reproducibility does not authorize
+   importing the old Admin schema/router/provisioning implementation.
+2. Rerun current-source primitive qualification in an isolated Linux laboratory. Use
+   Docker Desktop for ordinary Mac development and retain `epm-quota-test` for native
+   tests, stopped when unused. Preserve its baseline before installing Docker or
+   changing kernel/filesystem/tools; record and requalify the changed environment.
+3. Qualify actual non-root Docker UID mappings, capabilities, mount/project mutation
+   denial, syscall/ioctl restrictions, inheritance and cross-workspace isolation.
+   Bound every writable path, including container layers/tmpfs, SQLite/WAL, uploads,
+   scratch, logs and private auth/recovery storage. Neither CPU/RAM limits nor old
+   systemd evidence alone prove the persistent storage boundary.
+4. Re-prove enforcement, resource identity and persistence after container replacement
+   and host reboot on the exact admitted Google Cloud host/kernel/filesystem/Docker
+   configuration. Never format or change features on an existing data filesystem
+   through Add operator; any host preparation needs its own reviewed H02 setup plan.
+5. Measure physical byte/inode ceilings and operational/restore reserves for Free 50 MB
+   and the admitted warm population; synthetic fault-test limits are not production
+   profiles. H04 owns logical metering/reservations. The old source-ledger/collector
+   stack was not imported and needs separate design/review before any later reuse.
+6. Publish current component/native/cloud results and limitations in the
+   [acceptance register](../qualification/HOSTED_MVP_ACCEPTANCE.md). No production
+   quota activation or application-only fallback is admitted before the applicable
+   current-runtime and native-host gates pass.
+
+This reuse contract supplements H02 scope; it does not replace H02's detailed
+container/network/IAM/schema-resource/local-launch design or permit implementation
+before that design is complete. No VM/cloud changes or new qualification runs are
+performed by documenting this plan.
 
 #### Schema ownership and acceptance contract
 

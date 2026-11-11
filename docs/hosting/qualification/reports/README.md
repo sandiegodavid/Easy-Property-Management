@@ -17,3 +17,7 @@ results only; no report is promoted to the new topology by this alignment.
 Each report identifies its fixture, release, result and limits. Raw before/after
 observations remain under [evidence](../../evidence/); full original narrative is preserved
 in the [planning/report archive](../../archive/planning-and-reports-2026-10-24/).
+
+## Imported project-quota evidence
+
+The unchanged HOSTED_ADMIN_8A_2026-11-01 before/after-reboot JSON reports are historical Admin_UI_Workflow evidence. See the [reuse guide](../HOSTED_PROJECT_QUOTA_REUSE.md) and [import manifest](../PROJECT_QUOTA_IMPORT_MANIFEST.json) for source-pin differences; they are not current Docker/GCP acceptance.

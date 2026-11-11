@@ -59,6 +59,18 @@ Keep this Python environment active for the commands below. `EPM_PYTHON` selects
 
 <a id="local-workspace-foundation"></a>
 
+### Hosted container development versus Linux qualification
+
+Use Docker Desktop on the Mac for routine hosted-container development; the native
+Python/Vite Operator workflow below remains supported. Hosted build/launch tooling
+is planned under H02 and requires its detailed design before implementation.
+
+Keep the separate Lima `epm-quota-test` VM for native Linux quota/sandbox/host-agent
+and reboot tests, stopped when unused. Preserve its baseline before installing Docker
+or changing its environment, and requalify the new setup. Docker Desktop integration
+tests do not establish native quota or Google Cloud acceptance. See the [environment
+and qualification guide](docs/hosting/qualification/HOSTED_PROJECT_QUOTA_REUSE.md#development-versus-native-qualification).
+
 ### Configure and initialize a workspace
 
 Application code lives in Git; live user data belongs in an external workspace. Copy the configuration template and edit its paths:

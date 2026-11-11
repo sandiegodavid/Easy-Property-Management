@@ -1,0 +1,83 @@
+{
+  "source_branch": "Admin_UI_Workflow",
+  "source_commit": "cba6a7bf2561de06634abbddff0b60782949e6fc",
+  "import_date": "2026-11-10",
+  "scope": "Low-level quota primitives, original systemd/seccomp sandbox and disposable Linux harness only; no runtime registration, schema or activation imported.",
+  "files": [
+    {
+      "path": "application/apps/server/app/modules/hosted_admin/__init__.py",
+      "git_blob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "historical_8a_pin_matches": null
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_admin/infrastructure/__init__.py",
+      "git_blob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "historical_8a_pin_matches": null
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_admin/infrastructure/project_quota.py",
+      "git_blob": "d53eb9563501565f9425b0590a2af31419b8ab6f",
+      "sha256": "6157c6a7da151194c143463fc67b79a7b7021000abf6fcd0686daf6841b67719",
+      "historical_8a_pin_matches": false
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_admin/infrastructure/project_quota_qualification.py",
+      "git_blob": "b4367b5841f815f1dbc38d7ef3de322e470dc62a",
+      "sha256": "4fbf941cb7911d8de076436ea9f5d2a30bc20b59765319c15df448409e10d862",
+      "historical_8a_pin_matches": false
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_admin/infrastructure/project_sandbox.py",
+      "git_blob": "ce3b15d1706ba4790f3fc35a180ee2fee7995fc3",
+      "sha256": "8b940dd1a68e5a1447e98892f9172f2eb197703c9ca6dcbf5c2e71bdfc54d4fc",
+      "historical_8a_pin_matches": false
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_admin/infrastructure/quota_actor.py",
+      "git_blob": "e848a8222d45bafdc61bb1376ab4034cdf5462b5",
+      "sha256": "14b1db62d17d5d9974aee5740c1501770a90a115f80f85170ccdb0799c39c8bf",
+      "historical_8a_pin_matches": true
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_admin/infrastructure/quota_sandbox_exec.c",
+      "git_blob": "3ad765f25cad88e5b0baddbdef83d781f2e906b1",
+      "sha256": "851618b8dc4556b6b9b7d709648229b48127e3e8cfaa2add39d59db637bb9aa0",
+      "historical_8a_pin_matches": true
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_admin/tests/__init__.py",
+      "git_blob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "historical_8a_pin_matches": null
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_admin/tests/test_project_quota.py",
+      "git_blob": "15718539ade5df8a8dd8d832a2f9a80c68decf4b",
+      "sha256": "fa9581ed1228b967bbf08e8cb8ae127cf33dd3288a2f3a76f4414938980d8572",
+      "historical_8a_pin_matches": null
+    },
+    {
+      "path": "docs/hosting/qualification/reports/HOSTED_ADMIN_8A_2026-11-01_AFTER_REBOOT.json",
+      "sha256": "d52e9711832f15bfb0ec14f15f9678753fe167808cb98071da51fa24c03c97e5"
+    },
+    {
+      "path": "docs/hosting/qualification/reports/HOSTED_ADMIN_8A_2026-11-01_BEFORE_REBOOT.json",
+      "sha256": "9ce7aad358dfafdb313466a742e11aeef52f45576ca33b9c31bbff4e60b90aeb"
+    }
+  ],
+  "upstream_document_snapshots": [
+    {
+      "source_path": "docs/hosting/qualification/HOSTED_PROJECT_QUOTA_QUALIFICATION.md",
+      "snapshot_path": "docs/hosting/archive/project-quota-Admin_UI_Workflow/HOSTED_PROJECT_QUOTA_QUALIFICATION.md",
+      "sha256": "204cb646d8b28c38feb9c958bad955b909d29a327702fc758cfff3931fecaab5"
+    },
+    {
+      "source_path": "docs/hosting/qualification/LOCAL_LINUX_VM.md",
+      "snapshot_path": "docs/hosting/archive/project-quota-Admin_UI_Workflow/LOCAL_LINUX_VM.md",
+      "sha256": "484efa56f9985155f275c2a3526f890d98bee3ca200e1eb7556bf7ec45064d79"
+    }
+  ],
+  "new_native_or_cloud_qualification": false
+}
