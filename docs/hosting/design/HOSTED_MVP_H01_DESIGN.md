@@ -269,6 +269,167 @@ it. Identity/email quotas, private transport and provider permissions are actual
 inputs to qualify, not assumptions that this document has already validated. None blocks
 starting the schema/contracts work; all block live admission at their relevant slice.
 
+## Ordered H01 implementation plan
+
+Status: planned, not implemented. Execute H01.1–H01.7 in order; these are work units
+within H01, not new backlog items. Keep them in one cohesive change where practical,
+with separately reviewable commits if needed. H01 is complete when its contracts,
+resource scaffolding and proof specifications are executable/reviewable. It does not
+complete any H02–H05 feature or authorize a live deployment.
+
+### H01.1 — Pin the implementation baseline and ownership inventory
+
+Record the implementation-start commit, clean/dirty state and relevant source hashes
+in a new H01 evidence report under `docs/hosting/qualification/reports/`. Recheck every
+current-code assessment above against that checkout; record reuse, replacement and new
+work without importing the older Admin stack. Link the existing quota import manifest
+and preserve historical reports unchanged.
+
+Produce an ownership checklist linking each proposed store, command family and UI
+state to its H02, H03, H04 or H05 delivery owner. Use the master dictionary's table
+headings as the schema checklist; do not copy column definitions into this document.
+Identify existing hosted-access tests that will require replacement when H03/H04
+change the old schema/session policy. Leave existing local behavior operational.
+
+Exit: all Pilot 0 contracts have one owner; missing implementation is explicitly
+listed rather than inferred from old tests or the imported `hosted_admin` namespace.
+
+### H01.2 — Establish independent schema-resource scaffolding
+
+Under `application/database/`, create the proposed `admin-migrations/`,
+`admin-recovery-migrations/`, `host-inventory-migrations/`,
+`hosted-access-migrations/` and `recovery-migrations/` resource scaffolding, with
+documented per-store configuration/runner and packaging requirements. Keep the
+existing business resources unchanged. Each store needs its own version namespace,
+connection ownership and initialization contract; none may attach another store to
+simulate a cross-store transaction.
+
+H01 scaffolding must not install an empty baseline, stamp a revision or report a
+store as initialized before its owning tables/constraints exist. Specify the missing
+resource outcome explicitly. H02–H05 supply executable baselines, schema-derived
+structural checks and data initializers according to the master table ownership.
+The existing inline hosted-access schema is replaced atomically with its consuming
+adapter/tests in H03/H04, rather than partially rewiring it during H01.
+
+Specify initializer behavior for a new destination, an already matching store,
+wrong-store/revision/structure, interrupted initialization and missing resources.
+Separate creating an empty schema from inserting protected deployment identity,
+Free policy, release assignments or sessions. Initialization must never invent a
+workspace/operator identity or grant access. No deployed-data migration is included.
+
+Exit: resource ownership/layout and failure semantics are testable; no second DDL
+authority or automatically enabled hosted composition is introduced. Table delivery
+and actual fresh-store proofs remain H02–H05 acceptance obligations.
+
+### H01.3 — Implement bounded shared values and operation envelopes
+
+Add a small consumer-neutral hosted-contract package under
+`application/apps/server/app/platform/` for the values genuinely shared across owners:
+canonical IDs, revisions/epochs, operation identity, request hash, component name,
+bounded status/error codes and cursor/freshness envelopes. Keep action payloads and
+authorization decisions in their owning application modules. These types must not
+import FastAPI, ORM repositories, Docker or cloud clients.
+
+Define canonical semantic hashing with fixed test vectors: stable object-key order,
+validated normalized values and explicit absent/null handling; preserve meaningful
+array ordering and exclude only declared volatile transport metadata. Every action
+must enumerate its consequential fields. Include release, initial-data/seed identity,
+scope and expected fences where consequential; never hash arbitrary caller JSON as
+an authorization decision. Do not persist secrets in envelopes or fixtures.
+
+Test pending/running/needs_attention/unknown/succeeded/failed outcomes, original-result
+lookup and semantic conflict. Reuse shared API problem mapping rather than creating
+another HTTP-status policy. Transport timeout is unknown, not a fabricated failure
+or permission to repeat an effect.
+
+Exit: strict value/result validation and hash/retry contract tests pass, without
+claiming a durable operation repository or actual host-effect deduplication exists.
+
+### H01.4 — Define owning application ports and compatibility manifests
+
+Define typed command/observation protocols in the owning application boundaries for
+Admin, restricted host operations, hosted source, login, operator recovery and Admin
+recovery. Describe inputs, actor requirements, expected fences, safe outcomes and
+original-result lookup for every Pilot 0 command listed above. Use deterministic
+in-memory test doubles only for contract tests; do not expose placeholder production
+routes, runnable recovery commands or a generic shell/path parameter.
+
+The host contract accepts admitted resource/image IDs; protected inventory resolves
+paths, project IDs and immutable images. Keep workspace recovery operator-authorized
+and Admin recovery separately privileged. An Admin protection projection cannot be
+used as the operator's recovery catalog or restore queue.
+
+Define a versioned compatibility-manifest contract for separate Admin/Operator
+artifacts and future Tenant/Owner artifacts: component identity, immutable artifact
+digest, API/agent compatibility and owned/readable schema revisions, including separate
+Admin recovery. Validate per-workspace versus deployment-wide assignment scope.
+Represent unresolved native/provider qualification as unavailable evidence, never a
+default approval. H02 owns real packaging and private transport authentication.
+
+Exit: consumer/provider contract fixtures validate without cross-store access;
+unsupported pairings and caller-selected paths/images fail before effect dispatch.
+
+### H01.5 — Specify proof inputs, reports and packaging handoff
+
+Create reproducible proof specifications under `docs/hosting/qualification/`, linked
+from the acceptance register. Each specification names setup, safety prerequisites,
+exact invocation interface, workload, negative controls, expected observations and
+cleanup/retained-failure rules. Specify a common report shape with source/tool/image/
+schema pins, environment, actual result, evidence references and remaining limits.
+Unrun/native-unavailable checks must remain distinguishable from passes.
+
+H01 may add report-validation tests and non-privileged harness entry-point scaffolding;
+it must not run destructive/native quota experiments, alter the retained Lima VM or
+provision GCP resources. H02 adapts the imported quota harness after its detailed
+design, then supplies new Linux/Docker/GCP evidence. H03 owns managed-identity proofs,
+H04 accounting proofs and H05 encrypted backup/key/restore proofs.
+
+Inspect the existing schema staging and installation verification scripts when
+specifying packaging handoff: current staging copies only business resources.
+Require a declared per-component resource set, matching manifest and rejection of
+missing/wrong resources in H02. H01 does not claim that the current wheel or staging
+script already packages the new stores, or change local installation behavior.
+
+Exit: every proof in the table above has a reproducible specification and delivery
+owner; the register still shows native/cloud/end-user acceptance as not established.
+
+### H01.6 — Freeze UI/API state fixtures and delivery mapping
+
+Write strict synthetic contract fixtures for Admin list/add/detail and Operator
+Settings/recovery states. Cover pending versus effective access, known/stale/unknown
+usage, independent section loading/failure, unknown operation outcome, disabled
+access, retained invalid form values and unavailable restore. Map each action to the
+owning application command and its confirmation/authorization requirement.
+
+Keep actual screens and browser acceptance in H03/H04, with recovery UI in H05.
+No new H01 screen or separate UI backlog is needed. Record field defaults, bounded
+list/cursor behavior and source-refresh-as-async-operation in fixtures so later UI
+work cannot silently introduce synchronous per-operator polling or optimistic access.
+No paid purchase, scheduler or idle-wake control appears in Pilot 0 fixtures.
+
+Exit: fixtures agree with the master/H01 contracts and have named end-to-end delivery
+owners; fixture validation alone does not mark any usable workflow complete.
+
+### H01.7 — Validate, record evidence and hand off to H02
+
+Run focused tests for new values, manifests, port fixtures, report validation and
+schema-scaffold failure behavior. Test doubles may prove local transaction contract
+expectations; real per-store rollback/constraint/query-plan proofs remain assigned to
+the owning baseline/repository implementation. Do not replace them with mock passes.
+
+Run Ruff check and format check on every changed Python file using
+`application/pyproject.toml`. If frontend source/tooling changes become necessary,
+run lint, format check and typecheck from `application/`; otherwise record frontend
+checks as not applicable. Check changed documentation links and schema/contract
+ownership against the master. Run existing focused local/hosted regressions only
+where imports or shared boundaries changed; broader tests require a concrete reason.
+
+Publish exact commands/results and remaining gates in the H01 report, link it from
+the acceptance register and update this document's status only to the level proven.
+H02 can begin its detailed design once the H01 contract review is accepted; H02
+implementation still requires its own completed design. No H01 test authorizes live
+admission, restores, quota activation or billing.
+
 ## H01 acceptance and handoff
 
 H01 design acceptance requires review of the master schema, source inventory and all
