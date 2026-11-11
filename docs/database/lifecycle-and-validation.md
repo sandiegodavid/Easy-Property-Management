@@ -11,8 +11,13 @@ In this guide: [Initialization, recovery and retention](#initialization-recovery
 1. Install owning schema resources. Private file creation is exclusive and rejects
    existing mismatched/nonempty stores, unsafe paths and wrong permissions. Never let
    ordinary startup silently create a new empty registry or workspace after loss.
-2. Initialize main Admin schema/meta, protected Admin subject, Free policy, qualified
-   Admin/Operator releases and the Admin component assignment. Separately initialize
+2. H02 installs one complete main-Admin structural baseline, including identity,
+   operations and observation tables needed for its local FK closure, and initializes
+   protected deployment metadata. H03 owns protected Admin identity bootstrap; H04
+   owns Free policy and operator/application population. Candidate builds do not seed
+   qualified releases or assignments: insert genuinely qualified Admin/Operator
+   releases and the shared Admin assignment only after the owning artifact gates pass.
+   Synthetic test fixtures are not production qualification. Separately initialize
    Admin recovery schema/meta from protected deployment/recovery-authority bindings,
    with null checkpoint and no active operation. Initialize agent inventory from verified
    host/filesystem identity.
@@ -67,6 +72,7 @@ until verified cleanup is recorded.
 | Retry/idempotency | Original operation replay; changed hash conflict; duplicate claim/handoff; unknown host/access result; reserve/source-success/crash reconciliation. |
 | Rollback | Failure between record/audit/receipt writes leaves none committed; cross-store failure stays safely pending/unknown, not falsely atomic. |
 | Persistence | Exact current columns/types/constraints/indexes, FK checks, revision/state transitions, initial population, latest greenfield baseline and restart behavior. |
+| Host authority | Unique operator UID/GID mapping retained across resource replacement; ingress scope/binding-generation FKs, monotonic current fences and safe unknown observations; deterministic parent/child effect identity, duplicate-key reconciliation and immutable request preservation. |
 | Backup/restore | Operator-selected/authorized own-workspace restore, no Admin approval; qualified strong-step-up and exact-action proof; no offline/Admin impersonation path; cross-workspace/tenant/owner denial, authorization expiry and duplicate/conflicting jobs; DB/files and separate main Admin and Admin recovery stores recover consistently without losing active restore evidence; current recovery principal is verified without trusting damaged/restored Admin rows; corrupt/missing/key failure; stale jobs/sessions/grants never revived; prior destination retained; internal authenticated business-DB-independent recovery mode, interrupted switch, runtime/auth failure stays closed; stolen session, forged Admin, replay/path/key/object attacks rejected; Admin outage does not block workspace backup/restore. |
 | Admin recovery separation | Main Admin corruption/replacement leaves catalog/checkpoint/operation/audit readable; reject main-DB FKs and recovered-session authority; independently authenticate current recovery principal; main-only/recovery-only/host loss, interrupted switch, duplicate restore and local audit rollback; no automatic job replay. |
 | Query budget | Indexed session lookup and expiry cleanup, bounded Admin list/status projection without per-row source calls, bounded events/catalog pages and indexed reservation sum. |

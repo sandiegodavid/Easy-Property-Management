@@ -51,6 +51,11 @@ than linked as if they already exist.
 
 ## Schema definition placement
 
+Accepted H02 decisions refine the structural handoff: H02 delivers the complete
+main-Admin baseline/FK closure and inventory baseline; H03–H05 retain owning application
+behavior/population and access/recovery resources. See the [H02 decisions](HOSTED_MVP_H02_DESIGN.md#resolved-design-decisions)
+and [schema catalog](../../DATABASE_SCHEMA.md). H01 scaffold evidence remains unchanged.
+
 All executable schema definitions belong under `application/database/`, using the
 separate resource sets in the [schema master](../../database/overview.md#required-schema-definition-location).
 Application/agent modules must contain no inline schema DDL, table-creation operations,

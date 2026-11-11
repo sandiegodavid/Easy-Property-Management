@@ -31,6 +31,7 @@ For a first read: **scope → architecture and access → delivery plan**. For i
 
 - [Database schema catalog](../../DATABASE_SCHEMA.md): owning stores and complete table/column definitions.
 - [H01 detailed design and implementation plan](HOSTED_MVP_H01_DESIGN.md).
+- [H02 detailed design](HOSTED_MVP_H02_DESIGN.md) and [ordered implementation plan](HOSTED_MVP_H02_DESIGN.md#h02-implementation-plan): accepted foundation design and implementation plan; native/cloud qualification remains pending.
 - [Acceptance register](../qualification/HOSTED_MVP_ACCEPTANCE.md): actual proof status, separate from design requirements.
 - [Feature backlog](../../FEATURE_BACKLOG.md): feature scope and priority.
 

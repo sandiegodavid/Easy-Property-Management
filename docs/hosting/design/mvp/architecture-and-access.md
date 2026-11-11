@@ -49,10 +49,13 @@ services; a single template and the operator registry generate per-operator runt
 specifications. Do not manually maintain unrelated configurations for every operator.
 
 A durable worker invokes a narrow host agent using registered IDs and fixed operation
-kinds. Docker handles container lifecycle/restart policies. A bounded reconciler
+kinds. Docker executes container lifecycle operations, with automatic restart disabled.
+One systemd-supervised restricted host supervisor owns guarded starts/restarts and
+verifies mount, inventory, quota and ingress fences before each start, including boot.
+Do not run competing Docker/systemd restart loops. A bounded reconciler
 compares desired versus actual owned containers and reports drift. Health failures
-while a process remains alive need monitored remediation; Docker restart policies
-alone do not provide that behavior. Intentional suspension must remain distinct
+while a process remains alive need monitored remediation through that same owner.
+Intentional suspension must remain distinct
 from a crash or failed deployment, including after a host reboot.
 
 Keep persistent workspaces outside container writable layers and image directories.

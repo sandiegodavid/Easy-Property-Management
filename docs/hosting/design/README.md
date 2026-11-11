@@ -27,3 +27,8 @@ release-compatibility and post-reopen data-preservation requirements. [HOSTED-00
 
 - [H01 detailed design](HOSTED_MVP_H01_DESIGN.md): current-code inventory, deployment/source contracts, Admin-lite UI and proof plans.
 - [Database schema master](../../DATABASE_SCHEMA.md): shared store ownership and table/column dictionary; proposed hosted schema is not implemented.
+
+## H02 design and implementation planning
+
+- [H02 detailed design](HOSTED_MVP_H02_DESIGN.md): accepted container/storage/gateway design, quota reuse, schema/authority ownership and resolved D1–D13 decisions.
+- [H02 ordered plan](HOSTED_MVP_H02_DESIGN.md#h02-implementation-plan): sequential work units, evidence and H03–H05 handoff. Design only; no VM or cloud changes performed.

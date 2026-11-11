@@ -29,6 +29,15 @@ SQL mount. All five hosted resource sets are H01.2 unavailable scaffolds, so H02
 must deliver actual baselines and validators before a corresponding installed proof
 can pass. Do not stamp empty stores or turn `heads=[]` into readiness.
 
+Accepted H02 D1/D2 separates structural delivery from complete artifact promotion.
+H02 implements inventory and the complete main-Admin structural baseline/FK closure;
+H03–H05 retain access/recovery baselines, application behavior and unfinished assets.
+H02 candidate images and manifest inventories stay in protected build evidence, not
+qualified_releases rows. Report missing-store/asset cases as unavailable or not_run;
+the aggregate all-store report must not be labelled passed. Rebuild and repeat this
+entire installation proof on completed owning-slice artifacts before H06. Do not
+weaken manifest or startup validation to accept an incomplete production image.
+
 ## Required installation procedure and negative controls
 
 1. Pin clean/dirty source and all build/runtime tools. Build separate Admin/Operator

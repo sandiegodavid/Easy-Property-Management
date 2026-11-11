@@ -55,10 +55,10 @@ H02 detailed design must define these steps before integration:
    quota activation or application-only fallback is admitted before the applicable
    current-runtime and native-host gates pass.
 
-This reuse contract supplements H02 scope; it does not replace H02's detailed
-container/network/IAM/schema-resource/local-launch design or permit implementation
-before that design is complete. No VM/cloud changes or new qualification runs are
-performed by documenting this plan.
+This reuse contract supplements the [accepted H02 detailed design](../HOSTED_MVP_H02_DESIGN.md),
+which now defines container/network/IAM/schema-resource/local-launch decisions and the
+ordered implementation plan. Accepted design choices are not native/cloud evidence.
+No VM/cloud changes or new qualification runs are performed by documenting this plan.
 
 #### Schema ownership and acceptance contract
 
@@ -66,22 +66,25 @@ The [database schema master](../../../DATABASE_SCHEMA.md) is the single dictiona
 store ownership, tables/columns, relationships, initialization and schema acceptance.
 [H01 detailed design](../HOSTED_MVP_H01_DESIGN.md) defines the corresponding use cases,
 source inventory, typed contracts, UI handoff and proof plans. Both are design, not
-implemented schema resources. Keep later feature additions in the master rather than
+complete hosted schema resources. Keep later feature additions in the master rather than
 duplicating column lists in individual slices.
 
 H01 owns the logical schema design and store boundaries needed for Pilot 0, not
-implementation of all future tables. H03–H05 implement and refine their parts of
-that design before H06 admission. H02 packages/initializes the owning resources;
-it does not become an independent schema designer. H07–H11 design their additions
+implementation of all future tables. Accepted H02 D1 delivers the complete main-Admin
+structural baseline/FK closure and inventory baseline from the master. H03–H05 retain
+their owning population/behavior and access/recovery resource delivery before H06.
+H02 does not become an independent schema designer. Its candidate images are not
+qualified production releases while required later resources/assets are unavailable;
+repeat full all-store/image qualification after delivery and before H06. H07–H11 design their additions
 before feature implementation, maintaining the same ownership map and dictionary.
 H06 and H12 retain schema/version pins with release evidence rather than adding
 new domain tables merely for qualification.
 
 | Store/boundary | H01 Pilot 0 design | Later owning additions |
 | --- | --- | --- |
-| Admin/control registry | Stable operator/workspace/slug assignment, pinned Free allowance, readiness/provisioning status, operation identity/result and operational audit; H03/H04 implement their records. | H07 automation jobs/claims/reservations/effect references; H09 subscription desired state/provider references; H10 releases, schedules and rollout operations; H11 runtime lifecycle operations. |
+| Admin/control registry | H02 delivers one complete Pilot 0 structural baseline, including identity/operations FK closure and protected deployment metadata. H03/H04 own verified identity, Free policy, operator/provisioning and operational behavior; H05 owns protection summaries. Candidate artifacts never seed fake qualified releases. | H07 automation jobs/claims/reservations/effect references; H09 subscription desired state/provider references; H10 releases, schedules and rollout operations; H11 runtime lifecycle operations. |
 | Admin recovery store | Separate admin_recovery_meta, control backup checkpoint, control_recovery_operations, control_recovery_points, control_restore_operations and control_recovery_audit; H05 owns persistence/authenticated recovery mode while main Admin data is replaced. | H10 release/schema compatibility must include this store. Off-host manifests/bootstrap reconstruct a lost catalog with previous jobs inert. |
-| Protected inventory | Registered host/container/directory identities and resource ownership/limits; specify whether each fact is persisted in an owning store or generated as protected configuration. H02 initializes verified bindings; H04 records provisioning results. | H07 reconciliation observations; H08 physical allocation changes; H10/H11 verified release/runtime effects. No second editable registry in config files. |
+| Protected inventory | H02 owns registered host/container/directory identities, operator UID/GID mapping, resource limits, monotonic ingress fences and parent/child effect receipts. Protected gateway/runtime files are generated projections. H04 integrates admitted provisioning/access results through owning commands. | H07 reconciliation observations; H08 physical allocation changes; H10/H11 verified release/runtime effects. No second editable registry in config files. |
 | Per-operator hosted-access/control | Effective account/identity assignment, invitation/session/revocation facts, source fences and bounded Free storage admission/operation receipts; H03/H04 deliver them. | H08 metering/reservations/overage; H09 effective subscription capability; H10/H11 applicable execution/runtime fences. Operator processes never open the Admin DB. |
 | Per-operator recovery store | Private recovery_meta, checkpoint, operation/audit, recovery_points and restore_operations outside business data; H05 implements internal normal/authenticated recovery modes; no offline operator restore/decrypt entry point. Admin owns only summary projection and separate platform/control recovery. | H08 paid cadence/retention qualification; H10 pre-upgrade point links. Immutable manifests permit explicit catalog reconstruction without a central workspace catalog. |
 | Operator business workspace | Existing owning module tables remain domain authority; identify any required interface/schema changes explicitly. Keep live hosted credentials/session authority outside portable business records. | Portal/Finance/Payments changes belong to their functional backlogs, not HOSTED-001. Do not add billing or session tables to the business baseline. |

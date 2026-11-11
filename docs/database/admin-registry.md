@@ -4,11 +4,21 @@
 
 Part of the schema master. Proposed hosted tables are design contracts, not claims of implemented schema. Executable definitions belong exclusively under `application/database/`; see [resource ownership](overview.md#required-schema-definition-location).
 
-In this guide: [Pilot 0 Admin database](#pilot-0-admin-database) · [`control_meta` — H04 initialization](#control_meta--h04-initialization) · [`storage_policies` — H04 Free policy](#storage_policies--h04-free-policy) · [`qualified_releases` — H02 release qualification](#qualified_releases--h02-release-qualification) · [`component_deployments` — H02 shared Admin; H04 Operator assignments](#component_deployments--h02-shared-admin-h04-operator-assignments) · [`operators` — H03/H04 assignment and desired state](#operators--h03h04-assignment-and-desired-state)
+In this guide: [Pilot 0 Admin database](#pilot-0-admin-database) · [`control_meta` — H02 protected initialization](#control_meta--h02-protected-initialization) · [`storage_policies` — H04 Free policy](#storage_policies--h04-free-policy) · [`qualified_releases` — H02 release qualification](#qualified_releases--h02-release-qualification) · [`component_deployments` — H02 shared Admin; H04 Operator assignments](#component_deployments--h02-shared-admin-h04-operator-assignments) · [`operators` — H03/H04 assignment and desired state](#operators--h03h04-assignment-and-desired-state)
 
 ## Pilot 0 Admin database
 
-### `control_meta` — H04 initialization
+H02 implements the complete Pilot 0 main-Admin structural baseline across this guide,
+[identity](admin-identity.md) and [operations](admin-operations.md), keeping all local
+FKs intact. Table phase labels describe owning behavior/population, not independent
+partial database baselines. H02 initializes protected deployment metadata only;
+H03/H04 own identity, policy/operator population and application actions. H05 owns
+workspace protection reporting. No operator, session or fake qualified release is
+created by schema initialization. See [accepted H02 decisions](../hosting/design/HOSTED_MVP_H02_DESIGN.md#resolved-design-decisions).
+
+### `control_meta` — H02 protected initialization
+
+<a id="control_meta--h04-initialization"></a>
 
 Identifies the hosted deployment and its trusted public/login origins. Its registry
 generation distinguishes current control authority from stale state after recovery.
@@ -129,7 +139,10 @@ Constraints and indexes:
   non-null observation_ref and observed_at.
 
 This is the only editable release-assignment authority for all four components.
-H02 initializes the shared Admin assignment; H04 creates each Operator assignment
+H02 supplies this table's structure. Populate the shared Admin assignment only when
+its artifact is genuinely qualified; unavailable candidate builds remain protected
+build evidence, not qualified_releases rows or production assignments. H04 creates
+each Operator assignment
 atomically with its operator/operation/audit before provisioning can start. Within
 that transaction insert identity and assignment with operation_id null, insert the
 operation referencing the assignment, then link operation_id before commit; this
@@ -137,6 +150,11 @@ resolves the local FK cycle without disabling foreign-key enforcement. Reject
 provision/enable if that exact assignment is missing or incompatible. Tenant/Owner
 rows arrive only with their later qualified portal delivery; no placeholder releases.
 Operator identity rows contain no desired release column.
+
+H03–H05 component tests may use explicitly synthetic assignments/qualified-release
+fixtures in isolated stores. They do not promote an incomplete production artifact;
+repeat full installed-image/schema qualification after owning resources/assets arrive
+and before H06 admission. H02's infrastructure acceptance cannot stand in for that gate.
 
 Actual running images/resource identities remain authoritative in host inventory or
 the owning component's deployment observation. observed_release_id is a verified

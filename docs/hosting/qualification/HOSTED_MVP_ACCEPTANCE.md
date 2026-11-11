@@ -125,8 +125,19 @@ files**, current schema ownership/documentation checks and unchanged historical
 inputs. [Exact commands and tested source pins](reports/HOSTED_MVP_H01_7_VALIDATION_2026-11-11.json)
 identify the local contract scope and two lifecycle-alignment source changes.
 H01.1–H01.7 implementation preparation is delivered and ready for review; acceptance
-of that implementation contract review is not asserted by this task. H02 may begin
-its detailed design after that acceptance, and implementation requires its own
-completed design. Every stage-specific runtime/native/cloud/provider/end-user gate
+of that implementation contract review is not asserted by this task. The
+[H02 design decisions](../design/HOSTED_MVP_H02_DESIGN.md#resolved-design-decisions)
+are now accepted; its implementation remains planned. Every stage-specific runtime/native/cloud/provider/end-user gate
 above remains **Not established**. No admission, restore, quota, billing or UI control
 is enabled by H01 results.
+
+## H02 acceptance boundary
+
+H02's infrastructure subset requires current-source native/Linux-Docker/GCP proof,
+private resource/UID/quota isolation, guarded restart and durable external ingress
+denial. Its candidate images are not qualified hosted releases while H03–H05 schemas,
+assets or behavior remain unavailable. Keep the complete image/all-store report
+unavailable/not_run where applicable and repeat it on final owning-slice artifacts
+before H06. No candidate-only result populates a fake qualified release or permits
+customer admission. No H02 runtime or cloud acceptance is established by the accepted
+design. See the [ordered plan](../design/HOSTED_MVP_H02_DESIGN.md#h02-implementation-plan).

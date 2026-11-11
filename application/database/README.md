@@ -10,7 +10,7 @@ not executable resources and must not be used as fallbacks.
 | Resource set / configuration | Revision namespace | Delivery / connection owner |
 | --- | --- | --- |
 | Existing `sqlite-migrations/`, `application/alembic.ini` | Existing business revision | Domain-owned business runner; unchanged |
-| [admin-migrations/alembic.ini](admin-migrations/alembic.ini) | `admin_` | H04 Admin service; H02 release and H03 identity contributions |
+| [admin-migrations/alembic.ini](admin-migrations/alembic.ini) | `admin_` | H02 complete Pilot 0 structural baseline/FK closure and protected deployment metadata; H03/H04 own identity/provisioning population/behavior, H05 protection observations |
 | [admin-recovery-migrations/alembic.ini](admin-recovery-migrations/alembic.ini) | `admin_recovery_` | H05 Admin recovery service, independent of main Admin startup |
 | [host-inventory-migrations/alembic.ini](host-inventory-migrations/alembic.ini) | `host_inventory_` | H02 restricted host agent only |
 | [hosted-access-migrations/alembic.ini](hosted-access-migrations/alembic.ini) | `access_` | H03 owning operator source; H04 policy/accounting contributions |

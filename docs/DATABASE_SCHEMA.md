@@ -49,7 +49,7 @@ Keep column definitions in the owning store document and executable resources to
 
 - <a id="pilot-0-admin-database"></a>[Pilot 0 Admin database](database/admin-registry.md#pilot-0-admin-database)
 
-- <a id="control_meta--h04-initialization"></a>[`control_meta` — H04 initialization](database/admin-registry.md#control_meta--h04-initialization)
+- <a id="control_meta--h04-initialization"></a>[`control_meta` — H02 protected initialization](database/admin-registry.md#control_meta--h02-protected-initialization)
 
 - <a id="storage_policies--h04-free-policy"></a>[`storage_policies` — H04 Free policy](database/admin-registry.md#storage_policies--h04-free-policy)
 
@@ -95,9 +95,13 @@ Keep column definitions in the owning store document and executable resources to
 
 - <a id="host_identity"></a>[`host_identity`](database/host-inventory.md#host_identity)
 
+- [`operator_principals`](database/host-inventory.md#operator_principals)
+
 - <a id="resource_bindings"></a>[`resource_bindings`](database/host-inventory.md#resource_bindings)
 
 - <a id="project_assignments--h02-if-project-quotas-qualify"></a>[`project_assignments` — H02 if project quotas qualify](database/host-inventory.md#project_assignments--h02-if-project-quotas-qualify)
+
+- [`ingress_bindings`](database/host-inventory.md#ingress_bindings)
 
 - <a id="host_receipts"></a>[`host_receipts`](database/host-inventory.md#host_receipts)
 

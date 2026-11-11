@@ -1,7 +1,10 @@
 # admin schema resources
 
-**Scaffold only — unavailable for initialization or upgrade.** Delivery owner: H04.
-Main Admin registry; H02 release resources and H03 identity resources contribute to this store.
+**Scaffold only — unavailable for initialization or upgrade.** Structural delivery
+owner: H02, for the complete Pilot 0 main-Admin baseline/FK closure. H02 initializes
+protected deployment metadata only. H03/H04 retain identity/Free-policy/operator
+population and behavior; H05 owns workspace protection observations. Candidate
+builds do not seed qualified releases or production assignments.
 
 This directory owns its `alembic.ini`, environment and future `versions/` revisions.
 Revision namespace: `admin_`. No baseline, destination, default connection URL,

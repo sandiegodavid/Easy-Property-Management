@@ -4,6 +4,10 @@
 
 Part of the schema master. Proposed hosted tables are design contracts, not claims of implemented schema. Executable definitions belong exclusively under `application/database/`; see [resource ownership](overview.md#required-schema-definition-location).
 
+H02 delivers these tables in the complete main-Admin structural baseline. H04 retains
+operation/audit/provisioning behavior and H05 owns workspace recovery reporting;
+creating the schema neither starts operations nor claims recovery protection.
+
 In this guide: [`operations` — H04 supported manual effects](#operations--h04-supported-manual-effects) · [`operation_events` — H04](#operation_events--h04) · [`admin_audit` — H03/H04](#admin_audit--h03h04) · [`workspace_recovery_status` — H05](#workspace_recovery_status--h05)
 
 ### `operations` — H04 supported manual effects

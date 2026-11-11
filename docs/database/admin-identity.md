@@ -4,6 +4,10 @@
 
 Part of the schema master. Proposed hosted tables are design contracts, not claims of implemented schema. Executable definitions belong exclusively under `application/database/`; see [resource ownership](overview.md#required-schema-definition-location).
 
+H02 delivers these tables in the complete main-Admin structural baseline to satisfy
+local FK closure. H03 retains all identity/session/invitation population and behavior;
+schema creation itself grants no access and creates no principals or sessions.
+
 In this guide: [`invitations` — H03](#invitations--h03) · [`admin_principals` — H03](#admin_principals--h03) · [`admin_sessions` — H03](#admin_sessions--h03) · [`login_handoffs` — H03 central login](#login_handoffs--h03-central-login)
 
 ### `invitations` — H03
