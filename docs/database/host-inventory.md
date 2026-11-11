@@ -1,12 +1,18 @@
 # Protected host inventory
 
-[Database schema catalog](../DATABASE_SCHEMA.md) · [Shared conventions](overview.md)
+[Database schema catalog](README.md) · [Shared conventions](overview.md)
 
 Part of the schema master. Proposed hosted tables are design contracts, not claims of implemented schema. Executable definitions belong exclusively under `application/database/`; see [resource ownership](overview.md#required-schema-definition-location).
 
 In this guide: [Host identity](#host_identity) · [Operator principals](#operator_principals) · [Resource bindings](#resource_bindings) · [Project assignments](#project_assignments--h02-if-project-quotas-qualify) · [Ingress authority](#ingress_bindings) · [Effect receipts](#host_receipts)
 
 ## Pilot 0 protected host inventory — H02/H04
+
+H02.2 delivers the [six-table current baseline](../../application/database/host-inventory-migrations/README.md)
+and separate protected metadata binding. H02.3 adds the
+[private command/reservation boundary](../hosting/qualification/reports/HOSTED_MVP_H02_3_HANDOFF.md).
+Native verification and Docker/gateway effects remain later slices; schema creation
+itself creates no operator resources.
 
 ### `host_identity`
 
@@ -28,7 +34,9 @@ Protected root ownership pins actual host/filesystem identity. No caller-selecte
 
 Owns the host UID/GID assigned to each operator so filesystem isolation survives
 container replacement. These are process/filesystem identities, not extra OS instances,
-human login accounts or product roles. Accepted H02 D3; not yet implemented.
+human login accounts or product roles. Structural constraints are implemented in H02.2; H02.3 reserves mappings in the
+private inventory transaction using an explicit collision-probe dependency. Physical
+resource creation and native qualification remain H02.5/H02.8.
 
 | Column | Type | Nullable | Default | Description / column rules |
 | --- | --- | --- | --- | --- |
@@ -119,7 +127,9 @@ a second competing allocation ledger.
 Owns durable external access denial and its highest accepted access fence independently
 of the Operator process. Gateway configuration is a generated projection of this table,
 not a second editable registry. Accepted H02 D4/D5; H03 supplies live identity/source
-proof and H04 integrates Admin commands. Not yet implemented.
+proof and H04 integrates Admin commands. H02.2 implements structural constraints;
+H02.3 reserves desired fences and verifies typed effect results; actual gateway
+execution/containment remains H02.6.
 
 | Column | Type | Nullable | Default | Description / column rules |
 | --- | --- | --- | --- | --- |
@@ -177,7 +187,7 @@ separate from the Admin operation’s requested state.
 | `binding_id` | `ID` | Yes | — | Registered resource binding identity. FK resource_bindings. |
 | `access_epoch` | `REV` | No | — | Access authority fence; stale operations must not override it. |
 | `kind` | `TEXT` | No | — | Typed operation/effect kind; see allowed values below. |
-| `state` | `TEXT` | No | — | Lifecycle state; see table-specific values and transition rules. (`pending`, `unknown`, `applied`, `rejected`). |
+| `state` | `TEXT` | No | — | Lifecycle state; see table-specific values and transition rules. (`pending`, `unknown`, `applied`, `rejected`, `superseded`). |
 | `observed_json` | `TEXT` | Yes | — | Bounded typed effect observations, excluding raw shell output. (typed <=16 KiB). |
 | `recorded_at` | `TIME` | No | — | Time the record or event was persisted. |
 | `revision` | `REV` | No | — | Optimistic concurrency revision. |
@@ -205,3 +215,24 @@ The repair_runtime effect replaces only a stopped/fenced container from a regist
 compatible image, retaining data/control identities; it cannot call business initialization
 or silently switch to another workspace. Read-only inspect needs no receipt. No generic path/command string is admitted.
 
+
+### Verified containment and current supervision
+
+An authenticated, successfully verified `stop_container` atomically records its
+receipt and terminates older pending/unknown `start_container` receipts for the same
+binding, generation and owning scope as `superseded`. The original intent/hash and
+unknown observation remain unchanged; `observed_json` adds the verified stop child
+ID (`superseded_by_operation_id`), `containment_evidence_ref` and `superseded_at`.
+This proves current containment, not whether the historical start ever ran. The
+superseded state is terminal/immutable and cannot be replayed. A newly admitted
+start or repair may proceed at the current revision/fence once uncertainty is cleared.
+Stops do not resolve uncertain creation, limits or ingress effects without those
+owners' evidence. No cross-store atomicity or unauthenticated recovery path is implied.
+
+The immutable stop-only projection retains its first command solely for target
+identity and emergency containment. Under the inventory singleton, supervision
+resolves the current binding/container to an actual applied start receipt at the
+current access epoch and preceding binding revision. It does not manufacture a new
+command by copying a newer epoch onto old intent. Missing/stale authority remains
+fail-closed; independent physical/profile/external-deny checks still apply. Lookup
+loads only the matching command in one SQL query, not the target's entire history.

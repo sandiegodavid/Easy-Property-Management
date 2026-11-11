@@ -1,6 +1,6 @@
 # Independent releases and operator update experience
 
-[Hosted MVP design index](../HOSTED_MVP_DESIGN.md) · [Schema catalog](../../../DATABASE_SCHEMA.md)
+[Hosted MVP design index](../HOSTED_MVP_DESIGN.md) · [Schema catalog](../../../database/README.md)
 
 Part of the accepted HOSTED-001 design. Requirements here do not establish implementation, deployment or qualification; Pilot 0 exceptions are in the [delivery plan](delivery-plan.md).
 
@@ -16,7 +16,7 @@ assets have deployment-wide assignments. Tenant/Owner release delivery is future
 portal work, not Pilot 0 scope. Each artifact declares its API, source/runtime,
 authentication and owned/readable schema compatibility in a pinned manifest.
 All release assignments use the common component_deployments table described in the
-[schema master](../../../DATABASE_SCHEMA.md); scope distinguishes per-workspace Operator
+[schema master](../../../database/README.md); scope distinguishes per-workspace Operator
 rows from deployment-wide Admin/Tenant/Owner rows. Operator identity records do not
 carry a duplicate desired release.
 

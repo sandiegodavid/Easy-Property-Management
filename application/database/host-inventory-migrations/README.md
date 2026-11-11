@@ -1,15 +1,25 @@
 # host-inventory schema resources
 
-**Scaffold only — unavailable for initialization or upgrade.** Delivery owner: H02.
-Protected agent inventory and effect receipts; Admin uses typed ports only.
+H02.2 delivers `host_inventory_0001_initial`: Complete six-table protected host inventory baseline, including principals, ingress and child-effect receipts.
+All DDL lives in the owning revision and [shared column conventions](../hosted_ddl.py).
+No identity, policy, operator, release assignment or session is seeded by schema creation.
 
-This directory owns its `alembic.ini`, environment and future `versions/` revisions.
-Revision namespace: `host_inventory_`. No baseline, destination, default connection URL,
-identity, policy, release assignment or session is supplied. The environment rejects
-upgrade/stamp (including offline SQL) before using a connection or creating a file.
-An empty revision listing is not schema readiness.
+Use `resource_config(HostedStore, application_directory=...)` for installed-resource
+discovery and `app.platform.hosted_schema.initialize_store(...)` for exclusive fresh
+initialization or exact read-only reinit. There is no default connection URL.
+Direct Alembic upgrade/stamp/ensure-version/offline commands reject; only the owning
+runner supplies the explicit SQLite transaction. No migration or downgrade path.
 
-Use the [shared resource and initialization contract](../README.md) for discovery,
-runner ownership, failure behavior and component packaging requirements. The
-[owning dictionary](../../../docs/database/host-inventory.md) owns table/column definitions.
-The existing business and hosted-demo consumers are not wired to this scaffold.
+The installed set consists of `alembic.ini`, `env.py`, this revision and the shared
+`database/hosted_ddl.py` helper. H02.4 must package them together and verify installation
+outside the checkout; current wheel staging is not yet hosted-image qualification.
+Recovery/access resources remain independently unavailable until their owners deliver them.
+
+Protected metadata binding is separate from schema initialization. Main Admin may
+bind deployment metadata; inventory may bind host/filesystem identity. These are
+caller-owned transactions and do not establish authentication, quota enforcement,
+readiness or permission to start a container. H03/H04 own population/behavior and
+H02.3/H02.5 own host authority and actual device/mount/quota verification.
+
+See the [shared initialization contract](../README.md) and
+[H02.2 validation matrix](../../../docs/hosting/qualification/reports/HOSTED_MVP_H02_2_HANDOFF.md).

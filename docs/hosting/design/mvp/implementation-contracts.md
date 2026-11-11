@@ -1,6 +1,6 @@
 # H02 quota reuse and schema implementation contracts
 
-[Hosted MVP design index](../HOSTED_MVP_DESIGN.md) · [Schema catalog](../../../DATABASE_SCHEMA.md)
+[Hosted MVP design index](../HOSTED_MVP_DESIGN.md) · [Schema catalog](../../../database/README.md)
 
 Part of the accepted HOSTED-001 design. Requirements here do not establish implementation, deployment or qualification; Pilot 0 exceptions are in the [delivery plan](delivery-plan.md).
 
@@ -30,7 +30,7 @@ and exact source/tool/configuration pins when producing new qualification eviden
 H02 detailed design must define these steps before integration:
 
 1. Map ProjectBinding/host operations to the current inventory, project-ID uniqueness,
-   source fences and private resource roots in the [schema master](../../../DATABASE_SCHEMA.md).
+   source fences and private resource roots in the [schema master](../../../database/README.md).
    Retaining the old package namespace for import reproducibility does not authorize
    importing the old Admin schema/router/provisioning implementation.
 2. Rerun current-source primitive qualification in an isolated Linux laboratory. Use
@@ -56,13 +56,14 @@ H02 detailed design must define these steps before integration:
    current-runtime and native-host gates pass.
 
 This reuse contract supplements the [accepted H02 detailed design](../HOSTED_MVP_H02_DESIGN.md),
-which now defines container/network/IAM/schema-resource/local-launch decisions and the
-ordered implementation plan. Accepted design choices are not native/cloud evidence.
-No VM/cloud changes or new qualification runs are performed by documenting this plan.
+which defines container/network/IAM/schema-resource/local-launch boundaries. The
+[foundation guides](../../foundation/README.md) consolidate delivered behavior,
+operations and exactly scoped evidence by topic. Accepted requirements alone do not
+establish proof; this documentation does not perform VM/cloud changes or new runs.
 
 #### Schema ownership and acceptance contract
 
-The [database schema master](../../../DATABASE_SCHEMA.md) is the single dictionary for
+The [database schema master](../../../database/README.md) is the single dictionary for
 store ownership, tables/columns, relationships, initialization and schema acceptance.
 [H01 detailed design](../HOSTED_MVP_H01_DESIGN.md) defines the corresponding use cases,
 source inventory, typed contracts, UI handoff and proof plans. Both are design, not

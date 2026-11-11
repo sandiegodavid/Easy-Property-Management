@@ -12,12 +12,14 @@ from sqlalchemy import create_engine, event
 
 from app.platform.schema_resources import (
     HostedStore,
+    IMPLEMENTED_REVISIONS,
+    resource_config,
     SchemaResourcesUnavailable,
     scaffold_config,
 )
 
 APPLICATION = Path(__file__).resolve().parents[5]
-STORES = tuple(HostedStore)
+STORES = tuple(store for store in HostedStore if store not in IMPLEMENTED_REVISIONS)
 
 
 @pytest.mark.parametrize("store", STORES)
@@ -103,7 +105,7 @@ def test_supplied_connection_is_not_used_committed_or_closed(store):
         engine.dispose()
 
 
-@pytest.mark.parametrize("store", STORES)
+@pytest.mark.parametrize("store", tuple(HostedStore))
 @pytest.mark.parametrize("missing", ["alembic.ini", "env.py", "versions"])
 def test_incomplete_installed_resources_have_safe_unavailable_outcome(store, missing, tmp_path):
     resource = tmp_path / "database" / f"{store.value}-migrations"
@@ -114,7 +116,8 @@ def test_incomplete_installed_resources_have_safe_unavailable_outcome(store, mis
     else:
         absent.unlink()
     with pytest.raises(SchemaResourcesUnavailable) as caught:
-        scaffold_config(store, application_directory=tmp_path)
+        loader = resource_config if store in IMPLEMENTED_REVISIONS else scaffold_config
+        loader(store, application_directory=tmp_path)
     assert str(tmp_path) not in str(caught.value)
     assert caught.value.code == "schema_resources_unavailable"
 

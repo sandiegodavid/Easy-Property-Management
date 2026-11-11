@@ -1,0 +1,113 @@
+{
+  "scope": "H02.6 continuation: connected network components, protected startup and service/IAM candidates; not complete slice acceptance",
+  "status": "in_progress",
+  "date": "2026-11-12",
+  "base_commit": "2bcc20442af565a3d21ff6a177fda6b736f87c38",
+  "focused_tests": {
+    "passed": 184,
+    "failed": 0,
+    "seconds": 34.41,
+    "files": [
+      "test_gateway.py",
+      "test_endpoint_policy.py",
+      "test_egress_proxy.py",
+      "test_agent.py",
+      "test_runtime_effects.py",
+      "test_networks.py",
+      "test_host_services.py"
+    ],
+    "module": "application/apps/server/app/modules/host_agent/tests",
+    "scope": "focused only; socket tests run outside sandbox"
+  },
+  "lint": {
+    "ruff_check": "passed",
+    "ruff_format_check": "passed",
+    "changed_python_files": 19,
+    "configuration": "application/pyproject.toml"
+  },
+  "source_sha256": {
+    "application/apps/server/app/modules/host_agent/application/network.py": "df3eab1d6cf62fb1cab827faf722b349b341be523eba7456caa20a34a349e34f",
+    "application/apps/server/app/modules/host_agent/infrastructure/host_services.py": "ac748ccdeb08c849811d5ef0aacc1b9ea8645409432de221b3d8f45be8535993",
+    "application/apps/server/app/modules/host_agent/infrastructure/ingress_bootstrap.py": "65f621c6e6d7ab053533e24e7e054b7e40d160f7e29018f94a335cb50772f555",
+    "application/apps/server/app/modules/host_agent/infrastructure/network_firewall.py": "1290a671f40adc2034c6cb6154a8076e7be01b232d6e0309b45ca747ff85955c",
+    "application/apps/server/app/modules/host_agent/infrastructure/network_policy.py": "6963a586cc162d53ad880d17d2193e7f70e9269438c01baa5e415ebf74457cf6",
+    "application/apps/server/app/modules/host_agent/infrastructure/network_prerequisites.py": "77ed56821601d7c3f27bdbc7767cd1ce4ae75fb9ab88dcc5fd85814299d0f62d",
+    "application/apps/server/app/modules/host_agent/infrastructure/operator_networks.py": "1daf980095ed3c96fb70cf86509173d833219eacfb7f866f4193cbab09a967e1",
+    "application/apps/server/app/modules/host_agent/infrastructure/scoped_iam.py": "19bb4070199be271270a404bef9b66435a501930029c5ccdd364474be6823eda",
+    "application/apps/server/app/modules/host_agent/tests/test_host_services.py": "a7379a538fc180426828c1a92698ad858758445e9ae35281b6d331a5c3491c12",
+    "application/apps/server/app/modules/host_agent/tests/test_networks.py": "31b3c456bee45122d4e41524b510ba4ca41bdc675829b34498ac6ce4987c23d3",
+    "application/deploy/hosted-mvp/gateway/qualify_network.py": "7bb6a92c44f592f1bbc3005737c4ccaf6e5cd9d20b084c1f960613fdb82ad052",
+    "application/deploy/hosted-mvp/gateway/qualify_stream.py": "f03962313863d2beee198cdf467fc68ed2ac7006327d71448bcd5ced1fb84eee",
+    "application/deploy/hosted-mvp/gateway/qualify_tunnel.py": "a19abfbfeb7d68e9e9d441a17c367ce430db9c0db69ae481567b991e0fb88eec",
+    "application/apps/server/app/modules/host_agent/infrastructure/container_policy.py": "3d798f7b0fb8e3cf81607f9d82718d5609826874b4e7304f694b42b75e8a7471",
+    "application/apps/server/app/modules/host_agent/infrastructure/docker_engine.py": "b67704f9e30be71b4295448c7c0528ee72f290889f068b16873cce2dcf796e24",
+    "application/apps/server/app/modules/host_agent/infrastructure/egress_proxy.py": "cac6ba5a865f11f5b54cff5fa9dc2753d9ee556d3836d1a7770a23d271ee504a",
+    "application/apps/server/app/modules/host_agent/infrastructure/inventory.py": "12460983a471badc8894f46d22e192e1a804a1926891cea2f5896d7ecb156ee4",
+    "application/apps/server/app/modules/host_agent/infrastructure/runtime_effects.py": "ca36f271f2a8277bbfd9b942859cb36823fe40632ece1620ad752a6195e475e2",
+    "application/apps/server/app/modules/host_agent/tests/test_egress_proxy.py": "fc7a5126aee11e984f870bf5ff8f112bf7a565e403d30f36a40952155a228aca"
+  },
+  "native_evidence_root": "/Users/dcai/Desktop/Property-Management-Data/hosted-mvp-qualification/H02.6/native",
+  "native_network_final": {
+    "status": "scoped_network_pass",
+    "root": "/var/lib/epm-network-qualification-qh4txolo",
+    "image": "5dec05dc4c2653fa17e45761e59d61a93964fdcd67b3194d840fd8a43d565024",
+    "forward_drop_packets": 4,
+    "cases": [
+      "gateway UID reaches dual-stack unpublished application ports",
+      "root and tunnel UID cannot reach application ports",
+      "sibling, host-control, metadata and direct public egress denied",
+      "complete firewall projection reinspected",
+      "real controlled proxy reachable and metadata CONNECT rejected",
+      "forced metadata/public routes hit forwarding drop counters",
+      "static endpoint checked before and after start"
+    ],
+    "stream_containment": {
+      "existing_stream_closed": true,
+      "target_stopped": true,
+      "deny_config_verified": true
+    },
+    "source_sha256": "7bb6a92c44f592f1bbc3005737c4ccaf6e5cd9d20b084c1f960613fdb82ad052",
+    "library_sha256": {
+      "network_policy": "6963a586cc162d53ad880d17d2193e7f70e9269438c01baa5e415ebf74457cf6",
+      "network_firewall": "1290a671f40adc2034c6cb6154a8076e7be01b232d6e0309b45ca747ff85955c",
+      "operator_networks": "1daf980095ed3c96fb70cf86509173d833219eacfb7f866f4193cbab09a967e1",
+      "network_prerequisites": "77ed56821601d7c3f27bdbc7767cd1ce4ae75fb9ab88dcc5fd85814299d0f62d",
+      "docker_engine": "b67704f9e30be71b4295448c7c0528ee72f290889f068b16873cce2dcf796e24",
+      "egress_proxy": "cac6ba5a865f11f5b54cff5fa9dc2753d9ee556d3836d1a7770a23d271ee504a",
+      "endpoint_policy": "2bcc4007017fee6db508b48a225be81cb30e87ff03ba5024cea3456ade7d0dfa"
+    }
+  },
+  "native_tunnel_final": {
+    "status": "offline_tunnel_config_pass",
+    "binary_sha256": "3df43aedc9ff291d1735b5cb576cb97e0b157488796db2e32b28aecabb445775",
+    "host_services_sha256": "ac748ccdeb08c849811d5ef0aacc1b9ea8645409432de221b3d8f45be8535993",
+    "cases": [
+      "registered exact host targets private gateway",
+      "unknown and reserved hosts deny",
+      "validated in empty network namespace without credentials"
+    ],
+    "source_sha256": "a19abfbfeb7d68e9e9d441a17c367ce430db9c0db69ae481567b991e0fb88eec"
+  },
+  "prior_passing_network_lab": "epm-network-qualification-_ttuorcd",
+  "prior_passing_tunnel_lab": "epm-tunnel-qualification-ebfhqusq",
+  "diagnostic_limit": "Earlier stream harness assigned pass before its optional check; process failures in f_gb0u8u and j_2c0vty are failures regardless of embedded status. Final harness assigns pass only after all requested checks.",
+  "remaining": [
+    "Composed systemd lifecycle/death/restart and credential delivery",
+    "Actual provider/scoped IAM verification during later setup",
+    "Approved endpoint TLS/redirect/rebinding/fronting and DNS time bounds",
+    "Combined connected-runtime quota/AppArmor qualification with new policy hash",
+    "Complete H02.6 acceptance and source/proof reconciliation"
+  ],
+  "unchanged": [
+    "No live GCP/Cloudflare changes",
+    "No Operator enablement",
+    "No user data",
+    "No database DDL or compatibility work",
+    "Original epm-quota-test unchanged"
+  ],
+  "vm_state": {
+    "epm-h02-runtime": "preserved and stopped; no test containers running",
+    "epm-quota-test": "unchanged, stopped"
+  },
+  "stop_reason": "Weekly remaining usage reached 2%; no further implementation."
+}

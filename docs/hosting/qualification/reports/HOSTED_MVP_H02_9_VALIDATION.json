@@ -1,0 +1,610 @@
+{
+  "slice": "H02.9",
+  "date": "2026-11-13",
+  "status": "scoped_native_amd64_gcp_setup_and_approved_reset_delivered",
+  "scope": "Fresh closed GCP/Cloudflare host setup, exact installed candidates, synthetic native isolation/reboot proofs and the separately approved old VM/boot-disk reset; not hosted release promotion or customer admission",
+  "implementation_commit": "edbae816e95924db88c7d100d2a492db0b872448",
+  "private_evidence_root": "/Users/dcai/Desktop/Property-Management-Data/hosted-mvp-qualification/H02.9",
+  "sources": {
+    "5": {
+      "archive": "source-5.tar",
+      "source_sha256": "21dc74388d9e1bf93b84832fd0d4e4e4fe276e921e912b215d4088adea069a7f",
+      "file_count": 647,
+      "guest_root": "/opt/epm/qual-source-5"
+    },
+    "7": {
+      "archive": "source-7.tar",
+      "source_sha256": "405c033e05dd08c71fbd54a7d72783d497ac171380703747dc63dfd8f9bc9b92",
+      "file_count": 647,
+      "guest_root": "/opt/epm/qual-source-7"
+    },
+    "8": {
+      "archive": "source-8.tar",
+      "source_sha256": "14234af65e27dfcd27dd4f16a597afaa1b06ecc21550ee60d079910f9be2ac3b",
+      "file_count": 647,
+      "guest_root": "/opt/epm/qual-source-8"
+    }
+  },
+  "source_8_matches_current_selected_sources": true,
+  "source_8_changes_from_network_and_reboot_source_5": [
+    "deploy/hosted-mvp/gcp/install_services.py",
+    "deploy/hosted-mvp/gcp/qualify_host.py"
+  ],
+  "cloud": {
+    "project": "project-47b72bb7-ba90-42c9-910",
+    "region": "us-west1",
+    "zone": "us-west1-b",
+    "instance": "epm-h02-host",
+    "instance_id": "6955052781247608210",
+    "machine_type": "e2-standard-2",
+    "final_state": "TERMINATED",
+    "image": "ubuntu-2404-noble-amd64-v20261105",
+    "image_project": "ubuntu-os-cloud",
+    "image_id": "1892012953239034119",
+    "network": "epm-h02-network",
+    "subnet": "epm-h02-subnet",
+    "subnet_cidr": "10.80.0.0/24",
+    "firewalls": [
+      {
+        "allowed": [
+          {
+            "IPProtocol": "tcp",
+            "ports": [
+              "22"
+            ]
+          }
+        ],
+        "creationTimestamp": "2026-11-12T19:59:56.236-08:00",
+        "description": "",
+        "direction": "INGRESS",
+        "disabled": false,
+        "id": "8031802199046305235",
+        "kind": "compute#firewall",
+        "logConfig": {
+          "enable": false
+        },
+        "name": "epm-h02-network-iap",
+        "network": "https://www.googleapis.com/compute/v1/projects/project-47b72bb7-ba90-42c9-910/global/networks/epm-h02-network",
+        "priority": 1000,
+        "selfLink": "https://www.googleapis.com/compute/v1/projects/project-47b72bb7-ba90-42c9-910/global/firewalls/epm-h02-network-iap",
+        "sourceRanges": [
+          "35.235.240.0/20"
+        ],
+        "targetTags": [
+          "epm-h02-host"
+        ]
+      }
+    ],
+    "service_account": "epm-h02-host@project-47b72bb7-ba90-42c9-910.iam.gserviceaccount.com",
+    "project_level_grants": [],
+    "repository_iam": [
+      {
+        "members": [
+          "serviceAccount:epm-h02-host@project-47b72bb7-ba90-42c9-910.iam.gserviceaccount.com"
+        ],
+        "role": "roles/artifactregistry.reader"
+      }
+    ],
+    "tunnel_secret_iam": [
+      {
+        "members": [
+          "serviceAccount:epm-h02-host@project-47b72bb7-ba90-42c9-910.iam.gserviceaccount.com"
+        ],
+        "role": "roles/secretmanager.secretAccessor"
+      }
+    ],
+    "data_disk": {
+      "name": "epm-h02-host-data",
+      "id": "2550948901672400313",
+      "size_gib": 50,
+      "auto_delete": false,
+      "device_name": "epm-h02-data",
+      "mount": "/srv/epm/data",
+      "filesystem": "ext4",
+      "uuid": "8d2fd2e0-274b-4535-90d5-da78aa6bd9b6",
+      "options": [
+        "prjquota",
+        "nodev",
+        "nosuid",
+        "noexec"
+      ]
+    },
+    "boot_disk_gib": 20,
+    "tunnel_name": "epm-h02-qualification",
+    "tunnel_id": "d87e220e-e2a9-48c5-a67b-318255777bce",
+    "tunnel_secret_version": "1",
+    "qualification_hostname": "h02-check.epmdemo.xyz",
+    "public_status_while_connector_running": 403,
+    "direct_origin_denial": {
+      "ip": "136.86.239.143",
+      "results": [
+        {
+          "port": 80,
+          "returncode": 28,
+          "http_status": "000"
+        },
+        {
+          "port": 443,
+          "returncode": 28,
+          "http_status": "000"
+        },
+        {
+          "port": 8080,
+          "returncode": 28,
+          "http_status": "000"
+        }
+      ]
+    },
+    "existing_demo_dns_and_tunnel_unchanged": true,
+    "off_host_backups_changed": false
+  },
+  "native": {
+    "kernel": "7.0.0-1017-gcp",
+    "kernel_sha256": "3cf8c2c34cd30720d3f37c8b5327ae7d10f24073e73a34edb1e4aaea4dd39adb",
+    "machine": "x86_64",
+    "docker": {
+      "Platform": {
+        "Name": "Docker Engine - Community"
+      },
+      "Version": "29.9.3",
+      "ApiVersion": "1.56",
+      "MinAPIVersion": "1.40",
+      "Os": "linux",
+      "Arch": "amd64",
+      "Components": [
+        {
+          "Name": "Engine",
+          "Version": "29.9.3",
+          "Details": {
+            "ApiVersion": "1.56",
+            "Arch": "amd64",
+            "BuildTime": "Tue Nov  3 21:41:31 2026",
+            "Experimental": "false",
+            "GitCommit": "70efc0e",
+            "GoVersion": "go1.26.10",
+            "KernelVersion": "7.0.0-1017-gcp",
+            "MinAPIVersion": "1.40",
+            "Module": "github.com/moby/moby/v2",
+            "ModuleVersion": "v2.0.0+unknown",
+            "Os": "linux"
+          }
+        },
+        {
+          "Name": "containerd",
+          "Version": "v2.4.2",
+          "Details": {
+            "GitCommit": "b7a25261e029d68978bbf290df0a62fc819b3c51"
+          }
+        },
+        {
+          "Name": "runc",
+          "Version": "1.5.2",
+          "Details": {
+            "GitCommit": "v1.5.2-0-g29dd3dc2"
+          }
+        },
+        {
+          "Name": "docker-init",
+          "Version": "0.19.0",
+          "Details": {
+            "GitCommit": "de40ad0"
+          }
+        }
+      ],
+      "GitCommit": "70efc0e",
+      "GoVersion": "go1.26.10",
+      "KernelVersion": "7.0.0-1017-gcp",
+      "BuildTime": "2026-11-03T21:41:31.000000000+00:00"
+    },
+    "cgroup_controllers": "cpuset cpu io memory hugetlb pids rdma misc dmem",
+    "compatibility": {
+      "native": 42,
+      "compat": 159
+    },
+    "runtime_status": "scoped-native-cases-passed",
+    "runtime_cases": [
+      "security_and_wal",
+      "workspace_bytes",
+      "workspace_inodes",
+      "workspace_deleted",
+      "control_bytes",
+      "control_inodes",
+      "control_deleted",
+      "scratch_bytes",
+      "scratch_inodes",
+      "scratch_deleted",
+      "wal_full",
+      "log_rotation",
+      "log_workload",
+      "cross_uid_denial",
+      "guarded_lifecycle",
+      "systemd_supervision"
+    ],
+    "runtime_lab": "/var/lib/epm-quota-qualification-zo71tf62",
+    "fixture_image": "6db5a5522ef7e331116ee8c4372ed90e9c02e95ff3659ff09ca6d35e4bf4cb40"
+  },
+  "network": {
+    "status": "scoped_network_pass",
+    "root": "/var/lib/epm-network-qualification-39otsv42",
+    "image": "2b8a18bd6f9b34e80ca4cf43f2e5619671f17967bb5005fb1119ef4952b5048b",
+    "forward_drop_packets": 4,
+    "cases": [
+      "gateway UID reaches dual-stack unpublished application ports",
+      "root and tunnel UID cannot reach application ports",
+      "sibling, host-control, metadata and direct public egress denied",
+      "complete firewall projection reinspected",
+      "real controlled proxy reachable and metadata CONNECT rejected",
+      "forced metadata/public routes hit forwarding drop counters",
+      "static endpoint checked before and after start"
+    ],
+    "stream_containment": {
+      "existing_stream_closed": true,
+      "target_stopped": true,
+      "deny_config_verified": true
+    },
+    "source_sha256": "3bf2e37a9f0a348b610d4a4b7912df306e0e6d88e1673dc2cef3caf6c225e145",
+    "library_sha256": {
+      "network_policy": "a5053d5f38af381b552836cc60277b158e575260ba06f3a160653a5b147d7067",
+      "network_firewall": "958933fb141c4cbc7a49a3c17f1a8cedab4fe85d6444e03445b40e9dff51b1cb",
+      "operator_networks": "1daf980095ed3c96fb70cf86509173d833219eacfb7f866f4193cbab09a967e1",
+      "network_prerequisites": "77ed56821601d7c3f27bdbc7767cd1ce4ae75fb9ab88dcc5fd85814299d0f62d",
+      "docker_engine": "b67704f9e30be71b4295448c7c0528ee72f290889f068b16873cce2dcf796e24",
+      "egress_proxy": "61d54ce08f96057727679b4754b69c193fe1d41b824a8c02cb8a298e80e3af24",
+      "endpoint_policy": "9785ec36ffeb392ea3c5533eb1f2fca1dcf82541d08f0c1632c3013c5c438a3b"
+    }
+  },
+  "connected": {
+    "status": "connected_sandbox_pass",
+    "root": "/var/lib/epm-quota-qualification-6h54z1jd",
+    "cases": [
+      "connected_security_and_wal",
+      "workspace_bytes",
+      "workspace_inodes",
+      "workspace_deleted",
+      "control_bytes",
+      "control_inodes",
+      "control_deleted",
+      "scratch_bytes",
+      "scratch_inodes",
+      "scratch_deleted",
+      "connected_wal_full",
+      "cross_uid",
+      "connected_guarded_lifecycle"
+    ]
+  },
+  "egress": {
+    "status": "scoped_egress_pass",
+    "root": "/var/lib/epm-egress-qualification-nf_2yjf2",
+    "cases": [
+      "verified_TLS",
+      "matching_SNI_required",
+      "unregistered_redirect_denied",
+      "DNS_rebinding_to_metadata_denied",
+      "stalled_DNS_bounded"
+    ],
+    "dns_deadline_observed_seconds": 2.0044988549999516
+  },
+  "service_fixture": {
+    "status": "scoped_service_pass",
+    "root": "/var/lib/epm-service-qualification-jsec9jjp",
+    "cases": {
+      "held_after_process_death": true,
+      "stale_projection_rebuilt": true,
+      "missing_inventory_prevents_start": true,
+      "corrupt_inventory_prevents_start": true,
+      "admin_service_not_required": true,
+      "credentials": {
+        "own_credential_readable": true,
+        "credential_read_only": true,
+        "source_data_and_engine_denied": true
+      }
+    }
+  },
+  "real_closed_setup": {
+    "setup_source": 7,
+    "repeated_setup_preserves_host_inventory_and_credential": true,
+    "post_reboot_active_units": 6,
+    "post_reboot_gateway_egress_tunnel_guardian_restarts": 0,
+    "post_reboot_live_projection_verification": "passed",
+    "operator_allocations": 0,
+    "guardian_mode": "containment_only"
+  },
+  "reboot": {
+    "direct": {
+      "status": "passed",
+      "before_boot_id": "bf4c2d04-399e-4db7-85d8-7089ab7c1f81",
+      "after_boot_id": "2eaf3c4f-e371-4561-bc4f-0ff88feb1a16",
+      "lab": "/var/lib/epm-quota-qualification-zo71tf62"
+    },
+    "containers": {
+      "status": "passed",
+      "before_boot_id": "bf4c2d04-399e-4db7-85d8-7089ab7c1f81",
+      "after_boot_id": "2eaf3c4f-e371-4561-bc4f-0ff88feb1a16",
+      "lab": "/var/lib/epm-quota-qualification-vv5um7tx"
+    }
+  },
+  "old_host_reset": {
+    "status": "complete",
+    "prepared_at": "2026-11-13T15:57:40.505761+00:00",
+    "project": "project-47b72bb7-ba90-42c9-910",
+    "zone": "us-west1-b",
+    "old_instance_id": "8394063058170166658",
+    "old_disk_id": "8124117985590132098",
+    "replacement_instance_id": "6955052781247608210",
+    "retained_data_disk_id": "2550948901672400313",
+    "scope": "Delete only approved old VM and sole boot disk; preserve project/domain/provider resources/off-host backups",
+    "completed_at": "2026-11-13T15:58:42.071322+00:00",
+    "old_instance_absent": true,
+    "old_disk_absent": true,
+    "replacement_and_data_disk_preserved": true
+  },
+  "artifacts": {
+    "admin": {
+      "reference": "us-west1-docker.pkg.dev/project-47b72bb7-ba90-42c9-910/epm-h02-candidates/admin@sha256:a8c17495ce5618856df13b37e384b0671c2a49190e586cb4e8c3bbc93fb6ee37",
+      "candidate_source_sha256": "655a7dc1ba65db9b5049808e194e314fa09b3951af311b92998e9fb522c5b9c9",
+      "candidate_manifest_sha256": "f961ad13b89de879beebf07dd655fcfd9516c5ce456feb45f2549aa5c9887318",
+      "host_identity_pull": "passed",
+      "native_installed_probe": "passed"
+    },
+    "operator": {
+      "reference": "us-west1-docker.pkg.dev/project-47b72bb7-ba90-42c9-910/epm-h02-candidates/operator@sha256:6c264a90ff2f9a64e1d66b8e5b1405680d517210b4e3d1c586816603c486c995",
+      "candidate_source_sha256": "47d20d7632b309ae6e5576d5d9f86a08b8106274a58ea1c9d4e9c6665bb69e0d",
+      "candidate_manifest_sha256": "3dd9c6ffdb21e38704a171dd174ac325117b7fee46847a021f0e45c359a435f3",
+      "host_identity_pull": "passed",
+      "native_installed_probe": "passed"
+    },
+    "host_agent": {
+      "archive": "current-5/host-agent.tar.gz",
+      "sha256": "d16ce4b2ec9e43cc194f3e1219f02917683331c13a663c7ed4073fcd62d8c36c",
+      "installation": "/opt/epm/host-agent",
+      "offline_install_and_verify": "passed",
+      "candidate_source_sha256": "f4199993991e0007b0acb56a3f25c75ec5b541fd24958882aa6eadd3e2f45da7"
+    },
+    "dependency_lock_sha256": "e273cfbf1b3c1901c8e40c012fe44797152eef76b7efcdca805f8e481259706d",
+    "caddy": {
+      "version": "2.11.9",
+      "binary_sha256": "a563843e11cbce39c557bd429ebb787d56f49d51d9bbb3292cd9b36b37a60cdf"
+    },
+    "cloudflared": {
+      "version": "2026.10.7",
+      "binary_sha256": "1f99fb518b83dec2ba8d870a7cc991d82a77e6196295a3d2754ba17ab9f91872"
+    }
+  },
+  "validation": {
+    "focused_tests_passed": 61,
+    "full_suite_run": false,
+    "frontend_source_changed": false,
+    "ruff_check": "passed",
+    "ruff_format_check": "passed",
+    "python_files_checked": 16,
+    "test_command": ".venv/bin/python -m pytest scripts/tests/test_hosted_gcp.py scripts/tests/test_hosted_network_probes.py scripts/tests/test_hosted_lab.py scripts/tests/test_hosted_packaging.py apps/server/app/modules/host_agent/tests/test_networks.py -q"
+  },
+  "remaining_gates": [
+    "H02.10 capacity and reserves",
+    "H02.11 consolidated acceptance",
+    "H03 identity/access and final assets",
+    "H04 real admission and Admin/operator workflows",
+    "H05 recovery-owned stores/keys/restore",
+    "Final all-store/image qualification and qualified release promotion",
+    "H06 invitations"
+  ],
+  "release_qualified": false,
+  "business_ingress_enabled": false,
+  "failed_attempts_retained": [
+    "Generic-kernel extras assumption did not fit the GCP kernel; actual quota module availability was verified.",
+    "Docker omitted empty IPRange; only that empty representation is normalized; nonempty ranges/isolation remain exact.",
+    "Original five-second probe stall was not traced; later syscall trace and isolated stalled-metadata control established setpriv OS Login dependency. Numeric subprocess UID/GID removed the dependency without a deadline/firewall relaxation.",
+    "Initial network invocation selected the old ARM64 image reference; actual proof used the exact native AMD64 fixture.",
+    "Egress driver invoked with unsupported --run; no proof executed until correct invocation.",
+    "Offline wheel build needed existing cache access; identical closed constraints succeeded with authorized cache access.",
+    "Provider empty Endpoint field rejected by exact runtime credential; setup now canonicalizes only that empty field and validates private staging before non-overwriting publication.",
+    "Concurrent service refreshes contended on exclusive inventory; ordered setup/boot passed with zero post-reboot restarts.",
+    "Direct-data reboot proof opened an operator-owned writer lock as root; production guard rejected it. Corrected proof uses recorded numeric owner without relaxing the guard."
+  ],
+  "raw_evidence": [
+    {
+      "path": "target.json",
+      "sha256": "245f163b8da8f970805cacdeecc963aa32c7c25c815e1a1103ae42b6e2b3af5f",
+      "bytes": 400
+    },
+    {
+      "path": "reset-selection.json",
+      "sha256": "e403fb547a960766f9fa8706e5fba72812db6101201ec94e9553aae7125870c3",
+      "bytes": 331
+    },
+    {
+      "path": "disk-initialize.log",
+      "sha256": "b93c797be622c7985ddba400af4a94e6b036d0df0dc055479408f81ab62c7cc1",
+      "bytes": 390
+    },
+    {
+      "path": "runtime-agent-install.log",
+      "sha256": "624b11c1706d54a92c136c81b7430931a5fe8eaf38eeb76214e1fcc05ff2af91",
+      "bytes": 7305
+    },
+    {
+      "path": "native-network-attempt-2.log",
+      "sha256": "3a7d1f5832a1148c94cf28791d266116ed861d9c43af5f9989e8e377cffb99b6",
+      "bytes": 2285
+    },
+    {
+      "path": "network-trace-attempt-3.log",
+      "sha256": "6aed1ff45c3d4f4113b21a87aedd8288de59af2494cbf7c9563befca7b8fdd87",
+      "bytes": 374
+    },
+    {
+      "path": "principal-stall-control.log",
+      "sha256": "da7cf8b18caad3933427085c4ed41d5f8bcaea413a0050bee4e4e964fb52bb0f",
+      "bytes": 588
+    },
+    {
+      "path": "native-network-source-5.log",
+      "sha256": "4228788f7360aeb0a1dbda530d2a9a4086c9b4cb859054b80c73452507f5b944",
+      "bytes": 432
+    },
+    {
+      "path": "network-source-5.json",
+      "sha256": "bb5a4de7a2dc6b1d3d8e43269cd34204a1e3b0a2602f6bab8ee37db178ec9b70",
+      "bytes": 1535
+    },
+    {
+      "path": "connected-source-5.json",
+      "sha256": "e7202af8b080662563c43009eacb6a55542d2dfcc8fd74d88544fb2842f35234",
+      "bytes": 2595
+    },
+    {
+      "path": "services-source-5.json",
+      "sha256": "ae21d9f7d1ec393e492907b6f2eec09d95ea300c8b8e44999075163a3cc86239",
+      "bytes": 467
+    },
+    {
+      "path": "native-egress-services-source-5.log",
+      "sha256": "01f6d24a91ea47e0bb710daf2e59f2431626a6368f5ebb9c8140a1107cf441bc",
+      "bytes": 429
+    },
+    {
+      "path": "egress-service-progress.log",
+      "sha256": "6e9382327fbc8d0ba7f8d02ef02d411ee23cca7c081dfda3415788c6f0badf8f",
+      "bytes": 1292
+    },
+    {
+      "path": "closed-setup-repeat-source-7.log",
+      "sha256": "12f2b5e8052f75a11a10c47f139af79da8770f556d74f36aeafc9f2188eb5be9",
+      "bytes": 647
+    },
+    {
+      "path": "native-before-reboot-source-5.log",
+      "sha256": "d65e070ef50450da2bc1a0a04f91e8fedba2eed8d086fec8f6a97ef673373f1d",
+      "bytes": 544
+    },
+    {
+      "path": "after-reboot-evidence.json",
+      "sha256": "95ebd656422dc238da3780ff08fd3dceebcf3b3de2923662da39fd3a7638641e",
+      "bytes": 10404
+    },
+    {
+      "path": "native-after-reboot-corrected-owner.log",
+      "sha256": "ca0cb2ea24627b6b8085dc13742a3ee427f85774e45fdadc43ed4a4a139be404",
+      "bytes": 400
+    },
+    {
+      "path": "post-reboot-closed-services.log",
+      "sha256": "0f67529e00323d254e5f604e84d2ddd593c01ca7a50294f01f67066fa403ecf7",
+      "bytes": 1767
+    },
+    {
+      "path": "closed-qualification-dns.log",
+      "sha256": "92bdc98e9eab7786681bcd4af0fa0ce7763a495052391e28602c35d279f1d05b",
+      "bytes": 137
+    },
+    {
+      "path": "closed-public-headers.txt",
+      "sha256": "6dccbc92722fafd61e174b86995aa8fdc2f9b31cdb08df8897c1f4231ac2e002",
+      "bytes": 487
+    },
+    {
+      "path": "direct-origin-denial.json",
+      "sha256": "e53d9979460881b764f7788161258247b0a35cfacd1a99e2497c4e7c15f0a50f",
+      "bytes": 297
+    },
+    {
+      "path": "effective-firewalls.json",
+      "sha256": "222db2db337488a5797acf51a576b87a6a22df8e92e5624430efb9c8bd0496af",
+      "bytes": 789
+    },
+    {
+      "path": "host-project-iam.json",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "bytes": 3
+    },
+    {
+      "path": "repository-iam.json",
+      "sha256": "d96fba001f235ab28152c2fa75d478b45b4390afd930ba6d1f1e3236a49b0023",
+      "bytes": 245
+    },
+    {
+      "path": "tunnel-secret-iam.json",
+      "sha256": "91073065e70d766ebbfae63d85218be0ab5dce7b391ec166ddd879a2feca1930",
+      "bytes": 250
+    },
+    {
+      "path": "old-host-reset-preflight-instance.json",
+      "sha256": "5fdd7a7403bb381931e939fce0ea39fd087290ac8f0ad508d9cd2c153dde440c",
+      "bytes": 29627
+    },
+    {
+      "path": "old-host-reset-preflight-disk.json",
+      "sha256": "480419a93727d697fca1c7e3bfd4d9f41c9c1efc532478246cde9e0f2e391421",
+      "bytes": 212
+    },
+    {
+      "path": "old-host-reset-receipt.json",
+      "sha256": "6fc342e3992c6744563e9eb11e52b1d356343a4b4c128b9e05382872f6a6e7ee",
+      "bytes": 618
+    },
+    {
+      "path": "old-host-reset-delete.log",
+      "sha256": "330be8b3340699b2d4fd1a47bf304fdc9eed9733cdf770dd776f51e8dd2f530c",
+      "bytes": 125
+    },
+    {
+      "path": "old-host-reset-execution.log",
+      "sha256": "f14ac93d1139b25074ab1db317bac82c843561d8852eb2e9150665ead3fd9e53",
+      "bytes": 85
+    },
+    {
+      "path": "final-replacement-instance.json",
+      "sha256": "a064f417f5df2c9bb91ddc0206281e37d48f36d5492782c491162212205909aa",
+      "bytes": 30046
+    },
+    {
+      "path": "qualification-vm-stop-nov13.log",
+      "sha256": "ef3d35b801b1e0b13c944b9281ff680214faf43bb5623c2b97e1825dbd9622e7",
+      "bytes": 301
+    },
+    {
+      "path": "current-5/host-identity-pulls.log",
+      "sha256": "e27d2c3cbf5e65eeaa7c005dc33d5bf9dfa42cfcb2a23b7d9c27631b1ffb2228",
+      "bytes": 2529
+    },
+    {
+      "path": "current-5/installed-candidate-probes.log",
+      "sha256": "d3aca555e23f42b294b1c4b039e159c846f088095acaa4cf939548231c9c8963",
+      "bytes": 1253
+    },
+    {
+      "path": "current-5/host-agent-install.log",
+      "sha256": "cdc4c1778b983e996d020ec4f424536aaf0d4977a4427839ff0ca13636a258cd",
+      "bytes": 7421
+    },
+    {
+      "path": "final-instance-inventory.json",
+      "sha256": "07e9f8fc3fe930afba7b513cd72553619441566a3fc2a905ec50d623ec79fc16",
+      "bytes": 100
+    },
+    {
+      "path": "final-disk-inventory.json",
+      "sha256": "6615d811efe7d03f467dc13ec489a41a6ca99a237f3d3e03ab086ba121e7cfdf",
+      "bytes": 245
+    }
+  ],
+  "final_inventory": {
+    "instances": [
+      {
+        "id": "6955052781247608210",
+        "name": "epm-h02-host",
+        "status": "TERMINATED"
+      }
+    ],
+    "disks": [
+      {
+        "id": "2550948901672400313",
+        "name": "epm-h02-host-data",
+        "sizeGb": "50",
+        "users": [
+          "https://www.googleapis.com/compute/v1/projects/project-47b72bb7-ba90-42c9-910/zones/us-west1-b/instances/epm-h02-host"
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,170 @@
+{
+  "slice": "H02.8",
+  "date": "2026-11-12",
+  "status": "scoped_development_and_native_arm64_delivered",
+  "scope": "Docker Desktop emulated AMD64 candidates and native Ubuntu ARM64 isolated clone; not native AMD64/GCP or hosted release acceptance",
+  "baseline_preservation": {
+    "originals": [
+      "epm-quota-test",
+      "epm-h02-runtime"
+    ],
+    "originals_started_or_modified": false,
+    "clone": "epm-h02-8",
+    "clone_retained": true
+  },
+  "source": {
+    "archive": "source-2.tar",
+    "source_sha256": "828ceb0ede6e60402c3368080c5e3df96f52ddd77727e1390626c34726f4d9a2",
+    "file_count": 636,
+    "matches_current_selected_sources": true
+  },
+  "native": {
+    "kernel": "6.8.0-149-generic",
+    "kernel_sha256": "6378491f4b1ca6c45b8eb6ad3f4a6b9e331575fcfd2658d6ed2e514b27a9ec68",
+    "machine": "aarch64",
+    "docker": "29.1.3",
+    "apparmor_sha256": "d58ff64377e8e38c1dedf214b8558cfcaab4991176476c7664944f0c750be495",
+    "image": "5dec05dc4c2653fa17e45761e59d61a93964fdcd67b3194d840fd8a43d565024",
+    "runtime_status": "scoped-native-cases-passed",
+    "runtime_cases": [
+      "security_and_wal",
+      "workspace_bytes",
+      "workspace_inodes",
+      "workspace_deleted",
+      "control_bytes",
+      "control_inodes",
+      "control_deleted",
+      "scratch_bytes",
+      "scratch_inodes",
+      "scratch_deleted",
+      "wal_full",
+      "log_rotation",
+      "log_workload",
+      "cross_uid_denial",
+      "guarded_lifecycle",
+      "systemd_supervision"
+    ],
+    "runtime_lab": "/var/lib/epm-quota-qualification-idgwhdmj",
+    "connected_status": "connected_sandbox_pass",
+    "connected_cases": [
+      "connected_security_and_wal",
+      "workspace_bytes",
+      "workspace_inodes",
+      "workspace_deleted",
+      "control_bytes",
+      "control_inodes",
+      "control_deleted",
+      "scratch_bytes",
+      "scratch_inodes",
+      "scratch_deleted",
+      "connected_wal_full",
+      "cross_uid",
+      "connected_guarded_lifecycle"
+    ],
+    "connected_lab": "/var/lib/epm-quota-qualification-olatx390"
+  },
+  "reboot": {
+    "status": "passed",
+    "lab": "/var/lib/epm-quota-qualification-3m4lqjdq",
+    "before_boot_id": "b2cffaf3-5a98-4f91-a201-303747bcc368",
+    "after_boot_id": "5c9fb729-91ad-4337-9839-0c6edf2171e5",
+    "cases": [
+      "actual_boot_changed",
+      "no_automatic_container_restart",
+      "all_six_quota_projects_and_lock_inodes_retained",
+      "security_and_wal",
+      "workspace_post_reboot_edquot",
+      "control_post_reboot_edquot",
+      "scratch_post_reboot_edquot",
+      "cross_uid"
+    ],
+    "repeated_completed_check": "passed_without_effects"
+  },
+  "desktop": {
+    "status": "desktop_component_pass",
+    "engine": "29.9.3",
+    "native_machine": "arm64",
+    "candidate_architecture": "amd64",
+    "images": {
+      "admin": "sha256:a0833af6fc0ce5a0841096e470c822485ab99754e83daa3cd50bc77b282eac8e",
+      "operator": "sha256:fa4404d2dc29ca66078077148b7b6bcff050b7473b88aa8a8b5ed40878b6b7e6"
+    },
+    "probe": "Both current installed candidate probes passed; normal startup remains blocked; unavailable owned stores created no destination",
+    "origins": {
+      "18801": {
+        "status": 503,
+        "unavailable_page": true
+      },
+      "18802": {
+        "status": 503,
+        "unavailable_page": true
+      }
+    }
+  },
+  "failed_attempts": [
+    {
+      "case": "first native prerequisite",
+      "observation": "Kernel 6.8.0-149 had no quota_v2 module",
+      "resolution": "Installed matching linux-modules-extra 6.8.0-149.149 in clone only; original VMs unchanged"
+    },
+    {
+      "case": "connected after reboot",
+      "observation": "Missing /proc/sys/net/bridge/bridge-nf-call-iptables; failure closed before start",
+      "lab": "/var/lib/epm-quota-qualification-bm2yibz0",
+      "log": "native-connected-2.log",
+      "resolution": "Explicit modprobe br_netfilter and both bridge sysctls=1; fresh lab passed"
+    },
+    {
+      "case": "sandboxed offline Admin build",
+      "observation": "uv build exited 2 under restricted sandbox",
+      "resolution": "Same pinned offline build succeeded with build-cache access; no dependency relaxation"
+    },
+    {
+      "case": "initial Compose bridge",
+      "observation": "internal=true produced empty published-port mappings and refused host connection while process remained running",
+      "resolution": "Development-only ordinary bridge with exact loopback bindings; both origins returned safe HTTP503; no production policy changed"
+    }
+  ],
+  "focused_tests": {
+    "passed": 44,
+    "failed": 0,
+    "command": ".venv/bin/python -m pytest scripts/tests/test_hosted_lab.py scripts/tests/test_hosted_packaging.py apps/server/app/platform/tests/test_hosted_artifacts.py -q"
+  },
+  "lint": {
+    "ruff_check": "passed",
+    "ruff_format_check": "passed",
+    "configuration": "application/pyproject.toml"
+  },
+  "limits": [
+    "No live GCP/Cloudflare or operator data",
+    "No qualified release or customer ingress",
+    "Native AMD64 and target-host kernel are H02.9 gates",
+    "Native ARM32/compat qualification is not newly claimed by these Docker fixtures",
+    "H03-H05 owning access/recovery schemas remain unavailable",
+    "Physical capacity remains H02.10",
+    "Not a v1 aggregate promotion proof report"
+  ],
+  "private_evidence": "/Users/dcai/Desktop/Property-Management-Data/hosted-mvp-qualification/H02.8",
+  "evidence_sha256": {
+    "source-2.tar": "fa3ed45acdf77e06c96e64cea2842111c7c148759f7214cc7a96949e8ebc8cb4",
+    "source-2.json": "a049bb725d9c473d538886376485fbd04b9b88f923bd8f629327b357dcbe672a",
+    "native-runtime-2.json": "9c89391af553b8ca1edae040984d8c3233652144fdbc3c9e8c43198e5d6bf020",
+    "native-connected-3.json": "93bb6e3941ac41252c2a5dc1131ef1bb0e32b819d42d24bc2cf265db03d68ba7",
+    "reboot-after-2.json": "e711e452e9c5351865ec36e6a4691c19638ab73554a6585a8bcfff401b9a4b50",
+    "desktop-2.json": "f9dc2cc75b6e962e4b11a997826739eacec64737960d1df67bbf0e8911202478",
+    "compose-origins.json": "642dd2060476a6883de166f64a82f3c36cb082c832b938f4bebb44a23fa36dc2"
+  },
+  "changed_inputs_sha256": {
+    "application/deploy/hosted-mvp/lab/README.md": "d9db4c14795bfd820feee4e1119b71bf8608cbb729acf96fedf16e3de63f6325",
+    "application/deploy/hosted-mvp/lab/compose.yaml": "7b3256cb651b7fb5687af06df31a93fe11dec8f0716e03a4a7c90a5a4a9cb8ee",
+    "application/deploy/hosted-mvp/lab/desktop.py": "1b84acfe081820fb590f6c54bcfc287e3a6dac2cd5817e392bc17227eb7747d5",
+    "application/deploy/hosted-mvp/lab/qualify_reboot.py": "d8fae6ee074f60c142fb7ec995f3b9de97f8da2910e9807822e65a09019938cf",
+    "application/deploy/hosted-mvp/lab/snapshot.py": "b786aa4561c9f5d65f70344cac350f74d6a6ac8a48575b22395d9aa47d5e9853"
+  },
+  "cleanup": {
+    "development_compose_project": "removed",
+    "qualification_clone": "stopped_retained",
+    "original_vms": "both_stopped_retained",
+    "failed_labs": "retained"
+  }
+}

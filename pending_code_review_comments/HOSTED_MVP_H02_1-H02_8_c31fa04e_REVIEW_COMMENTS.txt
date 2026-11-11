@@ -1,0 +1,48 @@
+Review: commit c31fa04e against H02.1-H02.8
+Review date: 2026-11-12
+Branch: hosted_mvp
+
+Specification — durable effect reconciliation
+
+1. [P2] Allow verified containment to reconcile obsolete unknown effects
+Status: resolved (2026-11-12)
+File: application/apps/server/app/modules/host_agent/infrastructure/inventory.py:268-272
+Related: application/apps/server/app/modules/host_agent/infrastructure/inventory.py:648-666
+
+An uncertain start permanently blocks subsequent starts and repairs after a successful explicit stop. Reproduced with the owning SQLite inventory and existing test fixtures: prepare successfully; return unknown for a start; apply a new stop successfully; retry the original start; submit a fresh start at the current binding revision. The stop advances the binding revision, so can_inspect() prevents reconciliation of the original receipt. That receipt remains unknown, and the unresolved-receipt check rejects every fresh start/repair (and retirement). Verified containment therefore leaves the operator unavailable with no supported recovery path. Add an authenticated reconciliation/supersession path that retains original intent, records the verified containment of obsolete effects and permits newly admitted work once uncertainty is resolved. Never replay an obsolete start. Cover unknown start -> verified stop -> explicit successful restart, including a newer access fence.
+
+Specification — guarded runtime supervision
+
+2. [P2] Use current fenced authority when supervising a restarted container
+Status: resolved (2026-11-12)
+File: application/apps/server/app/modules/host_agent/infrastructure/supervisor.py:28
+Related: application/apps/server/app/modules/host_agent/infrastructure/stop_registry.py:182-190
+Related: application/apps/server/app/modules/host_agent/infrastructure/gateway.py:196
+
+StopRegistry retains the first start command when the same container is started again, and Supervisor passes that historical command into current runtime verification. Gateway.verify() requires its access_epoch to match current ingress authority. Reproduced with the real inventory, HostAgent, StopRegistry, NativeEffects, RuntimeAuthority, Gateway and Supervisor using synthetic physical adapters: initialize and start at epoch 1; stop successfully; apply held ingress at epoch 2; successfully execute a newly admitted start at epoch 2. The retained stop target still contains epoch 1, so the next Supervisor.poll() stops the running container. This repeats for subsequent restarts of the same container. Preserve immutable stop-only identity, but resolve current supervision authority through the owning inventory or a separately protected current supervision projection. Add a stop -> newer held fence -> restart -> guardian poll regression that verifies the container remains running while stale actual authority still causes containment.
+
+Implementation validation — 2026-11-12
+
+Finding 1: Inventory.finish() records verified-stop supersession atomically with
+its stop receipt. Older pending/unknown starts retain intent/hash and original
+unknown observation, with the stop child ID and containment evidence. Superseded
+starts are terminal, immutable and never replayed. Unknown stops clear nothing;
+other uncertain effect kinds still require their own verification.
+Implementation: application/apps/server/app/modules/host_agent/infrastructure/inventory.py:625
+Contract: application/apps/server/app/modules/host_agent/application/dispatch.py:230
+
+Finding 2: HostAgent.supervise() resolves the immutable protected target through
+the inventory's actual applied start at the current access epoch and binding
+revision. It does not rewrite the first stop projection or synthesize admission.
+Current external-deny failures still contain the exact runtime and retain attention.
+Implementation: application/apps/server/app/modules/host_agent/application/service.py:94
+Owning lookup: application/apps/server/app/modules/host_agent/infrastructure/inventory.py:537
+
+Validation: 277 focused tests passed in 72.37 s across receipt, inventory, native-
+adapter, supervisor, gateway and greenfield-schema tests. Ruff check and format
+check passed for all six changed Python files. No full suite or native/cloud
+qualification ran. Two old supervisor fixtures were corrected to establish an
+actual initialized container and applied start before testing attention behavior.
+
+Detailed matrix and qualification limits:
+docs/hosting/qualification/reports/HOSTED_MVP_H02_REVIEW_FIXES_2026-11-12.md

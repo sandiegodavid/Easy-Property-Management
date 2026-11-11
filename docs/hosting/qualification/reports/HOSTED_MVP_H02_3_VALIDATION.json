@@ -1,0 +1,173 @@
+{
+  "version": 1,
+  "slice": "H02.3",
+  "date": "2026-11-11",
+  "scope": "local_component_inventory_and_unix_transport_only",
+  "baseline_commit": "b3a8a452c36be0592d93e33c91243da14509ffc2",
+  "branch": "hosted_mvp",
+  "source_dirty": true,
+  "environment": {
+    "os": "Darwin",
+    "release": "27.0.0",
+    "architecture": "arm64",
+    "python": "3.14.8",
+    "pytest": "8.4.2",
+    "SQLAlchemy": "2.1.4",
+    "alembic": "1.20.0",
+    "pydantic": "2.14.0",
+    "ruff": "0.16.10"
+  },
+  "validation": {
+    "working_directory": "application",
+    "command": [
+      ".venv/bin/python",
+      "-m",
+      "pytest",
+      "apps/server/app/modules/host_agent/tests/test_agent.py",
+      "apps/server/app/modules/hosted_admin/tests/test_project_quota.py",
+      "apps/server/app/platform/tests/test_hosted_schema.py",
+      "apps/server/app/platform/tests/test_schema_resources.py",
+      "apps/server/app/platform/tests/test_hosted_effect_contracts.py",
+      "apps/server/app/platform/tests/test_hosted_ports.py",
+      "apps/server/app/platform/tests/test_hosted_proofs.py",
+      "apps/server/app/platform/tests/test_hosted_ui_contracts.py",
+      "-q",
+      "--tb=short"
+    ],
+    "passed": 573,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": "28.08",
+    "host_agent_cases": 53,
+    "reused_quota_cases": 23
+  },
+  "lint": {
+    "working_directory": "application",
+    "commands": [
+      [
+        ".venv/bin/ruff",
+        "check",
+        "apps/server/app/modules/host_agent/application/dispatch.py",
+        "apps/server/app/modules/host_agent/application/service.py",
+        "apps/server/app/modules/host_agent/infrastructure/inventory.py",
+        "apps/server/app/modules/host_agent/infrastructure/quota_targets.py",
+        "apps/server/app/modules/host_agent/infrastructure/unix_transport.py",
+        "apps/server/app/modules/host_agent/tests/test_agent.py"
+      ],
+      [
+        ".venv/bin/ruff",
+        "format",
+        "--check",
+        "apps/server/app/modules/host_agent/application/dispatch.py",
+        "apps/server/app/modules/host_agent/application/service.py",
+        "apps/server/app/modules/host_agent/infrastructure/inventory.py",
+        "apps/server/app/modules/host_agent/infrastructure/quota_targets.py",
+        "apps/server/app/modules/host_agent/infrastructure/unix_transport.py",
+        "apps/server/app/modules/host_agent/tests/test_agent.py"
+      ]
+    ],
+    "result": "passed",
+    "changed_python_files": 6
+  },
+  "source_pins": [
+    {
+      "path": "application/apps/server/app/modules/host_agent/application/build_inputs.py",
+      "sha256": "455de3c145ea9bc407780b8737dbc090d685b3f0aba3c686298f426917aecb92"
+    },
+    {
+      "path": "application/apps/server/app/modules/host_agent/application/contracts.py",
+      "sha256": "2a2b9738a5e749c92b6e08fcc30b133c88126dcedf1e20deb0a69bf2c304a5de"
+    },
+    {
+      "path": "application/apps/server/app/modules/host_agent/application/dispatch.py",
+      "sha256": "76313f284161e16be5344634e2c53d2d862c3ccc2aa1bdfbcad78836780c339a"
+    },
+    {
+      "path": "application/apps/server/app/modules/host_agent/application/effect_contracts.py",
+      "sha256": "91365b8a65661486a8a0607139b1776ac8221d159e6d86f899f027ecfdd3ebeb"
+    },
+    {
+      "path": "application/apps/server/app/modules/host_agent/application/service.py",
+      "sha256": "38e33e08b7d2f796153894b18ecb2746c10676416b9e8670f83035bd1466a321"
+    },
+    {
+      "path": "application/apps/server/app/modules/host_agent/infrastructure/inventory.py",
+      "sha256": "0e692c86e7a1e23596ed70c6222c2676288b73fb2fe828fabfc9b876d0566e0f"
+    },
+    {
+      "path": "application/apps/server/app/modules/host_agent/infrastructure/quota_targets.py",
+      "sha256": "da16bdcb3190b6d42c2811fb1544111f9beb603da7091da056e15e5a715f59f3"
+    },
+    {
+      "path": "application/apps/server/app/modules/host_agent/infrastructure/unix_transport.py",
+      "sha256": "8052e2fda892499f124999ac7b3500f24d34d17d2023143813c7711fc39feff2"
+    },
+    {
+      "path": "application/apps/server/app/modules/host_agent/tests/test_agent.py",
+      "sha256": "8990a3770a8161b85cc5a8a5639d60f07f1e5f3f091340fc1261e9fcbb378867"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_admin/infrastructure/project_quota.py",
+      "sha256": "6157c6a7da151194c143463fc67b79a7b7021000abf6fcd0686daf6841b67719"
+    },
+    {
+      "path": "application/apps/server/app/platform/hosted_schema.py",
+      "sha256": "01492b284f89d887980a4ac2a4c1d673b455a7a8f34b1aa193063e4d08e90d85"
+    },
+    {
+      "path": "application/database/host-inventory-migrations/alembic.ini",
+      "sha256": "0f3ca9bcf7437c0de836eab9e48f7b8cdd7e23b9357da542752e0c3b6450851f"
+    },
+    {
+      "path": "application/database/host-inventory-migrations/env.py",
+      "sha256": "321ffe0df148749e764c73fc70af67d98838cd08647205f8c9f02ba1ad78be51"
+    },
+    {
+      "path": "application/database/host-inventory-migrations/versions/host_inventory_0001_initial.py",
+      "sha256": "5dbbe082665c039ad94bdf3d27789d44c48ccf46ca9d4192dddaffdc31d67551"
+    },
+    {
+      "path": "application/database/hosted_ddl.py",
+      "sha256": "5d6f71c0d5ee71f9ea2be2f9a46a147adcdded64820124df95f884b347f8305e"
+    },
+    {
+      "path": "docs/database/host-inventory.md",
+      "sha256": "baa2e4f8ac4f6f436c86d0768f2b5c87ec874f2b32942c4a6808b4f79982e673"
+    },
+    {
+      "path": "docs/database/overview.md",
+      "sha256": "7ae256f93a717b1dd5073ed76a06fc6371c814e259eee95282707c3d28c2a1a1"
+    },
+    {
+      "path": "docs/hosting/design/HOSTED_MVP_H02_DESIGN.md",
+      "sha256": "e9effc18cd4e1054d95077b4e3debfb1f29f431b3c4859fedbaf4bd657bfee23"
+    },
+    {
+      "path": "docs/hosting/qualification/PROJECT_QUOTA_IMPORT_MANIFEST.json",
+      "sha256": "23cdcacac4119b6de52accc4bd1040bef470602c762dcea902f2295dfb417e81"
+    },
+    {
+      "path": "docs/hosting/qualification/reports/HOSTED_MVP_H02_3_HANDOFF.md",
+      "sha256": "4782c1d488731bf8f600934f91c96e26a7c1be59032dafea642353950a1401af"
+    },
+    {
+      "path": "docs/hosting/qualification/specifications/runtime_limits.json",
+      "sha256": "3ec2e9abc288615e1a50471d9b4064071de457dfa9d935cedeef0adc6135b47f"
+    }
+  ],
+  "qualification_limits": [
+    "Synthetic admission/effect drivers in tests only; no production permissive adapter.",
+    "Live authenticated Admin-owned original-intent adapter is H04; H02.7 owns service composition.",
+    "Native Linux root peer/namespace and Docker/GCP proof not executed.",
+    "Imported quota binding mapping is pure; physical quota and runtime effects remain H02.5.",
+    "Gateway apply/inspect, exact projection revisions and existing-connection containment remain H02.6.",
+    "Enable/eligibility and restore stage/switch remain unavailable.",
+    "Snapshot test is not encrypted off-host or authenticated restore qualification.",
+    "No schema changes, public API, startup hook, scheduler, VM reset or cloud provisioning."
+  ],
+  "execution_notes": [
+    "Local sandbox denied binding a filesystem Unix socket; focused tests rerun with approved permission.",
+    "Wrong-peer fixture scheduling race corrected; no body is sent after immediate peer rejection.",
+    "All external operational effects remained explicit synthetic fixtures."
+  ]
+}

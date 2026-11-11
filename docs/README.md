@@ -39,7 +39,7 @@ For a specific change, read its owning module, relevant shared platform contract
 
 ## Shared contracts
 
-- [Database schema catalog](DATABASE_SCHEMA.md): start with shared ownership/conventions, then use the focused per-store dictionaries in `database/` for Admin, inventory, access and recovery. Initialization, validation and later-slice additions have their own guide.
+- [Database schema catalog](database/README.md): start with shared ownership/conventions, then use the focused per-store dictionaries in `database/` for Admin, inventory, access and recovery. Initialization, validation and later-slice additions have their own guide.
 
 - [Persistence, transactions and validation](platform/persistence.md).
 - [API errors, reads and original-result recovery](platform/api-contracts.md).
@@ -52,7 +52,7 @@ For a specific change, read its owning module, relevant shared platform contract
 
 [Decisions](DECISIONS.md) preserves agreed rationale, including future product decisions. [Roadmap](ROADMAP.md) groups intended delivery. [Research](research/README.md) contains dated external investigations and experiments; findings need verification before implementing a changing provider/runtime capability.
 
-[Hosting](hosting) contains the [review index](hosting/README.md), consolidated local/demo/MVP planning, and the [Google Cloud demo deployment runbook](hosting/deployment/GOOGLE_CLOUD_DEMO_DEPLOYMENT.md). Proposed plans remain distinct from deployed capabilities.
+[Hosting](hosting) contains the [review index](hosting/README.md), [topic-based infrastructure guides](hosting/foundation/README.md), current MVP design and the [earlier Google Cloud demo runbook](hosting/deployment/GOOGLE_CLOUD_DEMO_DEPLOYMENT.md). Current behavior, exact qualification evidence, remaining feature gates and historical procedures remain distinct.
 
 ## Historical material and traceability
 

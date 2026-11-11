@@ -1,0 +1,240 @@
+{
+  "scope": "H02.6 delivered component/native ARM64 scope, not native AMD64/GCP or complete hosted release acceptance",
+  "status": "component_scope_delivered",
+  "date": "2026-11-12",
+  "branch": "hosted_mvp",
+  "base_commit": "84ca8661924ad293023e81809a265ab4107bd43e",
+  "focused_tests": {
+    "passed": 205,
+    "failed": 0,
+    "seconds": 36.33,
+    "module": "application/apps/server/app/modules/host_agent/tests",
+    "files": [
+      "test_gateway.py",
+      "test_endpoint_policy.py",
+      "test_egress_proxy.py",
+      "test_agent.py",
+      "test_runtime_effects.py",
+      "test_networks.py",
+      "test_host_services.py",
+      "test_service_runtime.py",
+      "test_tls_hello.py"
+    ],
+    "scope": "Focused only; local/Unix socket tests outside sandbox. No full suite or frontend changes."
+  },
+  "lint": {
+    "ruff_check": "passed",
+    "ruff_format_check": "passed",
+    "changed_python_files": 22,
+    "configuration": "application/pyproject.toml"
+  },
+  "native": {
+    "services": {
+      "status": "scoped_service_pass",
+      "root": "/var/lib/epm-service-qualification-aeskn10x",
+      "cases": {
+        "held_after_process_death": true,
+        "stale_projection_rebuilt": true,
+        "missing_inventory_prevents_start": true,
+        "corrupt_inventory_prevents_start": true,
+        "admin_service_not_required": true,
+        "credentials": {
+          "own_credential_readable": true,
+          "credential_read_only": true,
+          "source_data_and_engine_denied": true
+        }
+      }
+    },
+    "egress": {
+      "status": "scoped_egress_pass",
+      "root": "/var/lib/epm-egress-qualification-q2525g6g",
+      "cases": {
+        "approved_numeric_destination_and_verified_tls": true,
+        "tls_sni_must_match_connect_endpoint": true,
+        "redirect_to_unregistered_endpoint_denied": true,
+        "fresh_dns_rebinding_to_metadata_denied": true,
+        "dns_deadline_seconds": 2.0042386139999735
+      },
+      "source_sha256": "4688d01ed3a6b38f4f82a6f87f3b7f96bec0dc6cb18077b016097f1b16271e50"
+    },
+    "network": {
+      "status": "scoped_network_pass",
+      "root": "/var/lib/epm-network-qualification-snjhmkia",
+      "image": "5dec05dc4c2653fa17e45761e59d61a93964fdcd67b3194d840fd8a43d565024",
+      "forward_drop_packets": 4,
+      "cases": [
+        "gateway UID reaches dual-stack unpublished application ports",
+        "root and tunnel UID cannot reach application ports",
+        "sibling, host-control, metadata and direct public egress denied",
+        "complete firewall projection reinspected",
+        "real controlled proxy reachable and metadata CONNECT rejected",
+        "forced metadata/public routes hit forwarding drop counters",
+        "static endpoint checked before and after start"
+      ],
+      "stream_containment": {
+        "existing_stream_closed": true,
+        "target_stopped": true,
+        "deny_config_verified": true
+      },
+      "source_sha256": "8a1629049b60761c057daf1b5edf3aadf784821a1f52d4d788d232e2955de88b",
+      "library_sha256": {
+        "network_policy": "80ab698c06ed9d94033afba2035be55ae794298617c704889c873b2b3131b165",
+        "network_firewall": "958933fb141c4cbc7a49a3c17f1a8cedab4fe85d6444e03445b40e9dff51b1cb",
+        "operator_networks": "1daf980095ed3c96fb70cf86509173d833219eacfb7f866f4193cbab09a967e1",
+        "network_prerequisites": "77ed56821601d7c3f27bdbc7767cd1ce4ae75fb9ab88dcc5fd85814299d0f62d",
+        "docker_engine": "b67704f9e30be71b4295448c7c0528ee72f290889f068b16873cce2dcf796e24",
+        "egress_proxy": "61d54ce08f96057727679b4754b69c193fe1d41b824a8c02cb8a298e80e3af24",
+        "endpoint_policy": "9785ec36ffeb392ea3c5533eb1f2fca1dcf82541d08f0c1632c3013c5c438a3b"
+      }
+    },
+    "connected": {
+      "root": "/var/lib/epm-quota-qualification-nwekpp6c",
+      "kernel": "6.8.0-147-generic",
+      "machine": "aarch64",
+      "image": "5dec05dc4c2653fa17e45761e59d61a93964fdcd67b3194d840fd8a43d565024",
+      "scope": "native-arm64-lab-not-amd64-or-gcp",
+      "cases": {
+        "connected_security_and_wal": {
+          "/control/data": "writable-accounted",
+          "/control/writer.lock": 30,
+          "/dev/shm/escape": 30,
+          "/etc/escape": 30,
+          "/other/secret": 2,
+          "/run/escape": 30,
+          "/scratch": "writable-accounted",
+          "/tmp": "writable-accounted",
+          "/var/run/docker.sock": 30,
+          "/var/tmp": "writable-accounted",
+          "cgroup": {
+            "cpu.max": "50000 100000",
+            "memory.max": "134217728",
+            "memory.swap.max": "0",
+            "pids.max": "32"
+          },
+          "ioctl_probe_40046602": 1,
+          "ioctl_probe_40046604": 1,
+          "ioctl_probe_40086602": 1,
+          "ioctl_probe_401c5820": 1,
+          "ioctl_workspace_40046602": 1,
+          "ioctl_workspace_40046604": 1,
+          "ioctl_workspace_40086602": 1,
+          "ioctl_workspace_401c5820": 1,
+          "mount": 1,
+          "quotactl": 1,
+          "unshare": 1,
+          "writer_lock": "acquired-read-only-control-inode"
+        },
+        "workspace_bytes": {
+          "deleted_open": false,
+          "errno": 122,
+          "writes": 2043
+        },
+        "workspace_inodes": {
+          "errno": 122,
+          "writes": 253
+        },
+        "workspace_deleted": {
+          "deleted_open": true,
+          "errno": 122,
+          "writes": 2042
+        },
+        "control_bytes": {
+          "deleted_open": false,
+          "errno": 122,
+          "writes": 2045
+        },
+        "control_inodes": {
+          "errno": 122,
+          "writes": 252
+        },
+        "control_deleted": {
+          "deleted_open": true,
+          "errno": 122,
+          "writes": 2044
+        },
+        "scratch_bytes": {
+          "deleted_open": false,
+          "errno": 122,
+          "writes": 2045
+        },
+        "scratch_inodes": {
+          "errno": 122,
+          "writes": 254
+        },
+        "scratch_deleted": {
+          "deleted_open": true,
+          "errno": 122,
+          "writes": 2044
+        },
+        "connected_wal_full": {
+          "original_row_retained": true,
+          "storage_failure": {
+            "code": 778,
+            "name": "SQLITE_IOERR_WRITE"
+          }
+        },
+        "cross_uid": {
+          "private_sibling_read_denied": true
+        },
+        "connected_guarded_lifecycle": {
+          "new_qualification_hash": "08306a2c433579b985751ecb132e88d4aaeec8672bbd504fbb6f634ebac3aacc",
+          "connected_start_and_inspection": true,
+          "firewall_loss_stops_runtime": true
+        }
+      },
+      "status": "connected_sandbox_pass",
+      "source_sha256": "d82566bf97a7ba47f725b10001f81a5c29adcd17a1c64c9da965c5f87bcb7469"
+    },
+    "services_lab": "epm-service-qualification-aeskn10x",
+    "egress_lab": "epm-egress-qualification-q2525g6g",
+    "network_lab": "epm-network-qualification-snjhmkia",
+    "connected_lab": "epm-quota-qualification-nwekpp6c"
+  },
+  "changed_python_sha256": {
+    "application/apps/server/app/modules/host_agent/infrastructure/bounded_dns.py": "ac633e902c4dd85923a0fbc53e9695b8abeeb483a23deed39808c7fc1c833026",
+    "application/apps/server/app/modules/host_agent/infrastructure/container_policy.py": "dad7da468401d12ec6d6382371b80eca060fcefd4ef1b1302c4fa2263fbecfb5",
+    "application/apps/server/app/modules/host_agent/infrastructure/egress_proxy.py": "61d54ce08f96057727679b4754b69c193fe1d41b824a8c02cb8a298e80e3af24",
+    "application/apps/server/app/modules/host_agent/infrastructure/endpoint_policy.py": "9785ec36ffeb392ea3c5533eb1f2fca1dcf82541d08f0c1632c3013c5c438a3b",
+    "application/apps/server/app/modules/host_agent/infrastructure/host_services.py": "b8a7d1b69da164792e95688ef248c36157c15446e6f7529d2ef67adba8758a97",
+    "application/apps/server/app/modules/host_agent/infrastructure/network_firewall.py": "958933fb141c4cbc7a49a3c17f1a8cedab4fe85d6444e03445b40e9dff51b1cb",
+    "application/apps/server/app/modules/host_agent/infrastructure/network_policy.py": "80ab698c06ed9d94033afba2035be55ae794298617c704889c873b2b3131b165",
+    "application/apps/server/app/modules/host_agent/infrastructure/service_config.py": "d4ebbea18233aa7b8320f7aa687ef0c97885dd1ae22ddff593b1aac20990ce92",
+    "application/apps/server/app/modules/host_agent/infrastructure/service_runtime.py": "a0fb54e50c8efef0740d53e244b0deee9e17aab79dd7a14226d3f667855e9aff",
+    "application/apps/server/app/modules/host_agent/infrastructure/tls_hello.py": "b9819f239ace2b90db6a932275a27741d2ce62c939c03907bc24589aac620579",
+    "application/apps/server/app/modules/host_agent/infrastructure/tunnel_credentials.py": "f766251fee69974e92b7d4e58b73451432963b540a5c6948c55431e59e9bdec1",
+    "application/apps/server/app/modules/host_agent/tests/test_egress_proxy.py": "1631034f814dc32b0e3d7493fd03c3ae7a5601a21e6408c41a748dbad5c0efde",
+    "application/apps/server/app/modules/host_agent/tests/test_host_services.py": "6e7314349782901aa514622c7499a755fe9a99af891a119565a7a02e71e391e6",
+    "application/apps/server/app/modules/host_agent/tests/test_networks.py": "5bd250c5a2da45e6572ed81a61a0c6c2313fa0024dd05c3c672e2c6cd6a115c9",
+    "application/apps/server/app/modules/host_agent/tests/test_service_runtime.py": "0328e4887b35c65136bd916d3f7259295f37dbcb1473650b545ba0e1bfc1b827",
+    "application/apps/server/app/modules/host_agent/tests/test_tls_hello.py": "08c9969c00f4d4e3360e60408161a7eb64a7e84f3c8f36927e550cd773bee9fd",
+    "application/deploy/hosted-mvp/gateway/credential_probe.py": "6cedef5cd635b1754da7579b9101542a30d394a38ac59fd0bfa04aac5fe367c6",
+    "application/deploy/hosted-mvp/gateway/qualify_connected.py": "d82566bf97a7ba47f725b10001f81a5c29adcd17a1c64c9da965c5f87bcb7469",
+    "application/deploy/hosted-mvp/gateway/qualify_egress.py": "4688d01ed3a6b38f4f82a6f87f3b7f96bec0dc6cb18077b016097f1b16271e50",
+    "application/deploy/hosted-mvp/gateway/qualify_network.py": "8a1629049b60761c057daf1b5edf3aadf784821a1f52d4d788d232e2955de88b",
+    "application/deploy/hosted-mvp/gateway/qualify_services.py": "5e20c12fefb3bf60725277bdf083633ef07ff26dc0d4563a93b3d4c79644c80c",
+    "application/deploy/hosted-mvp/gateway/service_fixture.py": "c9750a998670094eb96ac17765da462aa08fcd8a6e7de7fae6c0f22b5db4fcb2"
+  },
+  "artifacts": "/Users/dcai/Desktop/Property-Management-Data/hosted-mvp-qualification/H02.6",
+  "vm_state": {
+    "epm-h02-runtime": "preserved and stopped; no containers left running",
+    "epm-quota-test": "unchanged and stopped"
+  },
+  "diagnostics": "Failed labs retained. Service ordering, namespace/probe paths, bridge-module prerequisite, notify readiness, UID-set normalization and valid socket-close outcomes were corrected without weakening rules.",
+  "export_exclusions": [
+    "Tunnel secret files",
+    "TLS private keys"
+  ],
+  "later_gates": [
+    "H02.7 full fresh hosted application composition",
+    "H02.8-11 wider native/platform/reboot/cloud/provider/capacity/aggregate acceptance",
+    "H03/H04 identity/admission/enable/revoke workflows",
+    "H03/H05 actual endpoints and per-workspace keys/object authorization"
+  ],
+  "unchanged": [
+    "No live GCP or Cloudflare mutations",
+    "No customer data",
+    "No positive production ingress",
+    "No database DDL or compatibility migration",
+    "No actual platform credential in code/environment/reports"
+  ]
+}

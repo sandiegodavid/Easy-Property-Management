@@ -8,13 +8,22 @@ import sys
 from tempfile import TemporaryDirectory
 
 
-def stage(source: Path) -> Path:
+def stage(source: Path, *, component: str | None = None) -> Path:
     if sys.prefix == sys.base_prefix:
         raise RuntimeError("Activate the dedicated application virtual environment first.")
+    if component is not None:
+        sys.dont_write_bytecode = True
     target = import_module("app.platform.config").application_root().resolve()
     runtime = Path(sys.prefix).resolve()
     if not target.is_relative_to(runtime):
         raise RuntimeError("Installed application must be inside the active virtual environment.")
+    if component is not None:
+        artifacts = import_module("app.platform.hosted_artifacts")
+        package = Path(import_module("app").__file__).resolve().parent
+        artifacts.stage_candidate(
+            source.absolute(), component=component, package=package, target=target
+        )
+        return target
     source = source.expanduser().resolve()
     migrations = source / "database/sqlite-migrations"
     if not (source / "alembic.ini").is_file():
@@ -44,9 +53,10 @@ def stage(source: Path) -> Path:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source", type=Path, help="Matching release's schema-resources folder.")
+    parser.add_argument("--component", choices=("admin", "operator", "host_agent"))
     args = parser.parse_args()
     try:
-        target = stage(args.source)
+        target = stage(args.source, component=args.component)
     except (OSError, RuntimeError, ImportError) as error:
         parser.exit(1, f"Schema staging failed: {error}\n")
     print(f"Schema resources staged: {target}")

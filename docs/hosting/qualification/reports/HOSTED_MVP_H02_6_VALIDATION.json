@@ -1,0 +1,90 @@
+{
+  "scope": "H02.6 partial deny-gateway and CONNECT components; not full network or release qualification",
+  "date": "2026-11-12",
+  "branch": "hosted_mvp",
+  "base_commit": "4e5c4bf6bd43670da70eb565a74449d7fe7dacfa",
+  "status": "in_progress",
+  "focused_tests": {
+    "result": "passed",
+    "passed": 150,
+    "failed": 0,
+    "seconds": 30.05,
+    "working_directory": "application",
+    "command": ".venv/bin/python -m pytest -q apps/server/app/modules/host_agent/tests/test_gateway.py apps/server/app/modules/host_agent/tests/test_endpoint_policy.py apps/server/app/modules/host_agent/tests/test_egress_proxy.py apps/server/app/modules/host_agent/tests/test_agent.py apps/server/app/modules/host_agent/tests/test_runtime_effects.py",
+    "sandbox_note": "Initial four existing socket-bind tests required an unsandboxed rerun; no code/test relaxation."
+  },
+  "lint": {
+    "ruff_check": "passed",
+    "ruff_format_check": "passed",
+    "changed_python_files": 10,
+    "configuration": "application/pyproject.toml"
+  },
+  "native_gateway": {
+    "root": "/var/lib/epm-gateway-qualification-hp9s34dg",
+    "uid": 898,
+    "binary_sha256": "762d7763ed8e303d50bf11fb0274627266907ea8c170720d7d9a6fd0b9bf5c65",
+    "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+    "kernel": "6.8.0-147-generic",
+    "source_sha256": {
+      "gateway.py": "f71db218ee54a933e723c3d79019f39fc24cd5bbd1b093f2f31b2ef621856442",
+      "qualify_gateway.py": "f97d700ed4af8a7bf4f36f548701fc3c157093af310a3c1dfdf03ea3a74f2e6e"
+    },
+    "config_sha256": "c635a00450b011ac8f4a54b3d5b140000fd4f511beee0cf9406a6adbd2c3a5aa",
+    "cases": {
+      "other_uid_admin_denied_and_no_tcp_admin": true,
+      "registered_held": {
+        "status": 503,
+        "body": "{\"code\":\"workspace_unavailable\"}",
+        "cache": "no-store"
+      },
+      "unknown_and_forged_hosts": "denied",
+      "failed_load_keeps_previous_config": true,
+      "new_fence_loaded_and_verified": true
+    },
+    "status": "scoped_gateway_pass"
+  },
+  "native_artifacts": "/Users/dcai/Desktop/Property-Management-Data/hosted-mvp-qualification/H02.6",
+  "changed_python_sha256": {
+    "application/apps/server/app/modules/host_agent/application/ingress.py": "914683871e10904a90dca44c0223c794b3cb47d659879e3e3fb8684506d60b3e",
+    "application/apps/server/app/modules/host_agent/infrastructure/egress_proxy.py": "922fb0f0e6ecfc3247c5d407237f239cb9d31ca861b2f111f87a40f74aae42e4",
+    "application/apps/server/app/modules/host_agent/infrastructure/endpoint_policy.py": "2bcc4007017fee6db508b48a225be81cb30e87ff03ba5024cea3456ade7d0dfa",
+    "application/apps/server/app/modules/host_agent/infrastructure/gateway.py": "f71db218ee54a933e723c3d79019f39fc24cd5bbd1b093f2f31b2ef621856442",
+    "application/apps/server/app/modules/host_agent/infrastructure/inventory.py": "9785f193e0b2d1500055e1314c0f75d970fc997afebe3eabb62903cdf9b9ead5",
+    "application/apps/server/app/modules/host_agent/tests/test_egress_proxy.py": "46205a27da2f016611c40a4692f41734524d9039c52b3b68d7acfaf581deb6cd",
+    "application/apps/server/app/modules/host_agent/tests/test_endpoint_policy.py": "54050a4b568b1ef714e647e210b49fa6f4638f15589d987c142c52c1229eb8e9",
+    "application/apps/server/app/modules/host_agent/tests/test_gateway.py": "a376e30b952833bd0f5e97ea5853f8eedebab04d0582bef4b5489db92704d662",
+    "application/deploy/hosted-mvp/gateway/qualify_containment.py": "76a15a0cedcd3c632c3b1dee25632592db4670a264728d21893f65afaa986880",
+    "application/deploy/hosted-mvp/gateway/qualify_gateway.py": "f97d700ed4af8a7bf4f36f548701fc3c157093af310a3c1dfdf03ea3a74f2e6e"
+  },
+  "remaining": [
+    "Per-operator bridges and Docker forwarding isolation",
+    "IPv4/IPv6/metadata/host-control enforcement",
+    "Controlled egress deployment and actual rebinding/redirect proof",
+    "Caddy/cloudflared services, protected startup and stream containment",
+    "Scoped IAM and credential delivery",
+    "Protected host composition and complete H02.6 integration qualification"
+  ],
+  "unchanged_boundaries": [
+    "No live GCP/Cloudflare operations",
+    "No user data changes",
+    "No database DDL changes",
+    "No enable routes",
+    "No full test suite",
+    "Original epm-quota-test unchanged"
+  ],
+  "native_containment": {
+    "status": "scoped_containment_pass",
+    "image": "5dec05dc4c2653fa17e45761e59d61a93964fdcd67b3194d840fd8a43d565024",
+    "lab": "/var/lib/epm-ingress-containment-qesjxq0k",
+    "cases": {
+      "uncommitted_runtime_stopped_by_exact_projection": true,
+      "sibling_remains_running": true,
+      "repeated_containment_is_safe": true
+    },
+    "source_sha256": "76a15a0cedcd3c632c3b1dee25632592db4670a264728d21893f65afaa986880"
+  },
+  "vm_state": {
+    "epm-h02-runtime": "preserved and stopped",
+    "epm-quota-test": "unchanged, stopped"
+  }
+}

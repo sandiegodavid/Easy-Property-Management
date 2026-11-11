@@ -1,0 +1,266 @@
+{
+  "version": 1,
+  "report_id": "0419b8f7-a651-4187-9b7d-0578b92ebcc0",
+  "proof": "runtime_limits",
+  "specification_sha256": "3ec2e9abc288615e1a50471d9b4064071de457dfa9d935cedeef0adc6135b47f",
+  "specification_revision": 2,
+  "owner": "H02",
+  "source_commit": "88140223ca46fac469438daa1ef68d30b5e8d55c",
+  "source_dirty": false,
+  "recorded_at": 1794604827908,
+  "started_at": 1794604441900,
+  "finished_at": 1794604704394,
+  "environment": {
+    "level": "native_linux",
+    "os": "linux",
+    "architecture": "amd64",
+    "machine_ref": "gcp_epm_h02_host",
+    "kernel": "7.0.0-1017-gcp",
+    "filesystem": "ext4_private_quota_lab",
+    "container_runtime": "docker_29.9.3",
+    "provider_configuration_ref": "h02_11_target_pins"
+  },
+  "invocation": {
+    "driver_ref": "h02_11_explicit_native_subset",
+    "input_manifest_ref": "private:H02.11:inputs.json",
+    "input_manifest_sha256": "8699df6603a89cd5035d07e454e455252f60875d2e74262a28d59613444a83f5",
+    "phase": "run",
+    "repetition": 1
+  },
+  "pins": [
+    {
+      "reference": "h02_11_source",
+      "kind": "source",
+      "state": "pinned",
+      "sha256": "a75ee26ae89a0cdf70fd81755495cb51b0a5f612c15990d5bf17624080466f7b",
+      "reason": null
+    },
+    {
+      "reference": "h02_11_tool",
+      "kind": "tool",
+      "state": "pinned",
+      "sha256": "c8482bde6a9bf72d2d8ae2e0cfb37c620f7ecf3d42c21f15ea6d0376edf6abaa",
+      "reason": null
+    },
+    {
+      "reference": "h02_11_image",
+      "kind": "image",
+      "state": "pinned",
+      "sha256": "ac6fca9d61d22c5abda00590ba39b2222dc4e09d9e112031622e9345ee9e5a90",
+      "reason": null
+    },
+    {
+      "reference": "h02_11_schema",
+      "kind": "schema",
+      "state": "pinned",
+      "sha256": "433e3cafada00274602aca17991ec3f0379b04a6dfcddb3610468ea4e71a06d4",
+      "reason": null
+    },
+    {
+      "reference": "h02_11_workload",
+      "kind": "workload",
+      "state": "pinned",
+      "sha256": "8699df6603a89cd5035d07e454e455252f60875d2e74262a28d59613444a83f5",
+      "reason": null
+    },
+    {
+      "reference": "h02_11_configuration",
+      "kind": "configuration",
+      "state": "pinned",
+      "sha256": "b4a4f93ba6e09a49c86182e579271fed078de6f714753b62ce01b6c2e2cce129",
+      "reason": null
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "runtime-result",
+      "artifact_ref": "private:H02.11:runtime-result.json",
+      "sha256": "78f8f580c4760ae4598a1d86590a1d13de3cc00199c7ba30dcdf64fa6dd09127"
+    },
+    {
+      "evidence_id": "connected-result",
+      "artifact_ref": "private:H02.11:connected-result.json",
+      "sha256": "c0a505e4ca80e0731fdaea9cafea396089e23d2938c83024dd88c2cdf36a44d0"
+    },
+    {
+      "evidence_id": "final-native-checks",
+      "artifact_ref": "private:H02.11:final-native-checks.json",
+      "sha256": "c05b80a4a60114565a1fafc760b5699a763c7d1495e45e074c581f9e40a547e8"
+    },
+    {
+      "evidence_id": "current-native-1",
+      "artifact_ref": "private:H02.11:current-native-1.log",
+      "sha256": "5cdc34a7a9f6d6b904d847bf47dfa4d3ece81d8e356ad916937017dbd9594eb8"
+    },
+    {
+      "evidence_id": "target-pins",
+      "artifact_ref": "private:H02.11:target-pins.json",
+      "sha256": "c8482bde6a9bf72d2d8ae2e0cfb37c620f7ecf3d42c21f15ea6d0376edf6abaa"
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "private_registered_mounts",
+      "status": "passed",
+      "observation": "Two synthetic owners, private quota roots and production container policy verified before actors. Isolated loop-filesystem fixture only.",
+      "evidence_ids": [
+        "runtime-result",
+        "connected-result",
+        "final-native-checks"
+      ],
+      "metrics": []
+    },
+    {
+      "case_id": "cross_operator_denial",
+      "status": "passed",
+      "observation": "Actual numeric owner sibling-private-tree read denied in native and connected fixtures.",
+      "evidence_ids": [
+        "runtime-result",
+        "connected-result",
+        "final-native-checks"
+      ],
+      "metrics": []
+    },
+    {
+      "case_id": "byte_inode_exhaustion",
+      "status": "passed",
+      "observation": "Actual byte, inode and deleted-open saturation across workspace, control and scratch.",
+      "evidence_ids": [
+        "runtime-result",
+        "connected-result",
+        "final-native-checks"
+      ],
+      "metrics": []
+    },
+    {
+      "case_id": "wal_commit_fsync_failure",
+      "status": "not_run",
+      "observation": "Quota/WAL exhaustion and reopen preserved prior rows; full explicit commit/fsync injection matrix not repeated in this subset.",
+      "evidence_ids": [],
+      "metrics": []
+    },
+    {
+      "case_id": "control_scratch_bounds",
+      "status": "passed",
+      "observation": "Readonly control root/lock; only control/data writable. Scratch backs temporary paths; quotas enforced.",
+      "evidence_ids": [
+        "runtime-result",
+        "connected-result",
+        "final-native-checks"
+      ],
+      "metrics": []
+    },
+    {
+      "case_id": "sandbox_escape_denial",
+      "status": "passed",
+      "observation": "Actual ioctl/quota/mount/namespace denials and protected chmod denial. Native ABI exit 42, 32-bit ABI rejected exit 159.",
+      "evidence_ids": [
+        "runtime-result",
+        "connected-result",
+        "final-native-checks"
+      ],
+      "metrics": []
+    },
+    {
+      "case_id": "disabled_enforcement_control",
+      "status": "passed",
+      "observation": "Only disposable loop quota enforcement disabled; above-ceiling write succeeded as negative control, then enforcement restored.",
+      "evidence_ids": [
+        "runtime-result",
+        "connected-result",
+        "final-native-checks"
+      ],
+      "metrics": []
+    },
+    {
+      "case_id": "remount_reboot_replace",
+      "status": "not_run",
+      "observation": "Actual GCP reboot remains H02.9-pinned evidence. No new VM reboot in H02.11; guarded replacement/lock-inode check did pass.",
+      "evidence_ids": [],
+      "metrics": []
+    },
+    {
+      "case_id": "one_writer_and_drain",
+      "status": "not_run",
+      "observation": "Second-writer exclusion passed; source-owned application drain/fence integration remains H04.",
+      "evidence_ids": [],
+      "metrics": []
+    },
+    {
+      "case_id": "warm_population_capacity",
+      "status": "not_run",
+      "observation": "H02.10 pins two/five/six measurements. Exact artifact revalidated with current native validator; workloads not rerun.",
+      "evidence_ids": [],
+      "metrics": []
+    },
+    {
+      "case_id": "concurrent_admission_commitments",
+      "status": "unavailable",
+      "observation": "H04 durable serialized admission and owning parent workflow unavailable.",
+      "evidence_ids": [],
+      "metrics": []
+    },
+    {
+      "case_id": "unique_principal_retention",
+      "status": "not_run",
+      "observation": "Distinct fixture principals retained; final H04 onboarding/retirement not exercised.",
+      "evidence_ids": [],
+      "metrics": []
+    },
+    {
+      "case_id": "immutable_child_effect_replay",
+      "status": "not_run",
+      "observation": "Current component replay/receipt tests passed; final native H04 owning parent workflow not exercised.",
+      "evidence_ids": [],
+      "metrics": []
+    },
+    {
+      "case_id": "monotonic_ingress_fences",
+      "status": "not_run",
+      "observation": "Current component fence tests passed; H03/H04 source-owned enable/revoke workflow unavailable.",
+      "evidence_ids": [],
+      "metrics": []
+    },
+    {
+      "case_id": "exact_host_gateway_denial",
+      "status": "not_run",
+      "observation": "H02.9 pins complete gateway/dual-stack/header checks. Current connected firewall-loss containment and real closed projection passed; full gateway suite not repeated.",
+      "evidence_ids": [],
+      "metrics": []
+    },
+    {
+      "case_id": "long_lived_connection_containment",
+      "status": "not_run",
+      "observation": "See H02.9 stream evidence; H03/H04 source revocation remains unavailable.",
+      "evidence_ids": [],
+      "metrics": []
+    },
+    {
+      "case_id": "single_guarded_restart_owner",
+      "status": "not_run",
+      "observation": "Current systemd crash/stop-only/no-restart checks passed; actual reboot remains separately pinned H02.9 evidence.",
+      "evidence_ids": [],
+      "metrics": []
+    },
+    {
+      "case_id": "metadata_and_egress_isolation",
+      "status": "not_run",
+      "observation": "H02.9 pins native TLS/DNS/metadata/egress; unchanged network code covered by current component tests, not repeated native here.",
+      "evidence_ids": [],
+      "metrics": []
+    },
+    {
+      "case_id": "scoped_secret_delivery",
+      "status": "not_run",
+      "observation": "H02.9 scoped IAM/Tunnel evidence retained; H05 object/key isolation is a separate prerequisite.",
+      "evidence_ids": [],
+      "metrics": []
+    }
+  ],
+  "status": "unavailable",
+  "remaining_limits": [
+    "Scoped infrastructure engineering evidence only; no qualified release/admission/invitation or all-store acceptance.",
+    "H02.9 reboot/network and H02.10 capacity retain original pins, not relabelled executions.",
+    "H03 identity/assets, H04 real admission/usage and H05 recovery remain prerequisites."
+  ]
+}

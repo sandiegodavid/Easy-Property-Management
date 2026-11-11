@@ -1,12 +1,16 @@
 # Admin registry, policies and release assignments
 
-[Database schema catalog](../DATABASE_SCHEMA.md) · [Shared conventions](overview.md)
+[Database schema catalog](README.md) · [Shared conventions](overview.md)
 
 Part of the schema master. Proposed hosted tables are design contracts, not claims of implemented schema. Executable definitions belong exclusively under `application/database/`; see [resource ownership](overview.md#required-schema-definition-location).
 
 In this guide: [Pilot 0 Admin database](#pilot-0-admin-database) · [`control_meta` — H02 protected initialization](#control_meta--h02-protected-initialization) · [`storage_policies` — H04 Free policy](#storage_policies--h04-free-policy) · [`qualified_releases` — H02 release qualification](#qualified_releases--h02-release-qualification) · [`component_deployments` — H02 shared Admin; H04 Operator assignments](#component_deployments--h02-shared-admin-h04-operator-assignments) · [`operators` — H03/H04 assignment and desired state](#operators--h03h04-assignment-and-desired-state)
 
 ## Pilot 0 Admin database
+
+The [H02.2 current baseline](../../application/database/admin-migrations/README.md)
+contains all 13 main-Admin tables and local FKs, with exact structural validation
+and separate protected deployment binding. Schema creation populates no authority.
 
 H02 implements the complete Pilot 0 main-Admin structural baseline across this guide,
 [identity](admin-identity.md) and [operations](admin-operations.md), keeping all local

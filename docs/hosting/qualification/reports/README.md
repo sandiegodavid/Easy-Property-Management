@@ -1,7 +1,8 @@
 # Hosting qualification reports
 
-The historical technical records below apply only to their earlier demo topology.
+Earlier-demo technical records apply only to their named historical topology.
 H01 implementation reports record contract work, not fresh-target runtime acceptance.
+Current H02 reports establish only their stated component/native/cloud scope.
 Start with the [MVP acceptance register](../HOSTED_MVP_ACCEPTANCE.md) and
 [current design](../../design/HOSTED_MVP_DESIGN.md). The
 [older demo register](../HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md) explains the historical
@@ -42,3 +43,25 @@ qualification remain H03/H04/H05 delivery gates.
 record the complete local H01 contract preparation result, not a target qualification
 report. H01 contract review acceptance is not asserted; all runtime/native/cloud/
 provider/browser gates remain open for their named owners.
+
+## Infrastructure evidence by topic
+
+Read the [foundation guides](../../foundation/README.md) for current behavior and
+operations. The records below preserve original dates, source/artifact pins, failures
+and scope; their numbered filenames are provenance, not a reading sequence. Earlier
+partial manifests remain historical and never inherit a newer acceptance result.
+
+| Topic | Current guide | Original evidence records |
+| --- | --- | --- |
+| Packaging and launch | [Guide](../../foundation/packaging-and-launch.md) | [Build/install observations](HOSTED_MVP_H02_4_HANDOFF.md), [artifact pins](HOSTED_MVP_H02_4_VALIDATION.json), [protected launch/browser observations](HOSTED_MVP_H02_7_HANDOFF.md), [native installed candidates](HOSTED_MVP_H02_9_VALIDATION.json) |
+| Inventory and commands | [Guide](../../foundation/inventory-and-host-commands.md) | [Input/decision baseline](HOSTED_MVP_H02_1_HANDOFF.md), [structural validation](HOSTED_MVP_H02_2_HANDOFF.md), [schema pins](HOSTED_MVP_H02_2_VALIDATION.json), [effect/transport observations](HOSTED_MVP_H02_3_HANDOFF.md), [effect pins](HOSTED_MVP_H02_3_VALIDATION.json) |
+| Runtime and capacity | [Guide](../../foundation/runtime-and-capacity.md) | [Guarded runtime](HOSTED_MVP_H02_5_HANDOFF.md), [native result](HOSTED_MVP_H02_5_NATIVE.json), [measured workloads](HOSTED_MVP_H02_10_HANDOFF.md), [candidate budget](HOSTED_MVP_H02_10_CAPACITY_PROFILE.json), [measurements](HOSTED_MVP_H02_10_VALIDATION.json) |
+| Networking and access | [Guide](../../foundation/networking-and-access.md) | [Network/secret observations](HOSTED_MVP_H02_6_HANDOFF.md), [network pins](HOSTED_MVP_H02_6_FINAL_VALIDATION.json), [exact GCP/IAM/stream evidence](HOSTED_MVP_H02_9_VALIDATION.json) |
+| Development and host operations | [Guide](../../foundation/development-and-host-operations.md) | [Lab/reboot observations](HOSTED_MVP_H02_8_HANDOFF.md), [lab pins](HOSTED_MVP_H02_8_VALIDATION.json), [host setup/reboot/reset](HOSTED_MVP_H02_9_HANDOFF.md), [host pins/receipts](HOSTED_MVP_H02_9_VALIDATION.json) |
+| Qualification and handoff | [Guide](../../foundation/qualification-and-handoff.md) | [Consolidated checks/limits](HOSTED_MVP_H02_11_HANDOFF.md), [commands/source/validation](HOSTED_MVP_H02_11_VALIDATION.json), [v1 native subset](HOSTED_MVP_H02_11_RUNTIME_SUBSET.json), [v1 final image/all-store unavailable report](HOSTED_MVP_H02_11_IMAGE_ALL_STORES.json) |
+
+The final two proof reports validate in v1 format but retain overall `unavailable`:
+whole-workflow/concurrent admission and final owning resources/assets are missing or
+unrun. Scoped infrastructure delivery grants no qualified release or customer access.
+Complete identity, admission/usage, UI, recovery and final artifact/Pilot 0 gates before
+invitations. The [acceptance register](../HOSTED_MVP_ACCEPTANCE.md) owns those gates.

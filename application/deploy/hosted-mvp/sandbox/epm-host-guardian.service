@@ -1,0 +1,31 @@
+[Unit]
+Description=EPM protected runtime guardian
+Requires=docker.service
+After=docker.service local-fs.target
+Before=shutdown.target
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=root
+Group=root
+UMask=0077
+ExecStart=/opt/epm/agent/bin/python -B -m app.modules.host_agent.infrastructure.supervisor --registry /var/lib/epm-host/stop-targets
+ExecStopPost=/opt/epm/agent/bin/python -B -m app.modules.host_agent.infrastructure.supervisor --registry /var/lib/epm-host/stop-targets --contain-all
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=180
+KillMode=control-group
+NoNewPrivileges=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/epm-host/stop-targets
+PrivateTmp=yes
+LimitCORE=0
+LimitNOFILE=1024
+TasksMax=32
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

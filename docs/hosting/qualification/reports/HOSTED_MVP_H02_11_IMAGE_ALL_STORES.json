@@ -1,0 +1,140 @@
+{
+  "version": 1,
+  "report_id": "808d0fd0-e1ef-47d1-a66a-080f100e405c",
+  "proof": "image_schema",
+  "specification_sha256": "399c40bdad17facbd79a6a01b7d7bcfd0b9d17f5a13d2e5730b51736a8610c31",
+  "specification_revision": 1,
+  "owner": "H02",
+  "source_commit": "88140223ca46fac469438daa1ef68d30b5e8d55c",
+  "source_dirty": false,
+  "recorded_at": 1794604827908,
+  "started_at": null,
+  "finished_at": null,
+  "environment": {
+    "level": "docker_linux",
+    "os": "linux",
+    "architecture": "amd64",
+    "machine_ref": "gcp_epm_h02_host",
+    "kernel": "7.0.0-1017-gcp",
+    "filesystem": null,
+    "container_runtime": "docker_29.9.3",
+    "provider_configuration_ref": "h02_11_target_pins"
+  },
+  "invocation": null,
+  "pins": [
+    {
+      "reference": "h02_11_source",
+      "kind": "source",
+      "state": "pinned",
+      "sha256": "a75ee26ae89a0cdf70fd81755495cb51b0a5f612c15990d5bf17624080466f7b",
+      "reason": null
+    },
+    {
+      "reference": "h02_11_tool",
+      "kind": "tool",
+      "state": "pinned",
+      "sha256": "c8482bde6a9bf72d2d8ae2e0cfb37c620f7ecf3d42c21f15ea6d0376edf6abaa",
+      "reason": null
+    },
+    {
+      "reference": "h02_11_image",
+      "kind": "image",
+      "state": "unavailable",
+      "sha256": null,
+      "reason": "Final later-owned resources/assets and aggregate artifacts unavailable."
+    },
+    {
+      "reference": "h02_11_schema",
+      "kind": "schema",
+      "state": "unavailable",
+      "sha256": null,
+      "reason": "Final later-owned resources/assets and aggregate artifacts unavailable."
+    },
+    {
+      "reference": "h02_11_workload",
+      "kind": "workload",
+      "state": "pinned",
+      "sha256": "8699df6603a89cd5035d07e454e455252f60875d2e74262a28d59613444a83f5",
+      "reason": null
+    },
+    {
+      "reference": "h02_11_configuration",
+      "kind": "configuration",
+      "state": "pinned",
+      "sha256": "b4a4f93ba6e09a49c86182e579271fed078de6f714753b62ce01b6c2e2cce129",
+      "reason": null
+    }
+  ],
+  "evidence": [],
+  "cases": [
+    {
+      "case_id": "build_separate_artifacts",
+      "status": "unavailable",
+      "observation": "Final six-store artifacts require H03 hosted-access and H05 recovery/admin-recovery resources and final assets. Earlier H02 candidate/component evidence remains separate.",
+      "evidence_ids": [],
+      "metrics": []
+    },
+    {
+      "case_id": "inventory_resources",
+      "status": "unavailable",
+      "observation": "Final six-store artifacts require H03 hosted-access and H05 recovery/admin-recovery resources and final assets. Earlier H02 candidate/component evidence remains separate.",
+      "evidence_ids": [],
+      "metrics": []
+    },
+    {
+      "case_id": "fresh_initialize_all_stores",
+      "status": "unavailable",
+      "observation": "Final six-store artifacts require H03 hosted-access and H05 recovery/admin-recovery resources and final assets. Earlier H02 candidate/component evidence remains separate.",
+      "evidence_ids": [],
+      "metrics": []
+    },
+    {
+      "case_id": "existing_store_read_only",
+      "status": "unavailable",
+      "observation": "Final six-store artifacts require H03 hosted-access and H05 recovery/admin-recovery resources and final assets. Earlier H02 candidate/component evidence remains separate.",
+      "evidence_ids": [],
+      "metrics": []
+    },
+    {
+      "case_id": "missing_wrong_resources",
+      "status": "unavailable",
+      "observation": "Final six-store artifacts require H03 hosted-access and H05 recovery/admin-recovery resources and final assets. Earlier H02 candidate/component evidence remains separate.",
+      "evidence_ids": [],
+      "metrics": []
+    },
+    {
+      "case_id": "wrong_component_manifest",
+      "status": "unavailable",
+      "observation": "Final six-store artifacts require H03 hosted-access and H05 recovery/admin-recovery resources and final assets. Earlier H02 candidate/component evidence remains separate.",
+      "evidence_ids": [],
+      "metrics": []
+    },
+    {
+      "case_id": "partial_initializer",
+      "status": "unavailable",
+      "observation": "Final six-store artifacts require H03 hosted-access and H05 recovery/admin-recovery resources and final assets. Earlier H02 candidate/component evidence remains separate.",
+      "evidence_ids": [],
+      "metrics": []
+    },
+    {
+      "case_id": "asset_secret_exclusion",
+      "status": "unavailable",
+      "observation": "Final six-store artifacts require H03 hosted-access and H05 recovery/admin-recovery resources and final assets. Earlier H02 candidate/component evidence remains separate.",
+      "evidence_ids": [],
+      "metrics": []
+    },
+    {
+      "case_id": "installed_without_checkout",
+      "status": "unavailable",
+      "observation": "Final six-store artifacts require H03 hosted-access and H05 recovery/admin-recovery resources and final assets. Earlier H02 candidate/component evidence remains separate.",
+      "evidence_ids": [],
+      "metrics": []
+    }
+  ],
+  "status": "unavailable",
+  "remaining_limits": [
+    "Scoped infrastructure engineering evidence only; no qualified release/admission/invitation or all-store acceptance.",
+    "H02.9 reboot/network and H02.10 capacity retain original pins, not relabelled executions.",
+    "H03 identity/assets, H04 real admission/usage and H05 recovery remain prerequisites."
+  ]
+}

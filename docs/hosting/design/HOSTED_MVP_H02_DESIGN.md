@@ -1,15 +1,19 @@
 # HOSTED-001 H02 — Container, storage and gateway foundation
 
-[Hosted design index](HOSTED_MVP_DESIGN.md) · [Ordered delivery plan](#h02-implementation-plan) · [Schema catalog](../../DATABASE_SCHEMA.md)
+[Hosted design index](HOSTED_MVP_DESIGN.md) · [Topic guides](#topic-guides) · [Schema catalog](../../database/README.md)
 
-Status: design decisions accepted November 11, 2026; implementation planned. No code,
-VM changes, cloud provisioning or new qualification performed by this update. Host
-inputs and measured limits still require qualification before activation. Assessment baseline:
-`hosted_mvp` at `240f05de`; pin the actual implementation-start revision again.
+Status: the infrastructure subset is delivered within its recorded component,
+native Linux/Docker and GCP qualification scopes. Final hosted-release promotion,
+managed identity, real admission/logical metering and recovery remain unavailable
+until their owners complete the [remaining gates](../foundation/qualification-and-handoff.md#remaining-delivery).
+Design decisions D1–D13 were accepted November 11, 2026. Qualification observations
+are dated and source-pinned; they are not a current live-host inventory or an access grant.
 
-Read in order: scope and dependencies → runtime boundaries → persistence and effects
-→ qualification → resolved decisions → ordered implementation. H01 contracts are inputs, not proof that
-these infrastructure features already exist.
+Use this document for accepted architecture and boundaries. The
+[foundation guides](../foundation/README.md) consolidate implementation, commands,
+measured limits and evidence by topic. Schema dictionaries remain column authorities;
+executable runbooks remain command authorities. The earlier ordered plan is
+[archived](../archive/HOSTED_MVP_H02_PLANNING_2026-11-13.md), not a required reading path.
 
 ## Scope, dependencies and completion
 
@@ -24,15 +28,15 @@ release or every six-store packaging case passes. H03–H05 must finish their ow
 schemas/assets and requalify the resulting images before H06 admission. Only synthetic
 identities/workspaces are permitted during H02. Customer ingress stays held closed.
 
-| Current implementation | Reuse or required change |
+| Implementation source | Boundary |
 | --- | --- |
-| [H01 design/contracts](HOSTED_MVP_H01_DESIGN.md), `app.platform.hosted_contracts`, `modules/host_agent/application/contracts.py` | Reuse values, manifests, scope/hash/outcome contracts. Add narrowly identified ingress/fence/receipt contracts below; do not treat type validation as live authority. |
-| [Schema scaffolds](../../../application/database/README.md), `app.platform.schema_resources` | All five hosted sets reject initialization. Inventory needs a real baseline/runner; H02 implements the complete main-Admin structural baseline under D1. Missing access/recovery resources stay explicitly unavailable until their owners deliver them. |
-| [Selective quota reuse](../qualification/HOSTED_PROJECT_QUOTA_REUSE.md) | Reuse ext4 primitives and adversarial workloads. Three imported files differ from historical passing pins; new native and Docker/GCP proofs are mandatory. |
+| [H01 design/contracts](HOSTED_MVP_H01_DESIGN.md), `app.platform.hosted_contracts`, `modules/host_agent/application/contracts.py` | Shared values, manifests and scope/hash/outcome contracts support the typed ingress/fence/receipt boundary; type validation is not live authority. |
+| [Schema resources](../../../application/database/README.md), `app.platform.schema_resources` | The owning resources implement the complete main-Admin structural baseline under D1 and the inventory baseline/runner. The other three hosted sets still reject initialization. Missing access/recovery resources stay explicitly unavailable until their owners deliver them. |
+| [Selective quota reuse](../qualification/HOSTED_PROJECT_QUOTA_REUSE.md) | Ext4 primitives and adversarial workloads require new proof where imported pins differ; current scoped native/Docker/GCP results are indexed by topic. |
 | [Old hosted composition](../../../application/apps/server/app/bootstrap/hosted_access.py), [configuration](../../../application/apps/server/app/modules/hosted_access/application/configuration.py) | Old expiry, `hosted_demo`, Cloudflare Access identity and loop-image assumptions cannot serve as the fresh composition. Do not expose local routes by relaxing transport middleware. |
 | [Workspace runtime](../../../application/apps/server/app/modules/workspace/application/runtime.py) | Reuse writer-lock semantics; provide a protected stable lock location for hosted use. Its current parent-directory lock must not become an unbounded or changing path across business-tree replacement. |
-| [Schema staging](../../../application/scripts/stage_schema_resources.py), [installation verification](../../../application/scripts/verify_installation.py) | Currently business-only. Extend declared resource discovery/verification for image builds; preserve existing local wheel installation behavior. |
-| [Proof tooling](../../../application/apps/server/app/platform/hosted_proofs/models.py) | Validators exist; executors are unavailable. Implement only H02 drivers, preserving unavailable outcomes for other owners and missing prerequisites. |
+| [Schema staging](../../../application/scripts/stage_schema_resources.py), [installation verification](../../../application/scripts/verify_installation.py) | Explicit per-component staging/verification and installed OCI/bundle checks; default local wheel installation remains business-only. |
+| [Proof tooling](../../../application/apps/server/app/platform/hosted_proofs/models.py) | Strict report validators and explicit scoped build/native drivers exist. The generic executor and missing owning prerequisites remain unavailable. |
 
 H01 review findings are recorded resolved in the current review file; H02 must retain
 those regression checks. That does not qualify host isolation or authorize live admission.
@@ -42,8 +46,8 @@ those regression checks. That does not qualify host isolation or authorize live 
 Accepted qualification target: one standard, non-Spot Compute Engine VM, Ubuntu 24.04
 LTS, Linux amd64, Docker Engine and cgroup v2; start measurement with 2 vCPUs/8 GiB,
 a 20-GiB boot disk and a dedicated 50-GiB persistent balanced ext4 data disk. Disk
-sizes are starting test inputs, subject to image/log/reserve measurements. This is a test candidate, not an
-assertion that five warm operators fit. Use the region/zone/domain/account selected
+sizes are starting test inputs, subject to image/log/reserve measurements. Measured results are recorded in the runtime/capacity guide, not an
+operator entitlement or permission to admit a fixed cohort. Use the region/zone/domain/account selected
 in protected setup; record exact image, kernel, packages, architecture and gross cost.
 Do not hard-code a prior demo VM/project. Never install from a moving image tag alone.
 
@@ -158,6 +162,11 @@ fault workload. The profile records rounded kernel ceilings, all reservations an
 measurements; Free logical storage remains 50,000,000 bytes under H04 accounting.
 Kernel quota rounding, operational headroom and downgrade overage are distinct from
 advertised entitlement. Never substitute a post-write `du` scan for enforcement.
+Production tier fit additionally requires [measured per-tier sizing](mvp/subscriptions-storage-and-runtime.md#per-tier-physical-storage-sizing-acceptance):
+allocated-byte/inode peaks at full logical allowance, justified margins and independent
+exhaustion/recovery checks at the proposed real limits. The existing synthetic trial
+constants do not satisfy that gate; Free qualification remains with admission/recovery
+before Pilot 0, and paid qualification precedes paid-tier activation.
 
 ## Network, IAM and external access enforcement
 
@@ -209,6 +218,10 @@ source/identity proof before removing the deny. Restart reconstructs the last ve
 protected projection; missing/corrupt/unverifiable authority stays closed. A temporary
 Admin outage alone does not discard a valid existing projection, grant new access or
 relax a deny. The privileged host remains trusted; no absolute anti-compromise claim.
+
+Current network/service behavior, native platform evidence and remaining identity
+boundaries are consolidated in [Networking and access](../foundation/networking-and-access.md).
+Dated platform results retain their original pins; no network proof authorizes customer ingress.
 
 ## Persistence, operation identities and initialization
 
@@ -326,40 +339,40 @@ work explicitly deferred to them.
 | D12 | Keep source and projection refinements with their owners. | H02 defines ingress/resource effects. H03/H04 implement missing applied-policy/rebind ports, safe release observations and external-deny acknowledgments. Projections are informational; operator scheduling schemas/APIs remain H10. |
 | D13 | Qualify protected bootstrap/IAM/egress and secret boundaries. | H02 owns cloud/domain inputs, Tunnel custody, metadata isolation and scoped delivery; H03 owns identity and H05 owns off-host key/object scopes. No shared platform credential, production test bypass or customer admission before relevant proof. |
 
-## H02 implementation plan
+## Topic guides
 
-Status: planned, not implemented. The design above defines boundaries, schema
-impacts, security and validation. Implement the [accepted decisions](#resolved-design-decisions);
-remaining environment measurements are proof gates, not unresolved architecture choices. This plan does not change feature backlog
-scope or authorize VM changes, deployment, real data or live access.
+<a id="h02-implementation-plan"></a>
 
-Execute the following work units sequentially. Each should leave a reviewable change
-with focused evidence; they remain parts of HOSTED-001 H02, not new backlog items.
+| Topic | Current implementation and operating reference |
+| --- | --- |
+| Artifacts, resources and startup | [Packaging and launch](../foundation/packaging-and-launch.md): separate candidates, Linux dependency closure, installed verification, protected bindings and safe unavailable UI. |
+| Persistence and restricted dispatch | [Inventory and host commands](../foundation/inventory-and-host-commands.md): owning baselines, initialization, retained UID/project allocation, immutable parent/child receipts, short transactions and peer-checked transport. |
+| Private runtime and sizing | [Runtime and capacity](../foundation/runtime-and-capacity.md): project quotas, stable writer, sandbox, independent stop-only containment, measured workloads, reservations and logical-versus-physical limits. |
+| Network and secret boundaries | [Networking and access](../foundation/networking-and-access.md): exact-host Caddy/Tunnel, dual-stack Docker forwarding, controlled egress, scoped IAM, protected credentials and closed service reconstruction. |
+| Build, labs and host operation | [Development and host operations](../foundation/development-and-host-operations.md): Docker Desktop, retained Linux VMs, source custody, safe GCP setup/reboot and retained target details. |
+| Proof and remaining delivery | [Qualification and handoff](../foundation/qualification-and-handoff.md): scoped validation matrix, retained failures, complete-report limitations and identity/admission/recovery ownership. |
 
-| Order | Implementation work unit | Concrete handoff and validation |
-| --- | --- | --- |
-| H02.1 | Pin the implementation baseline and translate accepted D1–D13 into exact versioned inputs. Verify the documented main-Admin closure, candidate acceptance, UID/ingress/receipt contracts and single restart owner. Select protected GCP/domain inputs and exact image/tool versions. | Use the updated dictionary and refine executable contract details/tests before DDL or effects; keep documentation/resources aligned. Record a protected host-build/capacity input manifest, source pins and proof specification revisions. No candidate becomes qualified merely because a build succeeded. |
-| H02.2 | Implement owning inventory schema/resources, structural validation and initializer; implement the complete main-Admin structural baseline under D1, without later application behavior. | Work under `application/database/host-inventory-migrations/` and `admin-migrations/`. Test FK/unique/check/index rules, fresh init, read-only matching reinit, wrong/partial/missing stores and rollback. Leave H03–H05 source/recovery behavior and population with those owners; no implicit operator/session/seed. |
-| H02.3 | Refine typed host commands and implement the narrow privileged application/adapter boundary. Add original-parent/child-effect identities, immutable requests, persisted UID/project allocation and monotonic ingress fences. | Owning code under `modules/host_agent/`, consuming schema resources and imported quota primitives. Protected Unix socket peer credentials and admitted-intent checks; no shell/path/image-tag arguments. Test duplicate/changed-key commands, fresh stale requests, crash/unknown effects and receipt/audit rollback; no external work under a writer transaction. |
-| H02.4 | Build separate pinned Admin/Operator OCI candidates and host-agent bundle; implement declared per-component resource staging and installation verification. | New hosted build/deployment resources under `application/deploy/hosted-mvp/`, reusing wheel/frontend tooling without changing local defaults. Verify asset/secret exclusion, actual digests, installed-without-checkout behavior and declared missing schemas. Do not fabricate Admin UI or final qualification for H03–H05 capabilities. |
-| H02.5 | Integrate private ext4 project trees, host UID ownership, bounded writable paths, stable writer lock and non-root container sandbox. Implement the accepted guarded lifecycle/restart policy. | Two synthetic operators, three bounded tree kinds each, read-only root, memory/CPU/PID/tmpfs/log limits. Reuse and re-prove combined ioctl/syscall protections. Test byte/inode/deleted-open/WAL failures, quota-off negative control, cross-UID/mount denial, no second writer and no unsafe automatic start. |
-| H02.6 | Implement exact-host gateway/Tunnel integration, protected ingress projection/apply/inspect, Docker forwarding isolation, outbound/metadata restrictions and scoped secret delivery. | Use the accepted Caddy/Cloudflare boundary and registered IDs. Unknown hosts deny; known held hosts never reach business routes. Test direct-origin/forged-header/IPv4/IPv6/private-socket/sibling access, durable deny after restart, config-load failure and long-lived connection containment. Operator field changes cannot raise quotas or remove denial. |
-| H02.7 | Wire explicit fresh hosted launch/health composition and minimal safe unavailable/maintenance UI; preserve production local Operator launch. | Hosted identity/path binding and lock location come only from protected config. No old expiry/loop-image fallback or test adapter in production. Test local launch/transport regressions, held ingress, safe status/freshness, no internal details, bounded retry/no command replay and accessible themes/narrow layout for any rendered page. H03/H04 still own actual login/Admin/operator status workflows. |
-| H02.8 | Deliver reproducible Mac Docker development and isolated native qualification procedures/drivers. | Use synthetic stores and explicit development origins/adapters. Preserve Lima baseline before changes; execute native current-source and actual Linux-Docker sandbox/reboot proofs in disposable labs. Component/Desktop passes cannot stand in for native evidence. Retain failures and distinct platform pins. |
-| H02.9 | Implement and rehearse fresh GCP/Cloudflare host setup on a dedicated qualification target. | Reviewed empty-device checks, supported startup/cloud-init, protected secrets/IAM, data-disk retention and firewall verification. Re-run exact amd64 kernel/filesystem/Docker checks, container replacement and actual VM reboot. Do not mutate an older demo host or format an existing data volume through Add operator. |
-| H02.10 | Measure warm-runtime/storage/IO and fault headroom; publish a versioned candidate capacity profile. | Start with two isolated operators, then target at least five warm test runtimes and an extra admission when measured capacity permits. Include shared components, retained/unknown commitments, logging/images, control/scratch, backup staging and future H05 restore reserves. No hard-coded cohort cap; unknown or insufficient capacity rejects admission. H04 owns real serialized Admin admission tests and logical metering. |
-| H02.11 | Record scoped acceptance and hand off to H03–H05. | Run focused host/schema/packaging/network/runtime and changed-boundary regressions, changed-file Ruff check/format, and lint/format/typecheck if frontend changes. Preserve native/cloud reports, exact commands, failures, runbooks and remaining gates in the acceptance register. Complete aggregate image/all-store proofs and full promotion only when owning later resources exist; no H06 invitation from H02 evidence alone. |
+## Completion boundary
 
-The host setup runbook must separate actions an authorized human performs (cloud
-account/domain/credentials and destructive empty-device confirmation) from reproducible
-tooling. Qualification commands operate only on explicit disposable targets. Keep
-production credentials, data paths and raw failure captures outside Git.
+The [acceptance register](../qualification/HOSTED_MVP_ACCEPTANCE.md#h02-consolidated-infrastructure-acceptance)
+records delivered infrastructure evidence and open release gates. The foundation has
+current-source native checks, earlier exactly pinned installed/reboot/network proofs,
+measured two/five/six-runtime candidate capacity and a developer/operations handoff.
+The qualification VM/disks are stopped and retained; positive business ingress and
+operator admission remain disabled.
 
-H02 completion means the agreed infrastructure subset has current-source/native/GCP
-evidence and a usable developer/operations handoff. It does not assert that login,
-Admin provisioning UI, logical quota accounting, encrypted recovery or scheduling
-already works. Those later owners must keep the H02 boundaries and requalify changed
-artifacts rather than inherit a pass from earlier candidate images.
+Whole-runtime and final image/all-store reports retain overall unavailable status
+where later owning resources/workflows are missing or unrun. That is the accepted
+infrastructure-versus-release boundary, not permission to invent schema versions,
+qualified release rows or authority. Managed identity, Admin provisioning UI, logical
+usage, encrypted recovery and scheduling do not follow from infrastructure delivery.
+Final owners must rebuild and requalify their changed artifacts before Pilot 0 invitations.
+
+Host setup distinguishes protected human choices (account/domain/credentials and
+explicit blank-device confirmation) from reproducible tooling. Qualification runs
+only against explicit disposable targets. Keep credentials, business data paths and
+raw failures outside Git. The separately approved completed old-host reset is
+historical evidence, not an ordinary setup or Add operator operation.
 
 ## Primary-source constraints checked
 
@@ -372,6 +385,6 @@ These sources constrain implementation choices; they do not certify this deploym
 - [Cloudflare Tunnel configuration](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/local-management/configuration-file/): a Tunnel ingress/catch-all configuration does not replace application host registration and access authority.
 - [GCE metadata](https://docs.cloud.google.com/compute/docs/metadata/predefined-metadata-keys): the host's metadata/identity boundary must be isolated from operator workloads.
 
-No executable schema, command implementation, frontend or infrastructure configuration
-is added by this design. The schema master contains the accepted inventory refinements and main-Admin delivery
-ownership; this document does not duplicate full column dictionaries.
+This design owns architectural boundaries and accepted decisions. The topic guides
+link implemented code, executable runbooks and exact evidence; the schema catalog
+owns field definitions. Documentation edits do not change runtime or deployment state.

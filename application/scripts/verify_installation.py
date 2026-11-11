@@ -4,9 +4,16 @@ import argparse
 from importlib import import_module
 from importlib.metadata import version
 from pathlib import Path
+import sys
 
 
-def verify() -> None:
+def verify(*, component: str | None = None) -> None:
+    if component is not None:
+        sys.dont_write_bytecode = True
+        runtime = import_module("app.hosted_candidates.runtime")
+        print(runtime.inspect(component))
+        print("Unqualified candidate inventory verified; hosted runtime remains unavailable.")
+        return
     package = import_module("app")
     root = Path(package.__file__).resolve().parent
     if not (root / "web_build/index.html").is_file():
@@ -26,9 +33,10 @@ def verify() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.parse_args()
+    parser.add_argument("--component", choices=("admin", "operator", "host_agent"))
+    args = parser.parse_args()
     try:
-        verify()
+        verify(component=args.component)
     except Exception as error:
         parser.exit(1, f"Installation verification failed: {error}\n")
 

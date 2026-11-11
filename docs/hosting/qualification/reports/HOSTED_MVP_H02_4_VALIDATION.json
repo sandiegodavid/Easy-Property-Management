@@ -1,0 +1,482 @@
+{
+  "version": 1,
+  "slice": "H02.4",
+  "date": "2026-11-11",
+  "scope": "component_packaging_and_docker_desktop_amd64_emulation",
+  "baseline_commit": "195a5fe668e2a6ecfdf1188698664dc4390556e5",
+  "continuation_commit": "45819c90eb23eaee1c7a59c3f638956d1c4e6214",
+  "branch": "hosted_mvp",
+  "source_dirty": true,
+  "acceptance": "infrastructure_candidate",
+  "qualified": false,
+  "environment": {
+    "host": "macOS arm64",
+    "docker_desktop": "4.99.0 (245822)",
+    "engine": "29.9.3",
+    "kernel": "7.0.14-linuxkit",
+    "containerd": "2.4.2",
+    "runc": "1.5.2",
+    "engine_architecture": "arm64",
+    "candidate_platform": "linux/amd64",
+    "target_python": "3.14.10",
+    "uv": "0.12.23",
+    "setuptools": "84.0.0",
+    "node": "26.9.0",
+    "npm": "11.19.1",
+    "vite": "8.3.4",
+    "ruff": "0.16.10"
+  },
+  "base_image": "docker.io/library/python@sha256:1faf2343e747208b2a36e5f2b5ff908ec3b2d0078a6a7bfe73b535698fe83909",
+  "dependency_lock_sha256": "e273cfbf1b3c1901c8e40c012fe44797152eef76b7efcdca805f8e481259706d",
+  "linux_resolution": {
+    "version": 1,
+    "system": "Linux",
+    "machine": "x86_64",
+    "python": "3.14.10",
+    "requirements": [
+      "alembic>=1.13,<2.0",
+      "cryptography>=45,<47",
+      "fastapi>=0.115,<1.0",
+      "python-multipart>=0.0.9,<1.0",
+      "keyring>=25,<27",
+      "pydantic>=2.7,<3.0",
+      "SQLAlchemy>=2.0,<3.0",
+      "uvicorn[standard]>=0.30,<1.0"
+    ],
+    "project_sha256": "1bd100e0c1905a84e8a7760fd1a24f5cee56796aeb9aa44c13b612f7ad21cd1c",
+    "distributions": [
+      {
+        "name": "alembic",
+        "version": "1.20.1",
+        "filename": "alembic-1.20.1-py3-none-any.whl",
+        "sha256": "9970712cfb81ea26c8658d378aaa5b8f6ff9146e5bb111d70497c164016cf598"
+      },
+      {
+        "name": "annotated-doc",
+        "version": "0.0.6",
+        "filename": "annotated_doc-0.0.6-py3-none-any.whl",
+        "sha256": "361ca0950cc7082f53fa69e9328409f40a62c61e57e0a47e1825a08078a58a53"
+      },
+      {
+        "name": "annotated-types",
+        "version": "0.8.0",
+        "filename": "annotated_types-0.8.0-py3-none-any.whl",
+        "sha256": "f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0"
+      },
+      {
+        "name": "anyio",
+        "version": "4.16.0",
+        "filename": "anyio-4.16.0-py3-none-any.whl",
+        "sha256": "c66ae634e0b8228396b801741beb3294326d4b6102f7bba4041c0dfb58c29026"
+      },
+      {
+        "name": "cffi",
+        "version": "2.1.1",
+        "filename": "cffi-2.1.1-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+        "sha256": "b0431303acaea1089ad4b3e9ce4e6518193def1118d4073ca848635ee4ea2e96"
+      },
+      {
+        "name": "click",
+        "version": "8.5.1",
+        "filename": "click-8.5.1-py3-none-any.whl",
+        "sha256": "8bb5376d2006950386f8c6427613334a2acadc5f559cb80e638d00b4df957e37"
+      },
+      {
+        "name": "cryptography",
+        "version": "46.0.7",
+        "filename": "cryptography-46.0.7-cp311-abi3-manylinux_2_34_x86_64.whl",
+        "sha256": "42a1e5f98abb6391717978baf9f90dc28a743b7d9be7f0751a6f56a75d14065b"
+      },
+      {
+        "name": "fastapi",
+        "version": "0.162.4",
+        "filename": "fastapi-0.162.4-py3-none-any.whl",
+        "sha256": "f093bc306d3958278d30ffd14f3834ca3d9b144fbb898ab5c9b652cf6e75f869"
+      },
+      {
+        "name": "h11",
+        "version": "0.16.0",
+        "filename": "h11-0.16.0-py3-none-any.whl",
+        "sha256": "63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86"
+      },
+      {
+        "name": "httptools",
+        "version": "0.9.0",
+        "filename": "httptools-0.9.0-cp314-cp314-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl",
+        "sha256": "18d800aaa2d6bff7d889df810d1b19a5fde72b1f6c0ca96e8d9f28a692fe5460"
+      },
+      {
+        "name": "idna",
+        "version": "3.20",
+        "filename": "idna-3.20-py3-none-any.whl",
+        "sha256": "ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c"
+      },
+      {
+        "name": "jaraco.classes",
+        "version": "3.4.0",
+        "filename": "jaraco.classes-3.4.0-py3-none-any.whl",
+        "sha256": "f662826b6bed8cace05e7ff873ce0f9283b5c924470fe664fff1c2f00f581790"
+      },
+      {
+        "name": "jaraco.context",
+        "version": "6.1.2",
+        "filename": "jaraco_context-6.1.2-py3-none-any.whl",
+        "sha256": "bf8150b79a2d5d91ae48629d8b427a8f7ba0e1097dd6202a9059f29a36379535"
+      },
+      {
+        "name": "jaraco.functools",
+        "version": "4.6.0",
+        "filename": "jaraco_functools-4.6.0-py3-none-any.whl",
+        "sha256": "99e3dc0060c5cbe8fcd1cdb36258e2a65ca40f1566b2033b12abb1bb44dd3c30"
+      },
+      {
+        "name": "jeepney",
+        "version": "0.9.0",
+        "filename": "jeepney-0.9.0-py3-none-any.whl",
+        "sha256": "97e5714520c16fc0a45695e5365a2e11b81ea79bba796e26f9f1d178cb182683"
+      },
+      {
+        "name": "keyring",
+        "version": "25.7.0",
+        "filename": "keyring-25.7.0-py3-none-any.whl",
+        "sha256": "be4a0b195f149690c166e850609a477c532ddbfbaed96a404d4e43f8d5e2689f"
+      },
+      {
+        "name": "Mako",
+        "version": "1.4.3",
+        "filename": "mako-1.4.3-py3-none-any.whl",
+        "sha256": "723296007c870bfd6b3f0c3230dba7198096e5269297ebf5e4eff9e7ffa39d4f"
+      },
+      {
+        "name": "MarkupSafe",
+        "version": "3.0.4",
+        "filename": "markupsafe-3.0.4-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+        "sha256": "a8e9f292fcda89b324f2f5c91d13f1424a153e40fc2756f38ee23b15835ff300"
+      },
+      {
+        "name": "more-itertools",
+        "version": "11.2.1",
+        "filename": "more_itertools-11.2.1-py3-none-any.whl",
+        "sha256": "35a7377edd1dd6608dcb2cdf534ded55ea32d49448875ad042cd3f879fb1ded0"
+      },
+      {
+        "name": "opentelemetry-api",
+        "version": "1.45.2",
+        "filename": "opentelemetry_api-1.45.2-py3-none-any.whl",
+        "sha256": "2cbd737377e710ee740d261c94e93fa0f08e6d037c18f17513cc0a2d94479a34"
+      },
+      {
+        "name": "pycparser",
+        "version": "3.12",
+        "filename": "pycparser-3.12-py3-none-any.whl",
+        "sha256": "a076f3f489b39b43ed13563a1dafe42447445bec2e294154ec5c57fcdda4c85e"
+      },
+      {
+        "name": "pydantic",
+        "version": "2.14.3",
+        "filename": "pydantic-2.14.3-py3-none-any.whl",
+        "sha256": "3f7b347782ab7e4cf4c798496ae3a82787d9f21ec12676a9c564355eeef8daa8"
+      },
+      {
+        "name": "pydantic_core",
+        "version": "2.50.4",
+        "filename": "pydantic_core-2.50.4-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+        "sha256": "f1d62fb172db35c6478c9323da34ff37d1f3d37d7d44337a9d94ba8c583e5730"
+      },
+      {
+        "name": "python-dotenv",
+        "version": "1.2.4",
+        "filename": "python_dotenv-1.2.4-py3-none-any.whl",
+        "sha256": "42269a8a5b3fd54ffa6f3d84b18abed50064717576b4ecf03dc4a55d8aa04fdc"
+      },
+      {
+        "name": "python-multipart",
+        "version": "0.0.33",
+        "filename": "python_multipart-0.0.33-py3-none-any.whl",
+        "sha256": "8f16c07b36add9da6b2ee87d3efcaf0a45a6de9c3d0a5dd94e9ccf7675a7bc45"
+      },
+      {
+        "name": "PyYAML",
+        "version": "6.0.3",
+        "filename": "pyyaml-6.0.3-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+        "sha256": "c458b6d084f9b935061bc36216e8a69a7e293a2f1e68bf956dcd9e6cbcd143f5"
+      },
+      {
+        "name": "SecretStorage",
+        "version": "3.5.0",
+        "filename": "secretstorage-3.5.0-py3-none-any.whl",
+        "sha256": "0ce65888c0725fcb2c5bc0fdb8e5438eece02c523557ea40ce0703c266248137"
+      },
+      {
+        "name": "SQLAlchemy",
+        "version": "2.1.8",
+        "filename": "sqlalchemy-2.1.8-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+        "sha256": "9587623885c13b7c53354fa39a5edc7cf5388dec708e4e6d04e7b6868941a2c6"
+      },
+      {
+        "name": "starlette",
+        "version": "1.10.0",
+        "filename": "starlette-1.10.0-py3-none-any.whl",
+        "sha256": "478c0ab3b4ced6e82719849c118fa406f0278a3499c1a898cd15cd31bdc38ce4"
+      },
+      {
+        "name": "typing_extensions",
+        "version": "4.16.0",
+        "filename": "typing_extensions-4.16.0-py3-none-any.whl",
+        "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8"
+      },
+      {
+        "name": "typing-inspection",
+        "version": "0.4.5",
+        "filename": "typing_inspection-0.4.5-py3-none-any.whl",
+        "sha256": "bc210535442b39e1bf2805e0c7a17dfd6a4ace760c84c7f7d16245d23a6b1c39"
+      },
+      {
+        "name": "uvicorn",
+        "version": "0.54.0",
+        "filename": "uvicorn-0.54.0-py3-none-any.whl",
+        "sha256": "505bdb0f318731d45f1f712071fc781a8981f6847a31c902c9f5e652d4f67faf"
+      },
+      {
+        "name": "uvloop",
+        "version": "0.23.0",
+        "filename": "uvloop-0.23.0-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+        "sha256": "31e0cf90bc8fd88784f6802cdba968a51fb1aec1cc3feec74d862b2d371d1330"
+      },
+      {
+        "name": "watchfiles",
+        "version": "1.3.0",
+        "filename": "watchfiles-1.3.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+        "sha256": "b5768b49e426fd5b550b012c866db347cdf15c398ef98dc557b6e6b72fa74cd1"
+      },
+      {
+        "name": "websockets",
+        "version": "17.4",
+        "filename": "websockets-17.4-cp314-cp314-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl",
+        "sha256": "ef03fb4b3685df0ed9dc6a074a090f030345cad2c23c61818da3e08e693a9caa"
+      }
+    ]
+  },
+  "components": {
+    "admin": {
+      "version": 1,
+      "component": "admin",
+      "architecture": "amd64",
+      "source_sha256": "cbe08962edc0ff6b0e1a4db9976d57adcd608c5fcb2550909ab1ff69b72a4ddf",
+      "dependency_lock_sha256": "e273cfbf1b3c1901c8e40c012fe44797152eef76b7efcdca805f8e481259706d",
+      "wheel_sha256": "0d2b9f993c4e71ff5a570e497e7871a232dd3dceb9b0612f224b5b24547d1f29",
+      "schemas": [
+        {
+          "store": "admin",
+          "state": "implemented",
+          "revision": "admin_0001_initial"
+        },
+        {
+          "store": "admin-recovery",
+          "state": "unavailable",
+          "revision": null
+        }
+      ],
+      "ui": "unavailable",
+      "acceptance": "infrastructure_candidate",
+      "runtime": "unavailable",
+      "manifest_sha256": "2a74758f0418377f0fe95ca0355c9b6c7c54ec3dbff5f3b5b28c2f35ebb97add",
+      "file_count": 586,
+      "probe": {
+        "candidate": {
+          "acceptance": "infrastructure_candidate",
+          "component": "admin",
+          "runtime": "unavailable",
+          "unavailableSchemas": [
+            "admin-recovery"
+          ]
+        },
+        "compiler": "absent",
+        "health": {
+          "/": 503,
+          "/api/properties": 503,
+          "/health/live": 200,
+          "/health/ready": 503
+        },
+        "machine": "x86_64",
+        "normalStartup": "blocked",
+        "python": "3.14.10",
+        "resources": {
+          "admin": "initialized_read_only_reinit",
+          "admin-recovery": "unavailable_no_destination_created"
+        },
+        "system": "Linux"
+      },
+      "oci_manifest_digest": "sha256:0c52f62a026aa31618a3e25d92dcccce4658c1beed372cb16d461ecd1c4edd06",
+      "oci_config_digest": "sha256:60117039f12e2c0d53fa45ecee032730ac7a7e8eda74385f67eca9f3f530bde9",
+      "oci_archive_sha256": "16802d6dbc3366ed7fb0ae72a3d45222332b21377689c2c4bcb0966443a3318c",
+      "repeat_manifest_identical": true,
+      "runtime_user": "65532:65532",
+      "build_paths_absent": [
+        "/input",
+        "/source",
+        "/workspace",
+        "/root/.cache"
+      ]
+    },
+    "operator": {
+      "version": 1,
+      "component": "operator",
+      "architecture": "amd64",
+      "source_sha256": "2b7bdc9bdcdbf338dc2f6f0cf5b6c7ab288d408e298937d798a3d0e6c08d781b",
+      "dependency_lock_sha256": "e273cfbf1b3c1901c8e40c012fe44797152eef76b7efcdca805f8e481259706d",
+      "wheel_sha256": "840cd2abefa417f8335ab24b44dc0bb287ae05a29304eafea1e97743156acc27",
+      "schemas": [
+        {
+          "store": "business",
+          "state": "implemented",
+          "revision": "0001_initial_schema"
+        },
+        {
+          "store": "hosted-access",
+          "state": "unavailable",
+          "revision": null
+        },
+        {
+          "store": "recovery",
+          "state": "unavailable",
+          "revision": null
+        }
+      ],
+      "ui": "compiled_operator",
+      "acceptance": "infrastructure_candidate",
+      "runtime": "unavailable",
+      "manifest_sha256": "a96a48972532be218af181794aa7fec2e29a2b9aab210321a5b2d3b2410f0e66",
+      "file_count": 595,
+      "probe": {
+        "candidate": {
+          "acceptance": "infrastructure_candidate",
+          "component": "operator",
+          "runtime": "unavailable",
+          "unavailableSchemas": [
+            "hosted-access",
+            "recovery"
+          ]
+        },
+        "compiler": "absent",
+        "health": {
+          "/": 503,
+          "/api/properties": 503,
+          "/health/live": 200,
+          "/health/ready": 503
+        },
+        "machine": "x86_64",
+        "normalStartup": "blocked",
+        "python": "3.14.10",
+        "resources": {
+          "business": "initialized_validated",
+          "hosted-access": "unavailable_no_destination_created",
+          "recovery": "unavailable_no_destination_created"
+        },
+        "system": "Linux"
+      },
+      "oci_manifest_digest": "sha256:637297357116a2dc3f86a4b13c68b3586bb7bb05e86fddf1b6f9c5acb67fd969",
+      "oci_config_digest": "sha256:8465d819efa2e23bccf9a302a5a8f9ddd8831e3e0e7bd9d1665a782cb6a22e2d",
+      "oci_archive_sha256": "ce8aa891e46e6743854951ddd65bdfa718124f559a48aedff69b8771b27aea30",
+      "repeat_manifest_identical": true,
+      "runtime_user": "65532:65532",
+      "build_paths_absent": [
+        "/input",
+        "/source",
+        "/workspace",
+        "/root/.cache"
+      ]
+    },
+    "host_agent": {
+      "version": 1,
+      "component": "host_agent",
+      "architecture": "amd64",
+      "source_sha256": "8f230c5dd4f5aef83e62d71c13bc5e0166922b0f67ca8aec8ed31958684c2a60",
+      "dependency_lock_sha256": "e273cfbf1b3c1901c8e40c012fe44797152eef76b7efcdca805f8e481259706d",
+      "wheel_sha256": "0d2b9f993c4e71ff5a570e497e7871a232dd3dceb9b0612f224b5b24547d1f29",
+      "schemas": [
+        {
+          "store": "host-inventory",
+          "state": "implemented",
+          "revision": "host_inventory_0001_initial"
+        }
+      ],
+      "ui": "not_applicable",
+      "acceptance": "infrastructure_candidate",
+      "runtime": "unavailable",
+      "manifest_sha256": "5a30b8ea07338c2d8fc257246cdd5d7119161debd2853047a1d42034e52ac8f9",
+      "file_count": 584,
+      "probe": {
+        "candidate": {
+          "acceptance": "infrastructure_candidate",
+          "component": "host_agent",
+          "runtime": "unavailable",
+          "unavailableSchemas": []
+        },
+        "compiler": "absent",
+        "health": null,
+        "machine": "x86_64",
+        "normalStartup": "blocked",
+        "python": "3.14.10",
+        "resources": {
+          "host-inventory": "initialized_read_only_reinit"
+        },
+        "system": "Linux"
+      },
+      "archive_sha256": "2bd341213b0a7291087edbf4e1dee995b8617b27ce582ae041d23f7a18ad0f01",
+      "archive_install": "passed_offline_fresh_container_venv"
+    }
+  },
+  "validation": {
+    "command": ".venv/bin/python -m pytest apps/server/app/platform/tests/test_hosted_artifacts.py scripts/tests/test_hosted_packaging.py apps/server/app/platform/tests/test_schema_resources.py apps/server/app/platform/tests/test_hosted_schema.py -q --tb=short",
+    "working_directory": "application",
+    "passed": 229,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 11.31,
+    "ruff_check": "passed",
+    "ruff_format_check": "passed",
+    "npm_lint": "passed",
+    "npm_format_check": "passed",
+    "npm_typecheck": "passed_192_source_files",
+    "operator_frontend_build": "passed_with_existing_large_chunk_warning",
+    "changed_python_files": 16
+  },
+  "limitations": [
+    "No native Ubuntu/GCP qualification, VM reset, live/customer data or retained Lima VM changes.",
+    "Normal hosted startup remains unavailable; health-only is not application readiness.",
+    "Admin recovery, hosted access and Operator recovery schemas remain unavailable.",
+    "No H03-H05 application behavior, release promotion or invitation authority.",
+    "Tests and data exclusion covers owned app/resources; the pinned base and third-party wheels are separately identified dependencies."
+  ],
+  "retained_artifacts": "Private hosted-mvp-qualification/H02.4 directory outside Git; OCI archives, contexts, lock/wheels, manifests and raw probe/install outputs.",
+  "failures_and_recovery": [
+    "Initial Homebrew system-link postflight required sudo and rolled back; official app-only installation succeeded.",
+    "Initial agent install probe used a noexec tmpfs and could not execute the new venv; executable temporary installation storage passed.",
+    "Repeat build exposed unsupported singular uv flag and space-sensitive absolute constraint path; plural flag and constraint-relative cwd now reproduce both original wheels.",
+    "Repo-root pytest invocation could not import scripts; documented application working directory passed."
+  ],
+  "build_source_files": {
+    "application/apps/server/app/hosted_candidates/__init__.py": "9a8c7c86b695c78af2e8b325a57f6d24dca1b2b6a4709f44e67c58675dc6873d",
+    "application/apps/server/app/hosted_candidates/admin.py": "614b6f5ded42c2af60dab1d20966b73b36244c8cdcf17b8469bb335a5cf2c7d4",
+    "application/apps/server/app/hosted_candidates/agent.py": "af9ebd7e2bc4adcf388db09970abb74147bd5feff03ab139de621a4f67c3bfc8",
+    "application/apps/server/app/hosted_candidates/operator.py": "fe76ce5792102d80e0f8b1449e4f05b3c25eccb806d9568c90a467775f74c442",
+    "application/apps/server/app/hosted_candidates/runtime.py": "286403b76cafe5073d19130f6e490b1d6302834c045f8d24475ec4d554a8a87f",
+    "application/apps/server/app/platform/hosted_artifacts.py": "ed20cc1c0b3880416d30435630063dd420d8ae43a4462923fadd1fd4cac0032f",
+    "application/apps/server/app/platform/tests/test_hosted_artifacts.py": "0ed765b46ae46498a453c67ee9e051eff63e98d3cafba664a6148015e1582cfd",
+    "application/database/README.md": "167defa70487d7598bc6112462f49e1fbf1ebd088a21f8acf966ec41a10e329b",
+    "application/deploy/hosted-mvp/Dockerfile.admin": "6d24a0d0f5a5516dac19a79fef64b6ca9e6148f17d0b0b6cdd66a2a74db0794a",
+    "application/deploy/hosted-mvp/Dockerfile.operator": "820262828381e118ad437865e1ac806ad8e9b5c074a5751a9b642d9e600a043b",
+    "application/deploy/hosted-mvp/README.md": "d81ac6508ca78f42a78e8247b79e9da55bad2a4ccf96a3200df606a3a7e115d2",
+    "application/deploy/hosted-mvp/archive_agent.py": "fb7f6c70e759393ce3cfc26f4f00c3eca2329fc8cecd4c76ae02b9a6da983900",
+    "application/deploy/hosted-mvp/build-constraints.txt": "5b96a1b3ab68ccbd56cda1f7d56e804b7ac05194b86762b3763c84c13a92cfeb",
+    "application/deploy/hosted-mvp/install_agent.py": "70562e5166c4a7ecc20921d031d252748446fa46c51e71988b93cea4bbbe1e87",
+    "application/deploy/hosted-mvp/probe.py": "f5c0bcf50591834602b9c52c011685659d9f03537fe49f8b8ed2ba31a926a27e",
+    "application/deploy/hosted-mvp/resolve_lock.py": "54d30c110aa92b3ea2c556d97a8b2db29da2908cb3b2de6c5488379324f0ed8f",
+    "application/deploy/hosted-mvp/verify_build_inputs.py": "2e31fcebefe927f128fcafc14c7f856e98a261502a5c994294a6c3f79e6edd94",
+    "application/scripts/hosted_package.py": "245a57fcd2f86cfccbf4a5dfe7aefa1ae005649298fa33ffb56498044c1530bf",
+    "application/scripts/stage_schema_resources.py": "a717548195ec59382466382c6c3e75bca17984c6efa046682f1683c0adb90d3e",
+    "application/scripts/tests/test_hosted_packaging.py": "d1a36d3f2fad6b3b01aaebc5583a2c693b04e4bc62dad08fc3cecc0b7de351d6",
+    "application/scripts/verify_installation.py": "2f8e1bd7c942b82ebb15489d99fc35714963697ee0935a63310ddfc38caa5830"
+  }
+}

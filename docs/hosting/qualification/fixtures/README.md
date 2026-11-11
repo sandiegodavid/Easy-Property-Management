@@ -12,7 +12,7 @@ by current application bootstrap. Each case pins a deployment and a discriminate
 owning presentation DTO. Root collections are bounded to 64 cases/512 KiB; action
 rows reject duplicates; extra fields, unknown controls and invalid combinations fail.
 These are presentation contracts, not new executable database definitions or a copy
-of the schema dictionary. The [schema master](../../../DATABASE_SCHEMA.md) still owns
+of the schema dictionary. The [schema master](../../../database/README.md) still owns
 storage; actual adapters/queries/authorization arrive in H03–H05. Current local Settings
 and hosted-demo consumers remain unchanged.
 

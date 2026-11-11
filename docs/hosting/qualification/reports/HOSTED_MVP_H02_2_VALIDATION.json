@@ -1,0 +1,204 @@
+{
+  "version": 1,
+  "slice": "H02.2",
+  "date": "2026-11-11",
+  "scope": "local_component_schema_and_transaction_tests_only",
+  "baseline_commit": "52a62d89d6a8b336d481b871a2eb8e0607250a05",
+  "source_commit": "52a62d89d6a8b336d481b871a2eb8e0607250a05",
+  "source_dirty": true,
+  "branch": "hosted_mvp",
+  "environment": {
+    "os": "Darwin",
+    "release": "27.0.0",
+    "architecture": "arm64",
+    "python": "3.14.8",
+    "pytest": "8.4.2",
+    "SQLAlchemy": "2.1.4",
+    "alembic": "1.20.0",
+    "pydantic": "2.14.0",
+    "ruff": "0.16.10"
+  },
+  "resources": {
+    "admin": {
+      "revision": "admin_0001_initial",
+      "tables": 13
+    },
+    "host-inventory": {
+      "revision": "host_inventory_0001_initial",
+      "tables": 6
+    }
+  },
+  "focused_validation": {
+    "command": [
+      ".venv/bin/python",
+      "-m",
+      "pytest",
+      "apps/server/app/platform/tests/test_hosted_schema.py",
+      "apps/server/app/platform/tests/test_schema_resources.py",
+      "apps/server/app/platform/tests/test_hosted_effect_contracts.py",
+      "apps/server/app/platform/tests/test_hosted_ports.py",
+      "apps/server/app/platform/tests/test_hosted_proofs.py",
+      "apps/server/app/platform/tests/test_hosted_ui_contracts.py",
+      "-q",
+      "--tb=short"
+    ],
+    "working_directory": "application",
+    "passed": 489,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": "9.95"
+  },
+  "lint": {
+    "commands": [
+      [
+        ".venv/bin/ruff",
+        "check",
+        "apps/server/app/modules/host_agent/infrastructure/__init__.py",
+        "apps/server/app/modules/host_agent/infrastructure/schema_store.py",
+        "apps/server/app/modules/hosted_admin/infrastructure/schema_store.py",
+        "apps/server/app/platform/hosted_metadata.py",
+        "apps/server/app/platform/hosted_schema.py",
+        "apps/server/app/platform/schema_resources.py",
+        "apps/server/app/platform/tests/test_hosted_schema.py",
+        "apps/server/app/platform/tests/test_schema_resources.py",
+        "database/admin-migrations/env.py",
+        "database/admin-migrations/versions/admin_0001_initial.py",
+        "database/host-inventory-migrations/env.py",
+        "database/host-inventory-migrations/versions/host_inventory_0001_initial.py",
+        "database/hosted_ddl.py"
+      ],
+      [
+        ".venv/bin/ruff",
+        "format",
+        "--check",
+        "apps/server/app/modules/host_agent/infrastructure/__init__.py",
+        "apps/server/app/modules/host_agent/infrastructure/schema_store.py",
+        "apps/server/app/modules/hosted_admin/infrastructure/schema_store.py",
+        "apps/server/app/platform/hosted_metadata.py",
+        "apps/server/app/platform/hosted_schema.py",
+        "apps/server/app/platform/schema_resources.py",
+        "apps/server/app/platform/tests/test_hosted_schema.py",
+        "apps/server/app/platform/tests/test_schema_resources.py",
+        "database/admin-migrations/env.py",
+        "database/admin-migrations/versions/admin_0001_initial.py",
+        "database/host-inventory-migrations/env.py",
+        "database/host-inventory-migrations/versions/host_inventory_0001_initial.py",
+        "database/hosted_ddl.py"
+      ]
+    ],
+    "working_directory": "application",
+    "result": "passed",
+    "changed_python_files": 13
+  },
+  "source_pins": [
+    {
+      "path": "application/apps/server/app/modules/host_agent/infrastructure/__init__.py",
+      "sha256": "141aa38c4d92b6f84c2a1d99b84b41e40628652e3cb061635f68f86c3444b340"
+    },
+    {
+      "path": "application/apps/server/app/modules/host_agent/infrastructure/schema_store.py",
+      "sha256": "6150d34143c637723e0cfe2447702c4b7f37947071edd5e93d4128fd63dd0bc3"
+    },
+    {
+      "path": "application/apps/server/app/modules/hosted_admin/infrastructure/schema_store.py",
+      "sha256": "a67409390c78b2f531269b7420b46606ba3ddb579e165898f17ac1046ec9a74a"
+    },
+    {
+      "path": "application/apps/server/app/platform/hosted_metadata.py",
+      "sha256": "949781c797dd4ef2b60a8671d438227207d1591108e4f9ccd5984924239e2ee4"
+    },
+    {
+      "path": "application/apps/server/app/platform/hosted_schema.py",
+      "sha256": "deeb2eff65137bab430d48bf3d01a76b60978f4417e207c6d2e412da03fb4f3c"
+    },
+    {
+      "path": "application/apps/server/app/platform/schema_resources.py",
+      "sha256": "447e5ee4555eba2700c003a543f510c7fe066bf19840f14d396d7691782c3c85"
+    },
+    {
+      "path": "application/apps/server/app/platform/tests/test_hosted_schema.py",
+      "sha256": "df9d7c485923d796f77ee138542397f41efa39ca6626ebe13906f0059d71ee55"
+    },
+    {
+      "path": "application/apps/server/app/platform/tests/test_schema_resources.py",
+      "sha256": "1f68ec7485c09de3d67838e8dfb58b5e8b4c51d86326758f1eb7f86da2e7eb2f"
+    },
+    {
+      "path": "application/database/README.md",
+      "sha256": "bd853d8ecd5ef10a916c0396d903d5a63a996962a3189e6254d83962162984bd"
+    },
+    {
+      "path": "application/database/admin-migrations/README.md",
+      "sha256": "2499d266de7db484f70f96368ebc3bec378463480974d2bd54b09a848c300000"
+    },
+    {
+      "path": "application/database/admin-migrations/alembic.ini",
+      "sha256": "ab28fe2c640dbd707107aec6d6312c79d683f262fab6cbdc14414e4acc6ac55b"
+    },
+    {
+      "path": "application/database/admin-migrations/env.py",
+      "sha256": "b5fbceebdf7e37e55cf678b5d1128e5d175dd6e47ecaf45a2d6d81f3e84ed94f"
+    },
+    {
+      "path": "application/database/admin-migrations/versions/README.md",
+      "sha256": "ed404ab575f74330f61a736d6e8321232e52c4974136ff125c52a06c81080d50"
+    },
+    {
+      "path": "application/database/admin-migrations/versions/admin_0001_initial.py",
+      "sha256": "03a63cf6bf29982de4ad082adfbc44e493c9d9346fc737bc3b474ca80912a5c3"
+    },
+    {
+      "path": "application/database/host-inventory-migrations/README.md",
+      "sha256": "77c79276fbf57f7beefef7ef5257c6e8cb9cccf1633f7c28eb9497292f57b918"
+    },
+    {
+      "path": "application/database/host-inventory-migrations/alembic.ini",
+      "sha256": "0f3ca9bcf7437c0de836eab9e48f7b8cdd7e23b9357da542752e0c3b6450851f"
+    },
+    {
+      "path": "application/database/host-inventory-migrations/env.py",
+      "sha256": "321ffe0df148749e764c73fc70af67d98838cd08647205f8c9f02ba1ad78be51"
+    },
+    {
+      "path": "application/database/host-inventory-migrations/versions/README.md",
+      "sha256": "91b7727df82bc4350a549107c33e52c832edacc84bc877ad0f57f822cdf060b8"
+    },
+    {
+      "path": "application/database/host-inventory-migrations/versions/host_inventory_0001_initial.py",
+      "sha256": "5dbbe082665c039ad94bdf3d27789d44c48ccf46ca9d4192dddaffdc31d67551"
+    },
+    {
+      "path": "application/database/hosted_ddl.py",
+      "sha256": "5d6f71c0d5ee71f9ea2be2f9a46a147adcdded64820124df95f884b347f8305e"
+    },
+    {
+      "path": "docs/database/admin-registry.md",
+      "sha256": "ea5cc1a4be2d1dd64851fbc70398840736cfa47a37da9e1101ffb51c18ad129a"
+    },
+    {
+      "path": "docs/database/host-inventory.md",
+      "sha256": "977c0aac59f62722ba6bec2bc60421d5f782b3d9da15018628522d22434d8d7b"
+    },
+    {
+      "path": "docs/database/overview.md",
+      "sha256": "a48af114618a2a6dfcfb71b7d8d598095e99576dfbab9cc64d03ceb61cfe262d"
+    },
+    {
+      "path": "docs/hosting/design/HOSTED_MVP_H02_DESIGN.md",
+      "sha256": "f39b49138661ac84418341ca5d036c3ce6b7a79aa63d3a13971e68f9eb503075"
+    },
+    {
+      "path": "docs/hosting/qualification/reports/HOSTED_MVP_H02_2_HANDOFF.md",
+      "sha256": "ce2016ecc52faa63ef1e39d9e207ea90890c128764baae5ad65bcd9aa3b9151b"
+    }
+  ],
+  "remaining_limits": [
+    "No native, Docker or GCP qualification; no VM or cloud effects.",
+    "Physical device/mount/quota and runtime readiness remain later H02 work.",
+    "No H03/H04 authentication, population or application mutation behavior.",
+    "Access and both recovery baselines remain unavailable.",
+    "Image resource staging and installed-artifact proof remain H02.4.",
+    "Snapshot test is not encrypted/off-host or authenticated restore qualification.",
+    "Typed retained operation payload and lifecycle validation belongs to later owning adapters."
+  ]
+}

@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "slice": "H02.5",
+  "date": "2026-11-11",
+  "branch": "hosted_mvp",
+  "baseline_commit": "4d9a892c47463873d3501a4088937743454c5dda",
+  "partial_commit": "da8aec4a5a4e7b8916ecf3a4f24a17887331a577",
+  "source_dirty": true,
+  "acceptance": "component_and_scoped_native_arm64_only",
+  "hosted_release_qualified": false,
+  "focused_validation": {
+    "working_directory": "application",
+    "command": ".venv/bin/python -m pytest apps/server/app/modules/host_agent/tests apps/server/app/modules/hosted_admin/tests/test_project_quota.py apps/server/app/modules/workspace/tests/test_api.py::WorkspaceApiTests::test_lifespan_runs_integrity_validation_and_retains_a_writer_lock apps/server/app/platform/tests/test_hosted_schema.py -q --tb=short",
+    "passed": 277,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 48.82,
+    "full_suite_run": false,
+    "browser_suite_run": false
+  },
+  "lint": {
+    "configuration": "application/pyproject.toml",
+    "ruff_check": "passed",
+    "ruff_format_check": "passed",
+    "changed_python_files": 20,
+    "rules_changed": false
+  },
+  "native_result": {
+    "file": "HOSTED_MVP_H02_5_NATIVE.json",
+    "sha256": "6a49e166de4da13dc8c730ca73b9a116c94b8a9015cf66a51b443cabe41faea9",
+    "lab": "epm-quota-qualification-sizrozul",
+    "status": "scoped-native-cases-passed"
+  },
+  "guardian_regression": {
+    "failed_lab": "epm-quota-qualification-vscmtzyf",
+    "instrumented_reproduction": "epm-quota-qualification-_249hwma",
+    "corrected_reproduction": "epm-quota-qualification-pgqr6n95",
+    "cause": "AppArmor denied receiving TERM/KILL from the host runc profile",
+    "policy_change": "Allow receive TERM/KILL from exact peer runc only",
+    "deadline_changed": false,
+    "diagnostic_stop_before_seconds": 12.068,
+    "diagnostic_stop_after_seconds": 0.041
+  },
+  "scope_limits": [
+    "No production source/qualification/ingress grants or normal hosted startup.",
+    "Standalone guardian is containment-only; owning ports compose in H02.6/H02.7.",
+    "No native AMD64/GCP or host-reboot qualification from these ARM64 component runs.",
+    "No H05 recovery or H02.10 capacity claim.",
+    "H02.4 candidate images predate the runtime edits; no release promotion."
+  ],
+  "retained_evidence": "Private hosted-mvp-qualification/H02.5 directory outside Git: final/failed results, diagnostic journals, source archives and complete tested source inventories.",
+  "source_sha256": {
+    "application/apps/server/app/modules/host_agent/application/dispatch.py": "65deda3f267632bf654944f82303564bbb120e598442ada19bcb215671ae1d73",
+    "application/apps/server/app/modules/host_agent/application/service.py": "a83761901f01850d13b62706dced780f0314f7bed936abf29ac1d390e8de88c7",
+    "application/apps/server/app/modules/host_agent/infrastructure/container_policy.py": "b1b56365d8c01ccb2af1a86d9df001c416ece775bebaa256174691fce78f06a6",
+    "application/apps/server/app/modules/host_agent/infrastructure/docker_engine.py": "0d408654a7ae0faa65b02f22491315cdfeeeba91fe5b40946807766a4ec053c8",
+    "application/apps/server/app/modules/host_agent/infrastructure/inventory.py": "1cc489360c23b147ec44a1f3ce3e362a6f0863a8f1e0b6f08bbb0b36af5c8eaa",
+    "application/apps/server/app/modules/host_agent/infrastructure/private_storage.py": "1f3823eba1e55e0517dcc54d935f561d916e5c47d3bae1e464696812e8cce0e6",
+    "application/apps/server/app/modules/host_agent/infrastructure/runtime_authority.py": "511492b80a98a03f1d750c836e306dbbf8ff44d58072526e019b1b52895a71c0",
+    "application/apps/server/app/modules/host_agent/infrastructure/runtime_effects.py": "210dd22d2eb0a3c6fcbea6bd09fe4aa10e17223f61a7af3dfd88eda43ad37628",
+    "application/apps/server/app/modules/host_agent/infrastructure/stop_registry.py": "a8680f6f011962cd2c6ed2052738123d0504acd8978ca8c6f04b63bf0db275cd",
+    "application/apps/server/app/modules/host_agent/infrastructure/supervisor.py": "6c29af046bf20dfe4ca4aae1a4c478d66623008aa3180c8c707d560409df89bc",
+    "application/apps/server/app/modules/host_agent/tests/test_agent.py": "7dcb164a1d7063f716b87560e5c419d3c64ed9b58de1967182ac97c00f21a673",
+    "application/apps/server/app/modules/host_agent/tests/test_native_receipts.py": "eff4bea8bd33f80f1dcdaff8884ea9cd21445bce4ac4febad2bc47dc0ed5483f",
+    "application/apps/server/app/modules/host_agent/tests/test_private_storage.py": "e0f450d5924bcdf47b668acfd817add09a424a38f140f365c1fba2931e9080ea",
+    "application/apps/server/app/modules/host_agent/tests/test_runtime_effects.py": "3b678f36429da40bf2e7dac9c2d0e593443fa1aec60579563ea72d72cb8ec295",
+    "application/apps/server/app/modules/host_agent/tests/test_supervisor.py": "071ffd3d09708724fba131ff2695354d66bdc5bb3cd85c469a0b768dc080647e",
+    "application/apps/server/app/modules/workspace/application/runtime.py": "ac10f1a00d62e2e9c2e2d04b1461a554669ce11b5d31e839786b42df6bd5f150",
+    "application/apps/server/app/platform/hosted_writer_lock.py": "dc7f1c0f1e4f602f768726747aa21476df292e5e3224c938ef6b04d5981a3308",
+    "application/deploy/hosted-mvp/sandbox/README.md": "b879a0991f2f8503aae4311d0f10833b52d358bf0bc2b5c6ce9b503b1f4d0d27",
+    "application/deploy/hosted-mvp/sandbox/epm-h02-operator-v1": "d58ff64377e8e38c1dedf214b8558cfcaab4991176476c7664944f0c750be495",
+    "application/deploy/hosted-mvp/sandbox/epm-host-guardian.service": "47bf89838e9b8357db86c7b6bd3be696a5049090e3a704e95448218998f5d761",
+    "application/deploy/hosted-mvp/sandbox/qualification_guard.py": "569b9ce154fa0258406a963be14ee2a8b94512db64a3c4787be74351696009e6",
+    "application/deploy/hosted-mvp/sandbox/qualify_runtime.py": "91710a47998b7cd1dc44c0df3fb77ac773bb47f9237f5ea172cb7fd45e61cf9f",
+    "application/deploy/hosted-mvp/sandbox/runtime_actor.py": "a27f3dec42882d57fd038ea36e7b4c3e9a3c777eda926ba37cd917655b985f63"
+  }
+}

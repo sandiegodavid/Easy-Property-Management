@@ -20,6 +20,7 @@ For a first read: **scope → architecture and access → delivery plan**. For i
 | Architecture, identity and access enforcement | [architecture-and-access.md](mvp/architecture-and-access.md) |
 | Operator provisioning and onboarding | [onboarding.md](mvp/onboarding.md) |
 | Subscriptions, storage and runtime behavior | [subscriptions-storage-and-runtime.md](mvp/subscriptions-storage-and-runtime.md) |
+| Per-tier physical storage sizing acceptance | [Measured peaks, margins and exhaustion checks](mvp/subscriptions-storage-and-runtime.md#per-tier-physical-storage-sizing-acceptance) |
 | Backup, recovery and retirement | [recovery.md](mvp/recovery.md) |
 | Independent releases and operator update experience | [releases.md](mvp/releases.md) |
 | Monitoring, operations and source references | [operations-and-sources.md](mvp/operations-and-sources.md) |
@@ -29,9 +30,9 @@ For a first read: **scope → architecture and access → delivery plan**. For i
 
 ## Related references
 
-- [Database schema catalog](../../DATABASE_SCHEMA.md): owning stores and complete table/column definitions.
+- [Database schema catalog](../../database/README.md): owning stores and complete table/column definitions.
 - [H01 detailed design and implementation plan](HOSTED_MVP_H01_DESIGN.md).
-- [H02 detailed design](HOSTED_MVP_H02_DESIGN.md) and [ordered implementation plan](HOSTED_MVP_H02_DESIGN.md#h02-implementation-plan): accepted foundation design and implementation plan; native/cloud qualification remains pending.
+- [Infrastructure design](HOSTED_MVP_H02_DESIGN.md) and [topic-based foundation guides](../foundation/README.md): delivered scoped container/storage/gateway behavior, operating procedures, exact evidence and remaining release gates.
 - [Acceptance register](../qualification/HOSTED_MVP_ACCEPTANCE.md): actual proof status, separate from design requirements.
 - [Feature backlog](../../FEATURE_BACKLOG.md): feature scope and priority.
 

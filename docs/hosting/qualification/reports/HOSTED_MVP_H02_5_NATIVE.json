@@ -1,0 +1,361 @@
+{
+  "root": "/var/lib/epm-quota-qualification-sizrozul",
+  "kernel": "6.8.0-147-generic",
+  "machine": "aarch64",
+  "image": "5dec05dc4c2653fa17e45761e59d61a93964fdcd67b3194d840fd8a43d565024",
+  "scope": "native-arm64-lab-not-amd64-or-gcp",
+  "cases": {
+    "security_and_wal": {
+      "/control/data": "writable-accounted",
+      "/control/writer.lock": 30,
+      "/dev/shm/escape": 30,
+      "/etc/escape": 30,
+      "/other/secret": 2,
+      "/run/escape": 30,
+      "/scratch": "writable-accounted",
+      "/tmp": "writable-accounted",
+      "/var/run/docker.sock": 30,
+      "/var/tmp": "writable-accounted",
+      "cgroup": {
+        "cpu.max": "50000 100000",
+        "memory.max": "134217728",
+        "memory.swap.max": "0",
+        "pids.max": "32"
+      },
+      "ioctl_probe_40046602": 1,
+      "ioctl_probe_40046604": 1,
+      "ioctl_probe_40086602": 1,
+      "ioctl_probe_401c5820": 1,
+      "ioctl_workspace_40046602": 1,
+      "ioctl_workspace_40046604": 1,
+      "ioctl_workspace_40086602": 1,
+      "ioctl_workspace_401c5820": 1,
+      "mount": 1,
+      "quotactl": 1,
+      "unshare": 1,
+      "writer_lock": "acquired-read-only-control-inode"
+    },
+    "workspace_bytes": {
+      "deleted_open": false,
+      "errno": 122,
+      "writes": 2043
+    },
+    "workspace_inodes": {
+      "errno": 122,
+      "writes": 253
+    },
+    "workspace_deleted": {
+      "deleted_open": true,
+      "errno": 122,
+      "writes": 2041
+    },
+    "control_bytes": {
+      "deleted_open": false,
+      "errno": 122,
+      "writes": 2045
+    },
+    "control_inodes": {
+      "errno": 122,
+      "writes": 252
+    },
+    "control_deleted": {
+      "deleted_open": true,
+      "errno": 122,
+      "writes": 2044
+    },
+    "scratch_bytes": {
+      "deleted_open": false,
+      "errno": 122,
+      "writes": 2045
+    },
+    "scratch_inodes": {
+      "errno": 122,
+      "writes": 254
+    },
+    "scratch_deleted": {
+      "deleted_open": true,
+      "errno": 122,
+      "writes": 2043
+    },
+    "wal_full": {
+      "original_row_retained": true,
+      "storage_failure": {
+        "code": 778,
+        "name": "SQLITE_IOERR_WRITE"
+      }
+    },
+    "log_rotation": {
+      "files": 2,
+      "bytes": 1111689
+    },
+    "log_workload": {
+      "log_payload_bytes": 3145728
+    },
+    "cross_uid_denial": {
+      "private_sibling_read_denied": true
+    },
+    "guarded_lifecycle": {
+      "second_writer": {
+        "second_writer_denied": true
+      },
+      "quota_off_stopped": true,
+      "negative_control": {
+        "bytes_above_registered_ceiling": 16777216
+      },
+      "replacement_preserved_lock_inode": true,
+      "attention": [
+        {
+          "state": "running",
+          "projects": {
+            "workspace": {
+              "project_id": 2001,
+              "allocated_bytes": 24576,
+              "allocated_inodes": 3,
+              "hard_bytes": 8388608,
+              "hard_inodes": 256
+            },
+            "control": {
+              "project_id": 2002,
+              "allocated_bytes": 12288,
+              "allocated_inodes": 4,
+              "hard_bytes": 8388608,
+              "hard_inodes": 256
+            },
+            "scratch": {
+              "project_id": 2003,
+              "allocated_bytes": 16384,
+              "allocated_inodes": 2,
+              "hard_bytes": 8388608,
+              "hard_inodes": 256
+            }
+          }
+        },
+        {
+          "state": "needs_attention",
+          "runtime_stopped": true
+        }
+      ]
+    },
+    "systemd_supervision": {
+      "unknown_inventory_stopped": true,
+      "sigkill_stop_post_stopped": true,
+      "service_restart_never_restarted_container": true,
+      "restarts": 1
+    }
+  },
+  "status": "scoped-native-cases-passed",
+  "tested_source_sha256": {
+    "application/apps/server/app/platform/hosted_writer_lock.py": "dc7f1c0f1e4f602f768726747aa21476df292e5e3224c938ef6b04d5981a3308",
+    "application/apps/server/app/platform/locking.py": "3751b5246a41bc004ecf849576c2ff74482d9f15608de873fa9fc482f901fd3e",
+    "application/apps/server/app/modules/hosted_admin/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "application/apps/server/app/modules/host_agent/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "application/apps/server/app/modules/hosted_admin/application/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "application/apps/server/app/modules/hosted_admin/application/recovery_contracts.py": "1c04ab8e12788dcf9d2244bb046ad8267f5bc66c9ed1be36123abd667e38d58e",
+    "application/apps/server/app/modules/hosted_admin/application/pilot_contracts.py": "aa20bd2ed1f07e46e888c54f60121a4f87dd9a437927ccf883ac4a10139e12b7",
+    "application/apps/server/app/modules/hosted_admin/application/ui_contracts.py": "074407c675da90c7459a96b5ba8ab4765df0271e0bc5f5bdd284d2663afee016",
+    "application/apps/server/app/modules/hosted_admin/infrastructure/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "application/apps/server/app/modules/hosted_admin/infrastructure/project_quota.py": "6157c6a7da151194c143463fc67b79a7b7021000abf6fcd0686daf6841b67719",
+    "application/apps/server/app/modules/hosted_admin/infrastructure/project_quota_qualification.py": "4fbf941cb7911d8de076436ea9f5d2a30bc20b59765319c15df448409e10d862",
+    "application/apps/server/app/modules/hosted_admin/infrastructure/project_sandbox.py": "8b940dd1a68e5a1447e98892f9172f2eb197703c9ca6dcbf5c2e71bdfc54d4fc",
+    "application/apps/server/app/modules/hosted_admin/infrastructure/schema_store.py": "a67409390c78b2f531269b7420b46606ba3ddb579e165898f17ac1046ec9a74a",
+    "application/apps/server/app/modules/hosted_admin/infrastructure/quota_actor.py": "14b1db62d17d5d9974aee5740c1501770a90a115f80f85170ccdb0799c39c8bf",
+    "application/apps/server/app/modules/host_agent/application/service.py": "a83761901f01850d13b62706dced780f0314f7bed936abf29ac1d390e8de88c7",
+    "application/apps/server/app/modules/host_agent/application/build_inputs.py": "455de3c145ea9bc407780b8737dbc090d685b3f0aba3c686298f426917aecb92",
+    "application/apps/server/app/modules/host_agent/application/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "application/apps/server/app/modules/host_agent/application/contracts.py": "2a2b9738a5e749c92b6e08fcc30b133c88126dcedf1e20deb0a69bf2c304a5de",
+    "application/apps/server/app/modules/host_agent/application/effect_contracts.py": "91365b8a65661486a8a0607139b1776ac8221d159e6d86f899f027ecfdd3ebeb",
+    "application/apps/server/app/modules/host_agent/application/dispatch.py": "65deda3f267632bf654944f82303564bbb120e598442ada19bcb215671ae1d73",
+    "application/apps/server/app/modules/host_agent/infrastructure/inventory.py": "1cc489360c23b147ec44a1f3ce3e362a6f0863a8f1e0b6f08bbb0b36af5c8eaa",
+    "application/apps/server/app/modules/host_agent/infrastructure/__init__.py": "141aa38c4d92b6f84c2a1d99b84b41e40628652e3cb061635f68f86c3444b340",
+    "application/apps/server/app/modules/host_agent/infrastructure/supervisor.py": "6c29af046bf20dfe4ca4aae1a4c478d66623008aa3180c8c707d560409df89bc",
+    "application/apps/server/app/modules/host_agent/infrastructure/stop_registry.py": "a8680f6f011962cd2c6ed2052738123d0504acd8978ca8c6f04b63bf0db275cd",
+    "application/apps/server/app/modules/host_agent/infrastructure/docker_engine.py": "0d408654a7ae0faa65b02f22491315cdfeeeba91fe5b40946807766a4ec053c8",
+    "application/apps/server/app/modules/host_agent/infrastructure/private_storage.py": "1f3823eba1e55e0517dcc54d935f561d916e5c47d3bae1e464696812e8cce0e6",
+    "application/apps/server/app/modules/host_agent/infrastructure/quota_targets.py": "da16bdcb3190b6d42c2811fb1544111f9beb603da7091da056e15e5a715f59f3",
+    "application/apps/server/app/modules/host_agent/infrastructure/container_policy.py": "b1b56365d8c01ccb2af1a86d9df001c416ece775bebaa256174691fce78f06a6",
+    "application/apps/server/app/modules/host_agent/infrastructure/schema_store.py": "6150d34143c637723e0cfe2447702c4b7f37947071edd5e93d4128fd63dd0bc3",
+    "application/apps/server/app/modules/host_agent/infrastructure/runtime_effects.py": "210dd22d2eb0a3c6fcbea6bd09fe4aa10e17223f61a7af3dfd88eda43ad37628",
+    "application/apps/server/app/modules/host_agent/infrastructure/runtime_authority.py": "511492b80a98a03f1d750c836e306dbbf8ff44d58072526e019b1b52895a71c0",
+    "application/apps/server/app/modules/host_agent/infrastructure/unix_transport.py": "8052e2fda892499f124999ac7b3500f24d34d17d2023143813c7711fc39feff2",
+    "application/deploy/hosted-mvp/sandbox/epm-h02-operator-v1": "d58ff64377e8e38c1dedf214b8558cfcaab4991176476c7664944f0c750be495",
+    "application/deploy/hosted-mvp/sandbox/qualify_runtime.py": "91710a47998b7cd1dc44c0df3fb77ac773bb47f9237f5ea172cb7fd45e61cf9f",
+    "application/deploy/hosted-mvp/sandbox/qualification_guard.py": "569b9ce154fa0258406a963be14ee2a8b94512db64a3c4787be74351696009e6",
+    "application/deploy/hosted-mvp/sandbox/runtime_actor.py": "a27f3dec42882d57fd038ea36e7b4c3e9a3c777eda926ba37cd917655b985f63",
+    "application/deploy/hosted-mvp/sandbox/epm-host-guardian.service": "47bf89838e9b8357db86c7b6bd3be696a5049090e3a704e95448218998f5d761"
+  },
+  "native_host": {
+    "architecture": "aarch64",
+    "ubuntu": "24.04",
+    "kernel": "6.8.0-147-generic",
+    "docker": {
+      "Client": {
+        "Version": "29.1.3",
+        "ApiVersion": "1.52",
+        "DefaultAPIVersion": "1.52",
+        "GitCommit": "29.1.3-0ubuntu3~24.04.2",
+        "GoVersion": "go1.24.4",
+        "Os": "linux",
+        "Arch": "arm64",
+        "BuildTime": "Wed Apr 29 16:41:06 2026",
+        "Context": "default"
+      },
+      "Server": {
+        "Platform": {
+          "Name": ""
+        },
+        "Version": "29.1.3",
+        "ApiVersion": "1.52",
+        "MinAPIVersion": "1.44",
+        "Os": "linux",
+        "Arch": "arm64",
+        "Components": [
+          {
+            "Name": "Engine",
+            "Version": "29.1.3",
+            "Details": {
+              "ApiVersion": "1.52",
+              "Arch": "arm64",
+              "BuildTime": "Wed Apr 29 16:41:06 2026",
+              "Experimental": "false",
+              "GitCommit": "29.1.3-0ubuntu3~24.04.2",
+              "GoVersion": "go1.24.4",
+              "KernelVersion": "6.8.0-147-generic",
+              "MinAPIVersion": "1.44",
+              "Os": "linux"
+            }
+          },
+          {
+            "Name": "containerd",
+            "Version": "2.2.1",
+            "Details": {
+              "GitCommit": ""
+            }
+          },
+          {
+            "Name": "runc",
+            "Version": "1.3.4-0ubuntu1~24.04.1",
+            "Details": {
+              "GitCommit": ""
+            }
+          },
+          {
+            "Name": "docker-init",
+            "Version": "0.19.0",
+            "Details": {
+              "GitCommit": ""
+            }
+          }
+        ],
+        "GitCommit": "29.1.3-0ubuntu3~24.04.2",
+        "GoVersion": "go1.24.4",
+        "KernelVersion": "6.8.0-147-generic",
+        "BuildTime": "2026-04-29T16:41:06.000000000+00:00"
+      }
+    },
+    "host_python": "Python 3.12.3"
+  },
+  "date": "2026-11-11",
+  "slice": "H02.5",
+  "qualification": "scoped_native_arm64_component_only",
+  "root_cause": {
+    "failure": "AppArmor denied receive signals from peer runc",
+    "kernel_events": [
+      "[Thu Nov 12 03:14:40 2026] audit: type=1400 audit(1794453279.753:123): apparmor=\"DENIED\" operation=\"signal\" class=\"signal\" profile=\"epm-h02-operator-v1\" pid=1532 comm=\"runc\" requested_mask=\"receive\" denied_mask=\"receive\" signal=term peer=\"runc\"",
+      "[Thu Nov 12 03:14:42 2026] audit: type=1400 audit(1794453281.767:124): apparmor=\"DENIED\" operation=\"signal\" class=\"signal\" profile=\"epm-h02-operator-v1\" pid=1541 comm=\"runc\" requested_mask=\"receive\" denied_mask=\"receive\" signal=kill peer=\"runc\""
+    ],
+    "fix": "Allow receive TERM and KILL only from named peer runc; leave all other policy unchanged.",
+    "deadline_changed": false,
+    "diagnostic_stop_seconds_before": 12.068,
+    "diagnostic_stop_seconds_after": 0.041
+  },
+  "limits": [
+    "No native AMD64/GCP acceptance or full hosted source/network/recovery readiness.",
+    "Fault profile 8 MiB / 256 inodes is not a production capacity profile.",
+    "Lab authority adapters are explicit synthetic fixtures; no production grant or source admission.",
+    "Guardian process death/restart proved; actual host reboot requalification belongs to H02.8/H02.9."
+  ],
+  "failed_labs_retained": [
+    "epm-quota-qualification-vscmtzyf",
+    "epm-quota-qualification-_249hwma"
+  ],
+  "verified_projects": {
+    "filesystem_uuid": "0a2a61e2-f01a-42a4-852a-02500a131e2a",
+    "projects": [
+      {
+        "role": "workspace",
+        "binding_id": "436ea492-926b-4b3f-8269-eb3868f3a3ed",
+        "host_uid": 904,
+        "host_gid": 883,
+        "project_id": 2001,
+        "allocated_bytes": 24576,
+        "allocated_inodes": 3,
+        "hard_bytes": 8388608,
+        "hard_inodes": 256
+      },
+      {
+        "role": "workspace",
+        "binding_id": "47b49620-1bf8-4200-b7b2-5144f8deef62",
+        "host_uid": 903,
+        "host_gid": 882,
+        "project_id": 2004,
+        "allocated_bytes": 8392704,
+        "allocated_inodes": 5,
+        "hard_bytes": 8388608,
+        "hard_inodes": 256
+      },
+      {
+        "role": "control",
+        "binding_id": "436ea492-926b-4b3f-8269-eb3868f3a3ed",
+        "host_uid": 904,
+        "host_gid": 883,
+        "project_id": 2002,
+        "allocated_bytes": 12288,
+        "allocated_inodes": 4,
+        "hard_bytes": 8388608,
+        "hard_inodes": 256,
+        "lock_device_inode": [
+          1794,
+          18
+        ]
+      },
+      {
+        "role": "control",
+        "binding_id": "47b49620-1bf8-4200-b7b2-5144f8deef62",
+        "host_uid": 903,
+        "host_gid": 882,
+        "project_id": 2005,
+        "allocated_bytes": 8192,
+        "allocated_inodes": 3,
+        "hard_bytes": 8388608,
+        "hard_inodes": 256,
+        "lock_device_inode": [
+          1794,
+          23
+        ]
+      },
+      {
+        "role": "scratch",
+        "binding_id": "436ea492-926b-4b3f-8269-eb3868f3a3ed",
+        "host_uid": 904,
+        "host_gid": 883,
+        "project_id": 2003,
+        "allocated_bytes": 16384,
+        "allocated_inodes": 2,
+        "hard_bytes": 8388608,
+        "hard_inodes": 256
+      },
+      {
+        "role": "scratch",
+        "binding_id": "47b49620-1bf8-4200-b7b2-5144f8deef62",
+        "host_uid": 903,
+        "host_gid": 882,
+        "project_id": 2006,
+        "allocated_bytes": 4096,
+        "allocated_inodes": 1,
+        "hard_bytes": 8388608,
+        "hard_inodes": 256
+      }
+    ]
+  },
+  "full_tested_source_inventory_sha256": "c590439ca131967ebe8aadcdcd6763c184c95c41bd0403d325716020d7d24291"
+}

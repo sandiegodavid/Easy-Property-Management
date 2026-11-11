@@ -9,7 +9,7 @@ records the unavailable scaffolds and initialization/packaging handoff.
 The [H01.3 evidence report](../qualification/reports/HOSTED_MVP_H01_3_CONTRACTS_2026-11-10.md)
 records bounded values, semantic hash vectors and pure original-outcome comparison.
 No fresh hosted runtime or deployment is established. Implements the H01 design obligation in the [hosted MVP slices](mvp/delivery-plan.md#implementation-slices).
-The [database schema master](../../DATABASE_SCHEMA.md) owns all table/column definitions.
+The [database schema master](../../database/README.md) owns all table/column definitions.
 This document owns use-case boundaries, initialization/order, interfaces and proof tasks.
 
 ## Scope and deliverables
@@ -54,7 +54,7 @@ than linked as if they already exist.
 Accepted H02 decisions refine the structural handoff: H02 delivers the complete
 main-Admin baseline/FK closure and inventory baseline; H03–H05 retain owning application
 behavior/population and access/recovery resources. See the [H02 decisions](HOSTED_MVP_H02_DESIGN.md#resolved-design-decisions)
-and [schema catalog](../../DATABASE_SCHEMA.md). H01 scaffold evidence remains unchanged.
+and [schema catalog](../../database/README.md). H01 scaffold evidence remains unchanged.
 
 All executable schema definitions belong under `application/database/`, using the
 separate resource sets in the [schema master](../../database/overview.md#required-schema-definition-location).

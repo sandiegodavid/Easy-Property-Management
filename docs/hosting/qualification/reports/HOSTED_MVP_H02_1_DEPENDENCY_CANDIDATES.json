@@ -1,0 +1,210 @@
+{
+  "version": 1,
+  "state": "downloaded_candidate_not_a_complete_linux_lock",
+  "python_version": "3.14",
+  "architecture": "amd64",
+  "index": "https://pypi.org/simple",
+  "requirements_source": "application/pyproject.toml project.dependencies",
+  "resolution_host": "macOS",
+  "remaining_gate": "pip cross-platform wheel selection does not establish Linux environment-marker closure. Resolve and install inside the selected Linux image in H02.4 before calling this a runtime lock.",
+  "distributions": [
+    {
+      "name": "alembic",
+      "version": "1.20.1",
+      "filename": "alembic-1.20.1-py3-none-any.whl",
+      "sha256": "9970712cfb81ea26c8658d378aaa5b8f6ff9146e5bb111d70497c164016cf598"
+    },
+    {
+      "name": "annotated-doc",
+      "version": "0.0.6",
+      "filename": "annotated_doc-0.0.6-py3-none-any.whl",
+      "sha256": "361ca0950cc7082f53fa69e9328409f40a62c61e57e0a47e1825a08078a58a53"
+    },
+    {
+      "name": "annotated-types",
+      "version": "0.8.0",
+      "filename": "annotated_types-0.8.0-py3-none-any.whl",
+      "sha256": "f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0"
+    },
+    {
+      "name": "anyio",
+      "version": "4.16.0",
+      "filename": "anyio-4.16.0-py3-none-any.whl",
+      "sha256": "c66ae634e0b8228396b801741beb3294326d4b6102f7bba4041c0dfb58c29026"
+    },
+    {
+      "name": "cffi",
+      "version": "2.1.1",
+      "filename": "cffi-2.1.1-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+      "sha256": "b0431303acaea1089ad4b3e9ce4e6518193def1118d4073ca848635ee4ea2e96"
+    },
+    {
+      "name": "click",
+      "version": "8.5.1",
+      "filename": "click-8.5.1-py3-none-any.whl",
+      "sha256": "8bb5376d2006950386f8c6427613334a2acadc5f559cb80e638d00b4df957e37"
+    },
+    {
+      "name": "cryptography",
+      "version": "46.0.7",
+      "filename": "cryptography-46.0.7-cp311-abi3-manylinux_2_28_x86_64.whl",
+      "sha256": "420b1e4109cc95f0e5700eed79908cef9268265c773d3a66f7af1eef53d409ef"
+    },
+    {
+      "name": "fastapi",
+      "version": "0.162.4",
+      "filename": "fastapi-0.162.4-py3-none-any.whl",
+      "sha256": "f093bc306d3958278d30ffd14f3834ca3d9b144fbb898ab5c9b652cf6e75f869"
+    },
+    {
+      "name": "h11",
+      "version": "0.16.0",
+      "filename": "h11-0.16.0-py3-none-any.whl",
+      "sha256": "63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86"
+    },
+    {
+      "name": "httptools",
+      "version": "0.9.0",
+      "filename": "httptools-0.9.0-cp314-cp314-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl",
+      "sha256": "18d800aaa2d6bff7d889df810d1b19a5fde72b1f6c0ca96e8d9f28a692fe5460"
+    },
+    {
+      "name": "idna",
+      "version": "3.20",
+      "filename": "idna-3.20-py3-none-any.whl",
+      "sha256": "ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c"
+    },
+    {
+      "name": "jaraco.classes",
+      "version": "3.4.0",
+      "filename": "jaraco.classes-3.4.0-py3-none-any.whl",
+      "sha256": "f662826b6bed8cace05e7ff873ce0f9283b5c924470fe664fff1c2f00f581790"
+    },
+    {
+      "name": "jaraco.context",
+      "version": "6.1.2",
+      "filename": "jaraco_context-6.1.2-py3-none-any.whl",
+      "sha256": "bf8150b79a2d5d91ae48629d8b427a8f7ba0e1097dd6202a9059f29a36379535"
+    },
+    {
+      "name": "jaraco.functools",
+      "version": "4.6.0",
+      "filename": "jaraco_functools-4.6.0-py3-none-any.whl",
+      "sha256": "99e3dc0060c5cbe8fcd1cdb36258e2a65ca40f1566b2033b12abb1bb44dd3c30"
+    },
+    {
+      "name": "keyring",
+      "version": "25.7.0",
+      "filename": "keyring-25.7.0-py3-none-any.whl",
+      "sha256": "be4a0b195f149690c166e850609a477c532ddbfbaed96a404d4e43f8d5e2689f"
+    },
+    {
+      "name": "Mako",
+      "version": "1.4.3",
+      "filename": "mako-1.4.3-py3-none-any.whl",
+      "sha256": "723296007c870bfd6b3f0c3230dba7198096e5269297ebf5e4eff9e7ffa39d4f"
+    },
+    {
+      "name": "MarkupSafe",
+      "version": "3.0.4",
+      "filename": "markupsafe-3.0.4-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "a8e9f292fcda89b324f2f5c91d13f1424a153e40fc2756f38ee23b15835ff300"
+    },
+    {
+      "name": "more-itertools",
+      "version": "11.2.1",
+      "filename": "more_itertools-11.2.1-py3-none-any.whl",
+      "sha256": "35a7377edd1dd6608dcb2cdf534ded55ea32d49448875ad042cd3f879fb1ded0"
+    },
+    {
+      "name": "opentelemetry-api",
+      "version": "1.45.2",
+      "filename": "opentelemetry_api-1.45.2-py3-none-any.whl",
+      "sha256": "2cbd737377e710ee740d261c94e93fa0f08e6d037c18f17513cc0a2d94479a34"
+    },
+    {
+      "name": "pycparser",
+      "version": "3.12",
+      "filename": "pycparser-3.12-py3-none-any.whl",
+      "sha256": "a076f3f489b39b43ed13563a1dafe42447445bec2e294154ec5c57fcdda4c85e"
+    },
+    {
+      "name": "pydantic",
+      "version": "2.14.3",
+      "filename": "pydantic-2.14.3-py3-none-any.whl",
+      "sha256": "3f7b347782ab7e4cf4c798496ae3a82787d9f21ec12676a9c564355eeef8daa8"
+    },
+    {
+      "name": "pydantic_core",
+      "version": "2.50.4",
+      "filename": "pydantic_core-2.50.4-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+      "sha256": "f1d62fb172db35c6478c9323da34ff37d1f3d37d7d44337a9d94ba8c583e5730"
+    },
+    {
+      "name": "python-dotenv",
+      "version": "1.2.4",
+      "filename": "python_dotenv-1.2.4-py3-none-any.whl",
+      "sha256": "42269a8a5b3fd54ffa6f3d84b18abed50064717576b4ecf03dc4a55d8aa04fdc"
+    },
+    {
+      "name": "python-multipart",
+      "version": "0.0.33",
+      "filename": "python_multipart-0.0.33-py3-none-any.whl",
+      "sha256": "8f16c07b36add9da6b2ee87d3efcaf0a45a6de9c3d0a5dd94e9ccf7675a7bc45"
+    },
+    {
+      "name": "PyYAML",
+      "version": "6.0.3",
+      "filename": "pyyaml-6.0.3-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "c458b6d084f9b935061bc36216e8a69a7e293a2f1e68bf956dcd9e6cbcd143f5"
+    },
+    {
+      "name": "SQLAlchemy",
+      "version": "2.1.8",
+      "filename": "sqlalchemy-2.1.8-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "9587623885c13b7c53354fa39a5edc7cf5388dec708e4e6d04e7b6868941a2c6"
+    },
+    {
+      "name": "starlette",
+      "version": "1.10.0",
+      "filename": "starlette-1.10.0-py3-none-any.whl",
+      "sha256": "478c0ab3b4ced6e82719849c118fa406f0278a3499c1a898cd15cd31bdc38ce4"
+    },
+    {
+      "name": "typing_extensions",
+      "version": "4.16.0",
+      "filename": "typing_extensions-4.16.0-py3-none-any.whl",
+      "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8"
+    },
+    {
+      "name": "typing-inspection",
+      "version": "0.4.5",
+      "filename": "typing_inspection-0.4.5-py3-none-any.whl",
+      "sha256": "bc210535442b39e1bf2805e0c7a17dfd6a4ace760c84c7f7d16245d23a6b1c39"
+    },
+    {
+      "name": "uvicorn",
+      "version": "0.54.0",
+      "filename": "uvicorn-0.54.0-py3-none-any.whl",
+      "sha256": "505bdb0f318731d45f1f712071fc781a8981f6847a31c902c9f5e652d4f67faf"
+    },
+    {
+      "name": "uvloop",
+      "version": "0.23.0",
+      "filename": "uvloop-0.23.0-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "31e0cf90bc8fd88784f6802cdba968a51fb1aec1cc3feec74d862b2d371d1330"
+    },
+    {
+      "name": "watchfiles",
+      "version": "1.3.0",
+      "filename": "watchfiles-1.3.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+      "sha256": "b5768b49e426fd5b550b012c866db347cdf15c398ef98dc557b6e6b72fa74cd1"
+    },
+    {
+      "name": "websockets",
+      "version": "17.4",
+      "filename": "websockets-17.4-cp314-cp314-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl",
+      "sha256": "ef03fb4b3685df0ed9dc6a074a090f030345cad2c23c61818da3e08e693a9caa"
+    }
+  ]
+}

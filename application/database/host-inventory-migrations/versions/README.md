@@ -1,6 +1,6 @@
-# host-inventory revisions
+# host-inventory current baseline
 
-No executable revisions are delivered by H01.2. Do not add an empty baseline or stamp
-an initialized version. H02 delivers the complete owning baseline and validation.
-Future revision identifiers use the `host_inventory_` namespace (maximum 32 characters).
-See the [shared initialization contract](../../README.md#initialization-contract).
+`host_inventory_0001_initial.py` is the sole greenfield baseline. No compatibility revisions or
+stamping-only initializer. Keep revision identifiers within 32 characters.
+The owning runner validates actual schema, constraints, indexes and triggers against
+an in-memory database generated from these same resources, not version text alone.

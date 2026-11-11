@@ -87,43 +87,43 @@ editable authority. No cross-store transaction or foreign key is implied.
 
 | Master table heading | Owner | Delivery boundary |
 | --- | --- | --- |
-| [`alembic_version` — each SQLite store](../../../DATABASE_SCHEMA.md#alembic_version--each-sqlite-store) | Per owning store | H02: inventory/release resources; H03: access/auth resources; H04: Admin-lite/usage resources; H05: both recovery stores. Business revision remains domain-owned. H01.2 only scaffolds. |
-| [`control_meta` — H04 initialization](../../../DATABASE_SCHEMA.md#control_meta--h04-initialization) | H04 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
-| [`storage_policies` — H04 Free policy](../../../DATABASE_SCHEMA.md#storage_policies--h04-free-policy) | H04 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
-| [`qualified_releases` — H02 release qualification](../../../DATABASE_SCHEMA.md#qualified_releases--h02-release-qualification) | H02 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
-| [`component_deployments` — H02 shared Admin; H04 Operator assignments](../../../DATABASE_SCHEMA.md#component_deployments--h02-shared-admin-h04-operator-assignments) | H02 | H02 owns shared/component scope and compatibility; H04 inserts per-workspace Operator assignments. |
-| [`operators` — H03/H04 assignment and desired state](../../../DATABASE_SCHEMA.md#operators--h03h04-assignment-and-desired-state) | H04 | H03 supplies verified identity binding; H04 owns assignment/readiness and desired state. |
-| [`invitations` — H03](../../../DATABASE_SCHEMA.md#invitations--h03) | H03 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
-| [`admin_principals` — H03](../../../DATABASE_SCHEMA.md#admin_principals--h03) | H03 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
-| [`admin_sessions` — H03](../../../DATABASE_SCHEMA.md#admin_sessions--h03) | H03 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
-| [`login_handoffs` — H03 central login](../../../DATABASE_SCHEMA.md#login_handoffs--h03-central-login) | H03 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
-| [`operations` — H04 supported manual effects](../../../DATABASE_SCHEMA.md#operations--h04-supported-manual-effects) | H04 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
-| [`operation_events` — H04](../../../DATABASE_SCHEMA.md#operation_events--h04) | H04 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
-| [`admin_audit` — H03/H04](../../../DATABASE_SCHEMA.md#admin_audit--h03h04) | H04 | H03 supplies authentication events; H04 owns the common mutation/audit boundary. |
-| [`workspace_recovery_status` — H05](../../../DATABASE_SCHEMA.md#workspace_recovery_status--h05) | H05 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
-| [`admin_recovery_meta` — H05](../../../DATABASE_SCHEMA.md#admin_recovery_meta--h05) | H05 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
-| [`control_recovery_operations` — H05](../../../DATABASE_SCHEMA.md#control_recovery_operations--h05) | H05 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
-| [`control_recovery_points` — H05](../../../DATABASE_SCHEMA.md#control_recovery_points--h05) | H05 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
-| [`control_restore_operations` — H05](../../../DATABASE_SCHEMA.md#control_restore_operations--h05) | H05 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
-| [`control_backup_state` — H05](../../../DATABASE_SCHEMA.md#control_backup_state--h05) | H05 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
-| [`control_recovery_audit` — H05](../../../DATABASE_SCHEMA.md#control_recovery_audit--h05) | H05 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
-| [`host_identity`](../../../DATABASE_SCHEMA.md#host_identity) | H02 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
-| [`resource_bindings`](../../../DATABASE_SCHEMA.md#resource_bindings) | H02 | H04 records admitted provisioning results via the H02 agent; no direct Admin SQL. |
-| [`project_assignments` — H02 if project quotas qualify](../../../DATABASE_SCHEMA.md#project_assignments--h02-if-project-quotas-qualify) | H02 | Conditional on H02 qualification; do not infer selection from historical reports. |
-| [`host_receipts`](../../../DATABASE_SCHEMA.md#host_receipts) | H02 | H02 owns effect identity/reconciliation; H04 orchestrates supported manual operations. |
-| [`access_meta` — H03/H04](../../../DATABASE_SCHEMA.md#access_meta--h03h04) | H03 | H03 owns access identity/epoch; H04 supplies applied Free-policy and usage bindings. |
-| [`access_sessions` — H03](../../../DATABASE_SCHEMA.md#access_sessions--h03) | H03 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
-| [`access_receipts` — H03/H04](../../../DATABASE_SCHEMA.md#access_receipts--h03h04) | H03 | H03 owns source access receipts; H04 contributes policy/admission effects through the same contract. |
-| [`access_audit` — H03](../../../DATABASE_SCHEMA.md#access_audit--h03) | H03 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
-| [`usage_state` — H04](../../../DATABASE_SCHEMA.md#usage_state--h04) | H04 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
-| [`usage_reservations` — H04](../../../DATABASE_SCHEMA.md#usage_reservations--h04) | H04 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
-| [`draft_leases` — H03 reuse existing unfinished-form fencing](../../../DATABASE_SCHEMA.md#draft_leases--h03-reuse-existing-unfinished-form-fencing) | H03 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
-| [`recovery_meta` — H05](../../../DATABASE_SCHEMA.md#recovery_meta--h05) | H05 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
-| [`recovery_operations` — H05](../../../DATABASE_SCHEMA.md#recovery_operations--h05) | H05 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
-| [`recovery_points` — H05](../../../DATABASE_SCHEMA.md#recovery_points--h05) | H05 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
-| [`backup_state` — H05](../../../DATABASE_SCHEMA.md#backup_state--h05) | H05 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
-| [`restore_operations` — H05](../../../DATABASE_SCHEMA.md#restore_operations--h05) | H05 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
-| [`recovery_audit` — H05](../../../DATABASE_SCHEMA.md#recovery_audit--h05) | H05 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`alembic_version` — each SQLite store](../../../database/README.md#alembic_version--each-sqlite-store) | Per owning store | H02: inventory/release resources; H03: access/auth resources; H04: Admin-lite/usage resources; H05: both recovery stores. Business revision remains domain-owned. H01.2 only scaffolds. |
+| [`control_meta` — H04 initialization](../../../database/README.md#control_meta--h04-initialization) | H04 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`storage_policies` — H04 Free policy](../../../database/README.md#storage_policies--h04-free-policy) | H04 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`qualified_releases` — H02 release qualification](../../../database/README.md#qualified_releases--h02-release-qualification) | H02 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`component_deployments` — H02 shared Admin; H04 Operator assignments](../../../database/README.md#component_deployments--h02-shared-admin-h04-operator-assignments) | H02 | H02 owns shared/component scope and compatibility; H04 inserts per-workspace Operator assignments. |
+| [`operators` — H03/H04 assignment and desired state](../../../database/README.md#operators--h03h04-assignment-and-desired-state) | H04 | H03 supplies verified identity binding; H04 owns assignment/readiness and desired state. |
+| [`invitations` — H03](../../../database/README.md#invitations--h03) | H03 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`admin_principals` — H03](../../../database/README.md#admin_principals--h03) | H03 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`admin_sessions` — H03](../../../database/README.md#admin_sessions--h03) | H03 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`login_handoffs` — H03 central login](../../../database/README.md#login_handoffs--h03-central-login) | H03 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`operations` — H04 supported manual effects](../../../database/README.md#operations--h04-supported-manual-effects) | H04 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`operation_events` — H04](../../../database/README.md#operation_events--h04) | H04 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`admin_audit` — H03/H04](../../../database/README.md#admin_audit--h03h04) | H04 | H03 supplies authentication events; H04 owns the common mutation/audit boundary. |
+| [`workspace_recovery_status` — H05](../../../database/README.md#workspace_recovery_status--h05) | H05 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`admin_recovery_meta` — H05](../../../database/README.md#admin_recovery_meta--h05) | H05 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`control_recovery_operations` — H05](../../../database/README.md#control_recovery_operations--h05) | H05 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`control_recovery_points` — H05](../../../database/README.md#control_recovery_points--h05) | H05 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`control_restore_operations` — H05](../../../database/README.md#control_restore_operations--h05) | H05 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`control_backup_state` — H05](../../../database/README.md#control_backup_state--h05) | H05 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`control_recovery_audit` — H05](../../../database/README.md#control_recovery_audit--h05) | H05 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`host_identity`](../../../database/README.md#host_identity) | H02 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`resource_bindings`](../../../database/README.md#resource_bindings) | H02 | H04 records admitted provisioning results via the H02 agent; no direct Admin SQL. |
+| [`project_assignments` — H02 if project quotas qualify](../../../database/README.md#project_assignments--h02-if-project-quotas-qualify) | H02 | Conditional on H02 qualification; do not infer selection from historical reports. |
+| [`host_receipts`](../../../database/README.md#host_receipts) | H02 | H02 owns effect identity/reconciliation; H04 orchestrates supported manual operations. |
+| [`access_meta` — H03/H04](../../../database/README.md#access_meta--h03h04) | H03 | H03 owns access identity/epoch; H04 supplies applied Free-policy and usage bindings. |
+| [`access_sessions` — H03](../../../database/README.md#access_sessions--h03) | H03 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`access_receipts` — H03/H04](../../../database/README.md#access_receipts--h03h04) | H03 | H03 owns source access receipts; H04 contributes policy/admission effects through the same contract. |
+| [`access_audit` — H03](../../../database/README.md#access_audit--h03) | H03 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`usage_state` — H04](../../../database/README.md#usage_state--h04) | H04 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`usage_reservations` — H04](../../../database/README.md#usage_reservations--h04) | H04 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`draft_leases` — H03 reuse existing unfinished-form fencing](../../../database/README.md#draft_leases--h03-reuse-existing-unfinished-form-fencing) | H03 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`recovery_meta` — H05](../../../database/README.md#recovery_meta--h05) | H05 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`recovery_operations` — H05](../../../database/README.md#recovery_operations--h05) | H05 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`recovery_points` — H05](../../../database/README.md#recovery_points--h05) | H05 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`backup_state` — H05](../../../database/README.md#backup_state--h05) | H05 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`restore_operations` — H05](../../../database/README.md#restore_operations--h05) | H05 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
+| [`recovery_audit` — H05](../../../database/README.md#recovery_audit--h05) | H05 | Owning slice delivers baseline, initializer, structural/retained validation and focused persistence proofs. |
 
 ## Command-family ownership checklist
 

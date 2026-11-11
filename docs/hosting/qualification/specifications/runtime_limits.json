@@ -5,7 +5,7 @@
   "contributors": [
     "H04"
   ],
-  "revision": 1,
+  "revision": 2,
   "levels": [
     "native_linux",
     "docker_linux",
@@ -30,6 +30,14 @@
     "remount_reboot_replace",
     "one_writer_and_drain",
     "warm_population_capacity",
-    "concurrent_admission_commitments"
+    "concurrent_admission_commitments",
+    "unique_principal_retention",
+    "immutable_child_effect_replay",
+    "monotonic_ingress_fences",
+    "exact_host_gateway_denial",
+    "long_lived_connection_containment",
+    "single_guarded_restart_owner",
+    "metadata_and_egress_isolation",
+    "scoped_secret_delivery"
   ]
 }

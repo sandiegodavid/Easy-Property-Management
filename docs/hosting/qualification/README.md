@@ -19,7 +19,7 @@ provider reachability or a successful login does not establish complete readines
 
 ## Project-quota reuse input
 
-[H02 project-quota reuse](HOSTED_PROJECT_QUOTA_REUSE.md) inventories the selected code/harness/tests and historical reboot reports imported from Admin_UI_Workflow. Three current Python source pins differ from the historical 8A run; native Docker/GCP qualification remains pending. This import does not activate runtime quotas or replace H02 design.
+[H02 project-quota reuse](HOSTED_PROJECT_QUOTA_REUSE.md) inventories the selected code/harness/tests and historical reboot reports imported from Admin_UI_Workflow. Three imported Python source pins differed from the historical 8A run; subsequent current-source native Docker/GCP evidence is linked in the H02 handoff below. This import does not activate runtime quotas or replace H02 design.
 
 ## H01.5 proof specifications and report tooling
 
@@ -48,3 +48,15 @@ the combined focused contract results and [tested inputs/commands](reports/HOSTE
 H01.1–H01.7 preparation is delivered, ready for contract review. No target proof is
 promoted: H02 needs its detailed design, and actual H02–H06 qualification/end-user
 acceptance remains open. Current runtime and local installation are unchanged.
+
+## Infrastructure qualification
+
+Use the [topic-based foundation guides](../foundation/README.md), particularly
+[qualification and handoff](../foundation/qualification-and-handoff.md), for delivered
+scope and remaining gates. The [evidence index](reports/README.md#infrastructure-evidence-by-topic)
+maps each topic to original dated reports, exact pins and retained failures.
+
+The [acceptance register](HOSTED_MVP_ACCEPTANCE.md#h02-consolidated-infrastructure-acceptance)
+distinguishes scoped infrastructure delivery from unavailable whole-runtime/final
+image proofs. Identity, real admission/usage, UI, recovery and final release gates
+still precede customer invitations. The qualification VM/disks are stopped and retained.

@@ -1,0 +1,323 @@
+{
+  "slice": "H02.11",
+  "date": "2026-11-13",
+  "status": "scoped_engineering_acceptance_delivered",
+  "source_commit": "88140223ca46fac469438daa1ef68d30b5e8d55c",
+  "source_sha256": "a75ee26ae89a0cdf70fd81755495cb51b0a5f612c15990d5bf17624080466f7b",
+  "private_evidence_root": "/Users/dcai/Desktop/Property-Management-Data/hosted-mvp-qualification/H02.11",
+  "scope": "H02 infrastructure subset only, not release promotion",
+  "source_archive_sha256": "0329884b867e2dde0036834832158eace2d42db54bf1ac7df4a54176dc1234ac",
+  "inputs_sha256": "8699df6603a89cd5035d07e454e455252f60875d2e74262a28d59613444a83f5",
+  "validation": {
+    "focused_python_passed": 985,
+    "initial_selection_passed": 584,
+    "sandbox_socket_failures": 10,
+    "socket_rerun_passed": 10,
+    "shared_contracts_passed": 391,
+    "hosted_status_browser_passed": 4,
+    "ruff_python_files": 113,
+    "ruff_check": "passed",
+    "ruff_format_check": "passed",
+    "full_suite_run": false,
+    "product_source_changed": false
+  },
+  "native": {
+    "runtime_status": "scoped-native-cases-passed",
+    "runtime_lab": "/var/lib/epm-quota-qualification-8yc5j_nr",
+    "connected_status": "connected_sandbox_pass",
+    "connected_lab": "/var/lib/epm-quota-qualification-ak9og6sm",
+    "final_checks": {
+      "compatibility": {
+        "native": 42,
+        "compat": 159
+      },
+      "capacity_artifact_current_validator": "passed",
+      "capacity_evidence_sha256": "11348cc457a7f138585174cb5c50327ff431573bdc4ca7307e19dc9386716de8",
+      "closed_service_projection": "passed",
+      "running_containers": 0,
+      "root": "/var/lib/epm-quota-qualification-chlqtzhc"
+    },
+    "target": {
+      "kernel": "7.0.0-1017-gcp",
+      "machine": "x86_64",
+      "kernel_sha256": "3cf8c2c34cd30720d3f37c8b5327ae7d10f24073e73a34edb1e4aaea4dd39adb",
+      "docker": {
+        "Platform": {
+          "Name": "Docker Engine - Community"
+        },
+        "Version": "29.9.3",
+        "ApiVersion": "1.56",
+        "MinAPIVersion": "1.40",
+        "Os": "linux",
+        "Arch": "amd64",
+        "Components": [
+          {
+            "Name": "Engine",
+            "Version": "29.9.3",
+            "Details": {
+              "ApiVersion": "1.56",
+              "Arch": "amd64",
+              "BuildTime": "Tue Nov  3 21:41:31 2026",
+              "Experimental": "false",
+              "GitCommit": "70efc0e",
+              "GoVersion": "go1.26.10",
+              "KernelVersion": "7.0.0-1017-gcp",
+              "MinAPIVersion": "1.40",
+              "Module": "github.com/moby/moby/v2",
+              "ModuleVersion": "v2.0.0+unknown",
+              "Os": "linux"
+            }
+          },
+          {
+            "Name": "containerd",
+            "Version": "v2.4.2",
+            "Details": {
+              "GitCommit": "b7a25261e029d68978bbf290df0a62fc819b3c51"
+            }
+          },
+          {
+            "Name": "runc",
+            "Version": "1.5.2",
+            "Details": {
+              "GitCommit": "v1.5.2-0-g29dd3dc2"
+            }
+          },
+          {
+            "Name": "docker-init",
+            "Version": "0.19.0",
+            "Details": {
+              "GitCommit": "de40ad0"
+            }
+          }
+        ],
+        "GitCommit": "70efc0e",
+        "GoVersion": "go1.26.10",
+        "KernelVersion": "7.0.0-1017-gcp",
+        "BuildTime": "2026-11-03T21:41:31.000000000+00:00"
+      },
+      "cgroup": "cpuset cpu io memory hugetlb pids rdma misc dmem",
+      "source_sha256": "a75ee26ae89a0cdf70fd81755495cb51b0a5f612c15990d5bf17624080466f7b",
+      "host_services_sha256": "b4a4f93ba6e09a49c86182e579271fed078de6f714753b62ce01b6c2e2cce129",
+      "filesystem": {
+        "filesystems": [
+          {
+            "uuid": "8d2fd2e0-274b-4535-90d5-da78aa6bd9b6",
+            "fstype": "ext4",
+            "options": "rw,nosuid,nodev,noexec,relatime,prjquota"
+          }
+        ]
+      }
+    }
+  },
+  "proof_reports": {
+    "runtime_limits": "unavailable: scoped passes plus unrun/later-owned cases",
+    "image_schema": "unavailable: final later-owned resources/assets"
+  },
+  "historical_evidence": {
+    "reboot_and_gateway": "HOSTED_MVP_H02_9_VALIDATION.json",
+    "capacity": "HOSTED_MVP_H02_10_CAPACITY_PROFILE.json"
+  },
+  "commands": [
+    [
+      ".venv/bin/python",
+      "-m",
+      "pytest",
+      "apps/server/app/modules/host_agent/tests",
+      "apps/server/app/platform/tests/test_hosted_schema.py",
+      "apps/server/app/platform/tests/test_schema_resources.py",
+      "apps/server/app/platform/tests/test_hosted_artifacts.py",
+      "apps/server/app/platform/tests/test_hosted_launch.py",
+      "apps/server/app/platform/tests/test_browser_transport.py",
+      "scripts/tests/test_hosted_packaging.py",
+      "scripts/tests/test_hosted_lab.py",
+      "scripts/tests/test_hosted_network_probes.py",
+      "scripts/tests/test_hosted_gcp.py",
+      "scripts/tests/test_hosted_capacity_measurement.py",
+      "-q"
+    ],
+    [
+      ".venv/bin/python",
+      "-m",
+      "pytest",
+      "apps/server/app/modules/host_agent/tests",
+      "apps/server/app/platform/tests/test_hosted_schema.py",
+      "apps/server/app/platform/tests/test_schema_resources.py",
+      "apps/server/app/platform/tests/test_hosted_artifacts.py",
+      "apps/server/app/platform/tests/test_hosted_launch.py",
+      "apps/server/app/platform/tests/test_browser_transport.py",
+      "scripts/tests/test_hosted_packaging.py",
+      "scripts/tests/test_hosted_lab.py",
+      "scripts/tests/test_hosted_network_probes.py",
+      "scripts/tests/test_hosted_gcp.py",
+      "scripts/tests/test_hosted_capacity_measurement.py",
+      "--lf",
+      "-q"
+    ],
+    [
+      ".venv/bin/python",
+      "-m",
+      "pytest",
+      "apps/server/app/platform/tests/test_hosted_contracts.py",
+      "apps/server/app/platform/tests/test_hosted_effect_contracts.py",
+      "apps/server/app/platform/tests/test_hosted_ports.py",
+      "apps/server/app/platform/tests/test_hosted_proofs.py",
+      "apps/server/app/platform/tests/test_hosted_ui_contracts.py",
+      "-q"
+    ],
+    [
+      "npx",
+      "playwright",
+      "test",
+      "--config",
+      "playwright.hosted-status.config.ts"
+    ]
+  ],
+  "native_commands": [
+    "EPM_RUN_PROJECT_QUOTA_QUALIFICATION=1 PYTHONPATH=<source>/apps/server <pinned-host-python> -B sandbox/qualify_runtime.py --run",
+    "same opt-in/python gateway/qualify_connected.py --run",
+    "systemctl restart epm-network-policy",
+    "Qualification allocate one synthetic owner; qualify_host.compatibility: native=42, compat=159",
+    "capacity_profile.validate_document on exact retained H02.10 evidence; expected source and policy hashes pinned",
+    "service_runtime verify; docker ps confirms zero running containers"
+  ],
+  "source_changes_since_capacity": [
+    "deploy/hosted-mvp/gcp/capacity_profile.py"
+  ],
+  "release_qualified": false,
+  "business_ingress_enabled": false,
+  "remaining_owners": [
+    "H03 identity/access/assets",
+    "H04 serialized admission/logical metering/Admin-lite UI",
+    "H05 recovery/restore and owning stores",
+    "Final image/all-store qualification before H06 invitations"
+  ],
+  "evidence": [
+    {
+      "path": "browser-result.json",
+      "sha256": "7d869d1a6fd4bdc7926d606c069e5993cd78090c9dd879219fd0ff03b42a1226",
+      "bytes": 193
+    },
+    {
+      "path": "connected-result.json",
+      "sha256": "c0a505e4ca80e0731fdaea9cafea396089e23d2938c83024dd88c2cdf36a44d0",
+      "bytes": 2691
+    },
+    {
+      "path": "current-native-1.log",
+      "sha256": "5cdc34a7a9f6d6b904d847bf47dfa4d3ece81d8e356ad916937017dbd9594eb8",
+      "bytes": 564
+    },
+    {
+      "path": "final-instance.json",
+      "sha256": "a064f417f5df2c9bb91ddc0206281e37d48f36d5492782c491162212205909aa",
+      "bytes": 30046
+    },
+    {
+      "path": "final-native-checks.json",
+      "sha256": "c05b80a4a60114565a1fafc760b5699a763c7d1495e45e074c581f9e40a547e8",
+      "bytes": 337
+    },
+    {
+      "path": "final-native-checks.log",
+      "sha256": "ada8bba00b59f0f7076db357cfeb244da577b6b2f9f0603c4b1213237c8e3384",
+      "bytes": 627
+    },
+    {
+      "path": "final-stop.log",
+      "sha256": "a7897f5219c0b487dbd668f280733da51f08fb97a7bf699b317a42b40a551941",
+      "bytes": 284
+    },
+    {
+      "path": "image-inputs.json",
+      "sha256": "ac6fca9d61d22c5abda00590ba39b2222dc4e09d9e112031622e9345ee9e5a90",
+      "bytes": 177
+    },
+    {
+      "path": "initial-component-result.json",
+      "sha256": "1cbbbee1d7ddb32739fc776183a31c1b60d9d9bc91deabd7bcd7bb9d36e77754",
+      "bytes": 1267
+    },
+    {
+      "path": "inputs.json",
+      "sha256": "8699df6603a89cd5035d07e454e455252f60875d2e74262a28d59613444a83f5",
+      "bytes": 3854
+    },
+    {
+      "path": "lint-files.json",
+      "sha256": "8bdf47637da9e9de05760e08bdf830e5193f0b8996c5a973ab3b1208d2e3c983",
+      "bytes": 6472
+    },
+    {
+      "path": "native-results.json",
+      "sha256": "bfa80431a10ad87200872a90f26292b1ef9698826678fd6ed5bd35edc2ac0da9",
+      "bytes": 7291
+    },
+    {
+      "path": "native-results.log",
+      "sha256": "592ce8f2e193997650512472ac14f91a53698f20c1990d5245d8bda169e9981e",
+      "bytes": 274
+    },
+    {
+      "path": "ruff-check.log",
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "bytes": 19
+    },
+    {
+      "path": "ruff-format.log",
+      "sha256": "291d91fd4256e9a8b5d743c5c5fcb04dfee353294a3741d1ec385150e1711bf6",
+      "bytes": 28
+    },
+    {
+      "path": "runtime-result.json",
+      "sha256": "78f8f580c4760ae4598a1d86590a1d13de3cc00199c7ba30dcdf64fa6dd09127",
+      "bytes": 3838
+    },
+    {
+      "path": "schema-inputs.json",
+      "sha256": "433e3cafada00274602aca17991ec3f0379b04a6dfcddb3610468ea4e71a06d4",
+      "bytes": 908
+    },
+    {
+      "path": "shared-contracts.log",
+      "sha256": "12e3080adf05e6813dd405d98452e6271fb6d23581607bb8bc05bec44bd18e23",
+      "bytes": 500
+    },
+    {
+      "path": "socket-rerun.log",
+      "sha256": "c481518a6cfe0e81b80ff6efa24dfb1db047355d1cc5a2a635eaecb6df148d0a",
+      "bytes": 114
+    },
+    {
+      "path": "source-1.json",
+      "sha256": "9ed8d483eaa6dbfddb047fa28aec6d1eb1bfe2346e82152495984def3f04d532",
+      "bytes": 84733
+    },
+    {
+      "path": "target-pins.json",
+      "sha256": "c8482bde6a9bf72d2d8ae2e0cfb37c620f7ecf3d42c21f15ea6d0376edf6abaa",
+      "bytes": 1486
+    },
+    {
+      "path": "target-pins.log",
+      "sha256": "592ce8f2e193997650512472ac14f91a53698f20c1990d5245d8bda169e9981e",
+      "bytes": 274
+    },
+    {
+      "path": "validate-image_schema.log",
+      "sha256": "66f015e3df68cf97849355d0af757232beadeb0e76c4400932816901d9c6478c",
+      "bytes": 128
+    },
+    {
+      "path": "validate-runtime_limits.log",
+      "sha256": "ae0fd66d321fd7a80f3834899dfef7078cc6ea5e18caa4d276f5c44b6198f8c1",
+      "bytes": 128
+    }
+  ],
+  "final_host_state": {
+    "instance_id": "6955052781247608210",
+    "status": "TERMINATED",
+    "data_disk": "epm-h02-host-data",
+    "data_disk_auto_delete": false,
+    "running_containers_before_stop": 0
+  }
+}

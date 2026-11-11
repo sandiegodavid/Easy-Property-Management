@@ -1,0 +1,185 @@
+{
+  "profile": {
+    "version": 1,
+    "reference": "gcp-amd64-candidate-v1",
+    "revision": 1,
+    "acceptance": "measured_candidate",
+    "measurement_sha256": "11348cc457a7f138585174cb5c50327ff431573bdc4ca7307e19dc9386716de8",
+    "source_sha256": "3e213459725fde49098e33af83053b9f209a6fa579de47df539afc41f8bc69d0",
+    "runtime_policy_sha256": "9fe9dc2cfce2b513d31559bc302fe7cb9f07a68142de38cf5e503f306da786d6",
+    "maximum_observation_age_ms": 5000,
+    "shared_reserve": {
+      "memory_bytes": 1610612736,
+      "cpu_millicores": 500,
+      "pids": 512,
+      "data_bytes": 4294967296,
+      "data_inodes": 100000,
+      "boot_bytes": 9663676416,
+      "boot_inodes": 300000
+    },
+    "recovery_reserve": {
+      "memory_bytes": 536870912,
+      "cpu_millicores": 0,
+      "pids": 0,
+      "data_bytes": 1073741824,
+      "data_inodes": 20000,
+      "boot_bytes": 0,
+      "boot_inodes": 0
+    }
+  },
+  "runtime": {
+    "version": 1,
+    "architecture": "amd64",
+    "apparmor_sha256": "d58ff64377e8e38c1dedf214b8558cfcaab4991176476c7664944f0c750be495",
+    "memory_bytes": 805306368,
+    "cpu_millicores": 250,
+    "pids": 64,
+    "file_descriptors": 512,
+    "log_bytes": 2097152,
+    "log_files": 3
+  },
+  "image": "619056c0a5bbf72cea7ccfb2ecea160774a13dd5b08979f9a003a667a9189641",
+  "stages": [
+    {
+      "population": 2,
+      "kind": "empty",
+      "samples": 21,
+      "peak_memory": 200806400,
+      "peak_pids": 4,
+      "minimum_host_available": 7203364864,
+      "worst_p95_ms": 6.924798999989434,
+      "requests": 358,
+      "cpu_usage_delta_usec": 2067194,
+      "cpu_throttled_delta_usec": 0
+    },
+    {
+      "population": 2,
+      "kind": "loaded",
+      "samples": 27,
+      "peak_memory": 408678400,
+      "peak_pids": 4,
+      "minimum_host_available": 7070932992,
+      "worst_p95_ms": 6.494560999954047,
+      "requests": 8,
+      "cpu_usage_delta_usec": 4422681,
+      "cpu_throttled_delta_usec": 10536865
+    },
+    {
+      "population": 5,
+      "kind": "empty",
+      "samples": 21,
+      "peak_memory": 408678400,
+      "peak_pids": 4,
+      "minimum_host_available": 6697205760,
+      "worst_p95_ms": 11.54546499992648,
+      "requests": 888,
+      "cpu_usage_delta_usec": 5042048,
+      "cpu_throttled_delta_usec": 0
+    },
+    {
+      "population": 5,
+      "kind": "loaded",
+      "samples": 33,
+      "peak_memory": 408678400,
+      "peak_pids": 4,
+      "minimum_host_available": 6470287360,
+      "worst_p95_ms": 9.137980000105017,
+      "requests": 15,
+      "cpu_usage_delta_usec": 9790804,
+      "cpu_throttled_delta_usec": 21929021
+    },
+    {
+      "population": 6,
+      "kind": "empty",
+      "samples": 21,
+      "peak_memory": 408678400,
+      "peak_pids": 4,
+      "minimum_host_available": 6519230464,
+      "worst_p95_ms": 9.20432099997015,
+      "requests": 1071,
+      "cpu_usage_delta_usec": 6017188,
+      "cpu_throttled_delta_usec": 0
+    },
+    {
+      "population": 6,
+      "kind": "loaded",
+      "samples": 31,
+      "peak_memory": 408678400,
+      "peak_pids": 4,
+      "minimum_host_available": 6316683264,
+      "worst_p95_ms": 11.764201000005414,
+      "requests": 15,
+      "cpu_usage_delta_usec": 9334055,
+      "cpu_throttled_delta_usec": 20160024
+    },
+    {
+      "population": 6,
+      "kind": "fault",
+      "samples": 48,
+      "peak_memory": 805306368,
+      "peak_pids": 62,
+      "minimum_host_available": 3617828864,
+      "faults": {
+        "workspace": {
+          "errno": 122,
+          "wal_failure_preserved_acknowledged_row": true
+        },
+        "control_bytes": 122,
+        "scratch_bytes": 122,
+        "deleted_open": 122,
+        "inodes": {
+          "files_created": 4092,
+          "errno": 122
+        },
+        "pids": {
+          "children": 60,
+          "errno": 11
+        },
+        "descriptors": {
+          "descriptors": 498,
+          "errno": 24
+        },
+        "shared_memory_readonly": true,
+        "bounded_memory_child_killed": true,
+        "application_survived_faults_ms": 32.2714270000688
+      },
+      "cpu_usage_delta_usec": 19275159,
+      "cpu_throttled_delta_usec": 32017490
+    }
+  ],
+  "log_bounds": [
+    {
+      "files": 3,
+      "bytes": 4382636
+    },
+    {
+      "files": 3,
+      "bytes": 4382628
+    },
+    {
+      "files": 3,
+      "bytes": 4382610
+    },
+    {
+      "files": 3,
+      "bytes": 4382615
+    },
+    {
+      "files": 3,
+      "bytes": 4382644
+    },
+    {
+      "files": 3,
+      "bytes": 4382614
+    }
+  ],
+  "stop_failures": [],
+  "status": "scoped_measured_candidate_pass",
+  "admission_enabled": false,
+  "restore_readiness": "unavailable_pending_H05",
+  "focused_tests": 72,
+  "source_archive_sha256": "5d0b4ab8998a72dbd01d2e2bdfad2b2710e8dfe61a6ca660eacc818395db76dc",
+  "filesystem_uuid": "8d2fd2e0-274b-4535-90d5-da78aa6bd9b6",
+  "kernel": "7.0.0-1017-gcp",
+  "machine": "x86_64"
+}

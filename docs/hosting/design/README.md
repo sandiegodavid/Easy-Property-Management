@@ -11,7 +11,7 @@ The MVP design is a navigation index backed by focused guides in `mvp/`. Start w
 then the [delivery plan](mvp/delivery-plan.md). Use [recovery](mvp/recovery.md),
 [storage/subscriptions](mvp/subscriptions-storage-and-runtime.md) and
 [releases](mvp/releases.md) for specific workflows. The
-[schema catalog](../../DATABASE_SCHEMA.md) links to separate per-store dictionaries.
+[schema catalog](../../database/README.md) links to separate per-store dictionaries.
 
 | Reference | Status |
 | --- | --- |
@@ -26,9 +26,14 @@ release-compatibility and post-reopen data-preservation requirements. [HOSTED-00
 ## H01 implementation handoff
 
 - [H01 detailed design](HOSTED_MVP_H01_DESIGN.md): current-code inventory, deployment/source contracts, Admin-lite UI and proof plans.
-- [Database schema master](../../DATABASE_SCHEMA.md): shared store ownership and table/column dictionary; proposed hosted schema is not implemented.
+- [Database schema master](../../database/README.md): shared store ownership and table/column dictionary; proposed hosted schema is not implemented.
 
-## H02 design and implementation planning
+## Container, storage and gateway foundation
 
-- [H02 detailed design](HOSTED_MVP_H02_DESIGN.md): accepted container/storage/gateway design, quota reuse, schema/authority ownership and resolved D1–D13 decisions.
-- [H02 ordered plan](HOSTED_MVP_H02_DESIGN.md#h02-implementation-plan): sequential work units, evidence and H03–H05 handoff. Design only; no VM or cloud changes performed.
+- [Foundation design](HOSTED_MVP_H02_DESIGN.md): accepted architecture, authority boundaries and D1–D13 rationale.
+- [Foundation guides](../foundation/README.md): current implementation and operations by topic, including packaging/launch, inventory/commands, runtime/capacity, networking, development/host operation and qualification.
+- [Acceptance register](../qualification/HOSTED_MVP_ACCEPTANCE.md#h02-consolidated-infrastructure-acceptance): delivered scoped infrastructure and remaining identity/admission/recovery/final-release gates.
+
+The qualification host is retained and stopped. Scoped evidence does not promote a
+release or authorize invitations. Dated reports and the archived ordered plan are
+provenance, not the primary reading sequence.

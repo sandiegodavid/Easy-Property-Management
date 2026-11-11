@@ -1,6 +1,6 @@
 # Initialization, retention and schema validation
 
-[Database schema catalog](../DATABASE_SCHEMA.md) · [Shared conventions](overview.md)
+[Database schema catalog](README.md) · [Shared conventions](overview.md)
 
 Part of the schema master. Proposed hosted tables are design contracts, not claims of implemented schema. Executable definitions belong exclusively under `application/database/`; see [resource ownership](overview.md#required-schema-definition-location).
 

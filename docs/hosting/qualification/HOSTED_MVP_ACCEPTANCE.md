@@ -1,6 +1,6 @@
 # Fresh hosted MVP acceptance register
 
-Updated November 11, 2026. **Design accepted; fresh-MVP implementation and deployment
+Updated November 13, 2026. **Design accepted; fresh-MVP implementation and deployment
 acceptance not established.** This register follows the
 [Hosted MVP design](../design/HOSTED_MVP_DESIGN.md), not the older demo checkpoint.
 HOSTED-001 schedules implementation; H01 preparation evidence does not establish
@@ -37,7 +37,7 @@ hosted workflow is established by these unit contracts.
 
 | Stage | Required evidence | Status |
 | --- | --- | --- |
-| H01–H05 preparation | Private container/storage and identity proofs; Admin-lite safe provisioning/claim/retry; Free 50 MB admission/usage; nightly verified off-host database/files and control recovery; rehearsed restore; warm-container capacity for the admitted population (initial proof target: five). | Not established |
+| H01–H05 preparation | Private container/storage and identity proofs; Admin-lite safe provisioning/claim/retry; Free 50 MB admission/usage; nightly verified off-host database/files and control recovery; rehearsed restore; warm-container capacity for the admitted population (initial proof target: five). | H02 infrastructure subset delivered; H03–H05 and final artifact acceptance not established |
 | H06 — Pilot 0 | Invited Free operators within qualified capacity; prove a sixth operator can be admitted when capacity permits, concurrent admissions cannot reuse headroom, and insufficient/unknown capacity stays pending; one announced maintenance window with safe drain/recovery; named support and manual-operation runbook; recorded gross spend/Admin minutes; monitored backup-point age. No Stripe, paid enrollment, idle-wake or individual scheduling. | Not established |
 | H07–H12 — Full hosted target | Automatic onboarding, paid quota/recovery/billing, independent release scheduling, idle-wake, paid pilot and measured expansion. Apply the detailed gates below to each admitted capability. | Not established |
 | Portal follow-up | PORTAL-001/002, FIN-009 and PAY-001/002 source/privacy/payment/browser gates; not hosting completion or Pilot 0 scope. | Not established |
@@ -51,12 +51,13 @@ Pilot 0 proof cannot qualify a later automated effect without its own tests.
 
 | Gate | Required result | Current fresh-target status |
 | --- | --- | --- |
-| Runtime isolation and persistence | Private Docker instances, one SQLite writer, correct persistent mounts, non-root/runtime and host-agent boundary; restart preserves data and quota ownership. | Not established |
-| Gateway and identity | Registered flat subdomains, unknown-host denial, central Google/email callback, secure one-use handoff, host-only sessions and MFA-protected separate Admin. | Not established |
-| Small-host capacity/cost | Empty/representative data, background jobs, paid warm residency and Free wake measured; gross launch budget $250/month before credits, no unsupported admission. | Not established |
+| Runtime isolation and persistence | Private Docker instances, one SQLite writer, correct persistent mounts, non-root/runtime and host-agent boundary; restart preserves data and quota ownership. | H02 synthetic infrastructure subset delivered; final application/identity/drain integration and artifacts remain open |
+| Gateway and identity | Registered flat subdomains, unknown-host denial, central Google/email callback, secure one-use handoff, host-only sessions and MFA-protected separate Admin. | H02 closed gateway/denial subset delivered; H03 identity/positive routing not established |
+| Small-host capacity/cost | Empty/representative data, background jobs, paid warm residency and Free wake measured; gross launch budget $250/month before credits, no unsupported admission. | H02 two/five/six synthetic warm candidate measured; real admission, recovery jobs, cost and later paid/wake acceptance not established |
 | Admin onboarding | Add operator admits one durable job; readiness/verified backup precedes invitation; exact identity claim activates automatically; failures stay safely pending. | Not established |
 | Free recovery | Consistent database/file capture, nightly/seven-point policy, unattended keys, degraded-status alerts and successful operator-authorized separate-destination restore without Admin approval; preview/recent-auth, safe fencing/validation, scoped status and optional manual executor attribution. | Not established |
 | Control recovery | Off-host registry/ownership/configuration/release/billing references and recoverable keys; recovery works without hosted Admin and cannot revive sessions/stale grants. | Not established |
+| Per-tier physical storage sizing | [Measured peaks and justified margins](../design/mvp/subscriptions-storage-and-runtime.md#per-tier-physical-storage-sizing-acceptance) for each 50 MB/200 MB/1 GB logical tier, per-tree actual byte/inode ceilings, independent real-limit exhaustion/rollback/retry/UI proofs and separate backup/restore reservations. Free must qualify before Pilot 0; paid tiers before activation. | Not established for any tier; existing 256-MiB/8,192-inode constants are synthetic trial inputs, not derived production sizing |
 | Metering/enforcement | Reproducible logical allowance, protected physical byte/inode limits, bounded reserves, quota/commit failure handling and safe over-allowance reads/cleanup. | Not established |
 | Paid recovery | Actual completed off-host-point age meets recent 15-minute objective; fine-grained 24 hours then daily 30/90-day history, valid incremental chains and measured retained bytes/traffic. | Not established |
 | Billing/application | Confirmed payment before verified application; duplicate/out-of-order events and interrupted effects reconcile; scheduled downgrade/cancellation, renewal grace and compensation preserve data. | Not established |
@@ -127,8 +128,8 @@ identify the local contract scope and two lifecycle-alignment source changes.
 H01.1–H01.7 implementation preparation is delivered and ready for review; acceptance
 of that implementation contract review is not asserted by this task. The
 [H02 design decisions](../design/HOSTED_MVP_H02_DESIGN.md#resolved-design-decisions)
-are now accepted; its implementation remains planned. Every stage-specific runtime/native/cloud/provider/end-user gate
-above remains **Not established**. No admission, restore, quota, billing or UI control
+are now accepted; subsequent scoped H02 implementation evidence is recorded below.
+Every stage-specific release gate above remains **Not established** by H01 preparation. No admission, restore, quota, billing or UI control
 is enabled by H01 results.
 
 ## H02 acceptance boundary
@@ -139,5 +140,39 @@ denial. Its candidate images are not qualified hosted releases while H03–H05 s
 assets or behavior remain unavailable. Keep the complete image/all-store report
 unavailable/not_run where applicable and repeat it on final owning-slice artifacts
 before H06. No candidate-only result populates a fake qualified release or permits
-customer admission. No H02 runtime or cloud acceptance is established by the accepted
-design. See the [ordered plan](../design/HOSTED_MVP_H02_DESIGN.md#h02-implementation-plan).
+customer admission. Scoped runtime/cloud evidence is recorded below; the design
+alone establishes no acceptance. See the [topic-based foundation guides](../foundation/README.md).
+
+## H02 consolidated infrastructure acceptance
+
+The container/storage/gateway foundation is delivered within the accepted
+infrastructure subset. [Qualification and handoff](../foundation/qualification-and-handoff.md)
+consolidates **985 focused Python passes**, **four hosted-status browser passes**,
+Ruff checks on **113 infrastructure Python files**, current-source native sandbox/
+connected/ABI proofs and final closed-host verification. Exact sources/commands
+remain in the [recorded validation manifest](reports/HOSTED_MVP_H02_11_VALIDATION.json).
+The qualification VM/data disk are stopped and retained. No positive business
+ingress, release grant or provider setting changed during consolidation.
+
+| Topic | Current reference | Acceptance boundary |
+| --- | --- | --- |
+| Packaging and launch | [Guide](../foundation/packaging-and-launch.md) | Separate candidates and safe unavailable launch; final complete artifacts and application assets remain open. |
+| Inventory and commands | [Guide](../foundation/inventory-and-host-commands.md) | Available Admin/inventory baselines, immutable effects/receipts and fences; authenticated owning workflows remain open. |
+| Runtime and capacity | [Guide](../foundation/runtime-and-capacity.md) | Private writer/quota/sandbox and measured two/five/six candidate population; no durable admission or recovery authority. |
+| Networking and access | [Guide](../foundation/networking-and-access.md) | Closed gateway/egress/service/secret boundary; positive identity access remains open. |
+| Development and host operation | [Guide](../foundation/development-and-host-operations.md) | Isolated procedures and exact retained GCP setup/reboot; completed one-time reset is not ordinary setup. |
+| Qualification and handoff | [Guide](../foundation/qualification-and-handoff.md) | Current scoped checks; older reboot/capacity/network records retain their original pins. |
+
+The [runtime subset report](reports/HOSTED_MVP_H02_11_RUNTIME_SUBSET.json) covers every
+specification case with explicit passed/not-run/unavailable results. Its overall
+status remains **unavailable**, including H04's real concurrent admission. The
+[final image/all-store report](reports/HOSTED_MVP_H02_11_IMAGE_ALL_STORES.json) is
+**unavailable** until later owning baselines/assets exist. Both pass strict v1
+format/coverage validation; valid evidence format does not grant release authority.
+This is the intended D1/D2 scope boundary, not a silently omitted or passed gate.
+
+H03 must deliver identity/access/assets; H04 real serialized admission/logical usage
+and Admin/operator workflows; H05 recovery-owned resources/keys/restore. Then rebuild
+and qualify final installed artifacts/all six stores before promotion and H06
+invitations. Stage-specific release acceptance above remains **Not established**.
+The handoff records exact owner inputs, commands, retained failures and runbooks.

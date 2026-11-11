@@ -37,3 +37,10 @@ Their [manifest](planning-and-reports-2026-10-24/MANIFEST.json) records source a
 snapshot hashes; snapshot prose is unchanged and relative links are rebased.
 Current reports focus on tested conditions/results and retain the underlying
 technical evidence. Use the current index for operating instructions.
+
+## Infrastructure planning provenance
+
+[Container/storage/gateway planning snapshot](HOSTED_MVP_H02_PLANNING_2026-11-13.md)
+preserves the earlier design/status/ordered plan at `71f712a7`, with relative links
+rebased. Current [foundation guides](../foundation/README.md) consolidate behavior,
+operations and proof by topic; dated qualification records remain unchanged.

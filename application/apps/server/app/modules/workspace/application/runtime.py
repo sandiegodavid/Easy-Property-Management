@@ -16,10 +16,14 @@ from app.platform.locking import WorkspaceOperationInProgressError, WorkspaceOpe
 class WorkspaceRuntime:
     """Keeps one server instance responsible for an active local workspace."""
 
-    def __init__(self, service: WorkspaceService) -> None:
+    def __init__(self, service: WorkspaceService, *, writer_lock=None) -> None:
         self.service = service
-        self._lock = WorkspaceOperationLock(
-            service.paths.root.parent / f".{service.paths.root.name}.server.lock"
+        self._lock = (
+            writer_lock
+            if writer_lock is not None
+            else WorkspaceOperationLock(
+                service.paths.root.parent / f".{service.paths.root.name}.server.lock"
+            )
         )
         self.startup_attempted = False
         self.writer_lock_acquired = False

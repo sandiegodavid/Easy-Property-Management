@@ -1,6 +1,6 @@
 # Hosting documentation
 
-Updated November 10, 2026. Start with the confirmed fresh hosted-MVP direction.
+Updated November 13, 2026. Start with the confirmed fresh hosted-MVP direction.
 Documentation describes requirements and evidence separately; it does not establish
 implementation or permission to deploy, charge or admit real customer data.
 
@@ -20,15 +20,27 @@ operator count within qualified capacity; Empty workspace is the default. Import
 are deferred but available to all tiers when implemented; tenant/owner portals follow hosting in the immediate backlog.
 Launch and 100-operator gross budget targets are $250 and $300/month before credits.
 
-## Implement first
+## Foundation and remaining delivery
 
-Start [HOSTED-001 H01](design/mvp/delivery-plan.md#implementation-slices). Pilot 0 releases at H06 to invited Free operators within qualified capacity: Admin-lite, verified nightly off-host backups/rehearsed restore, warm runtimes, one maintenance window and recorded manual operating cost. No Stripe, idle-wake or per-operator scheduling. H07–H12 deliver the subsequent full platform described above. [PORTAL-001/002](../active/PORTALS_IMPLEMENTATION_PLAN.md) follow it, with shared FIN-009 and PAY-001/002 sources.
+The [topic-based infrastructure guides](foundation/README.md) consolidate delivered
+container/storage/gateway behavior, setup/development procedures, measured capacity
+and qualification limits. Use these instead of following completed implementation
+steps. Exact reports retain their original dates and source/artifact identities.
+
+The [delivery plan](design/mvp/delivery-plan.md#implementation-slices) keeps managed
+identity, real admission/usage and recovery with their owners. Pilot 0 releases at
+H06 only after those gates: invited Free operators within qualified capacity,
+Admin-lite, verified nightly off-host backups/rehearsed restore, warm runtimes, one
+maintenance window and recorded manual cost. No Stripe, idle-wake or per-operator
+scheduling. Later features deliver that automation; [portal work](../active/PORTALS_IMPLEMENTATION_PLAN.md)
+follows hosting. Scoped foundation delivery is not release promotion or customer access.
 
 ## Find the right document
 
 | Area | Use |
 | --- | --- |
 | [Design index](design/README.md) | Current MVP specification and clearly superseded demo designs |
+| [Foundation guides](foundation/README.md) | Current infrastructure implementation, operating procedures and evidence by topic |
 | [Deployment index](deployment/README.md) | Fresh-target prerequisites versus older release-specific procedures |
 | [Operations index](operations/README.md) | Current intended workflows and limitations of older executable runbooks |
 | [Qualification index](qualification/README.md) | New acceptance gates versus dated reports/raw evidence |

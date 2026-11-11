@@ -1,10 +1,11 @@
 # Schema resource ownership
 
-H01.2 adds independent **unimplemented scaffolds**, not initialized databases.
-The [schema master](../../docs/DATABASE_SCHEMA.md) owns table/column design;
+H02.2 implements the main-Admin and host-inventory current baselines. The other
+three hosted resource sets remain **unimplemented scaffolds**, not initialized databases.
+The [schema master](../../docs/database/README.md) owns table/column design;
 [H01](../../docs/hosting/design/HOSTED_MVP_H01_DESIGN.md#h012--establish-independent-schema-resource-scaffolding)
-owns this handoff. No business resources, local launcher or old hosted-access
-consumer is changed. Existing ignored caches from older resource directories are
+owns this handoff. The business baseline, local launcher and old hosted-access consumer remain unchanged.
+H02.4 adds explicit component packaging and installed verification. Existing ignored caches from older resource directories are
 not executable resources and must not be used as fallbacks.
 
 | Resource set / configuration | Revision namespace | Delivery / connection owner |
@@ -23,19 +24,21 @@ or open a damaged business/main-Admin DB merely to initialize its recovery store
 
 ## Discovery and runner handoff
 
-`app.platform.schema_resources.scaffold_config(HostedStore, application_directory=...)`
-loads exactly one configuration from a trusted installed application root, independent
+`app.platform.schema_resources.resource_config(HostedStore, application_directory=...)`
+loads an implemented Admin/inventory set; `scaffold_config` discovers only the three
+remaining unavailable sets. Both load exactly one configuration from a trusted installed application root, independent
 of the current working directory. It returns configuration **only**; it does not
 validate a database or report readiness. Missing/mismatched resource sets fail with
 `SchemaResourcesUnavailable`, stable code `schema_resources_unavailable`, without
 paths, credentials or connection URLs in the safe message. Unknown store IDs fail
 before resource dispatch. No default URL or database path is included in an INI.
 
-All five `env.py` entry points currently reject execution with the same unavailable
-outcome, including `upgrade`, `stamp`, `ensure_version` and offline SQL generation.
+The three scaffold `env.py` entry points reject execution with the same unavailable
+outcome. The two implemented environments also reject direct Alembic commands; only
+the owning runner may supply an explicit connection/transaction. This includes raw
+`upgrade`, `stamp`, `ensure_version` and offline SQL generation.
 A supplied connection is not used; even an empty or version-looking destination
-cannot be treated as matching. No empty revision, revision stamp or usable baseline
-is delivered. Alembic `heads` showing no heads is not successful initialization.
+cannot be treated as matching. No scaffold delivers an empty revision, revision stamp or usable baseline. Alembic `heads` showing no heads is not successful initialization.
 
 H02–H05 must replace each owning scaffold environment with a real runner/baseline,
 resource-derived structural validation and initializer **together**, including focused
@@ -46,9 +49,9 @@ No placeholder production route/CLI or startup initializer is registered by H01.
 
 ## Initialization contract
 
-These are acceptance requirements for the future owning initializer. Today every
-attempt fails unavailable before inspecting/creating a destination, since there is no
-baseline to establish a valid store. Fixture version rows are not proof of matching.
+These requirements are implemented for main Admin and host inventory by
+`app.platform.hosted_schema`; the remaining stores fail unavailable before inspecting
+or creating a destination. Fixture version rows are not proof of matching.
 
 | Input / condition | Required implemented behavior |
 | --- | --- |
@@ -66,7 +69,45 @@ protected deployment/host/recovery bindings, bootstrap principal, Free policy or
 qualified release assignments according to the master. They may not invent operator
 or workspace identities, enable an account, create sessions or seed business records.
 Provisioning/claim supplies those later using current authority and original receipts.
-No H01.2 scaffold performs either step.
+No remaining scaffold performs either step. H02.2 adds separate typed
+`bind_deployment` and `bind_host` adapters; neither grants readiness or access.
+
+## H02.2 owning runner usage
+
+From trusted application/bootstrap composition, supply an absolute canonical installed
+application root and destination beneath a caller-owned private (0700) directory:
+
+```python
+from app.platform.hosted_schema import initialize_store
+from app.platform.schema_resources import HostedStore
+
+result = initialize_store(
+    HostedStore.ADMIN,
+    private_admin_directory / "admin.sqlite",
+    application_directory=installed_application_root,
+)
+```
+
+This creates only the schema in a fresh exclusive 0600 regular file. Existing empty,
+partial, wrong-store/revision/shape, linked or nonprivate files reject without reset.
+Failed initialization retains its reserved file for explicit owner inspection. Matching
+reinit uses SQLite read-only mode and does not replay DDL or bind metadata.
+
+For an explicitly caller-owned SQLite connection, enable foreign keys before beginning
+an actual SQLite transaction (`BEGIN IMMEDIATE` for creation). `create_schema` neither
+commits nor closes it; SQLAlchemy autobegin alone is insufficient for transactional DDL.
+`validate_schema` requires an actual caller-owned SQLite snapshot and checks the
+current resource-derived sqlite_schema inventory, owning revision, foreign keys and
+quick-check without mutation. Attached stores and temporary
+objects reject. Current complete dictionaries define 13 Admin and six inventory tables.
+Only bootstrap/schema validation is delivered here; typed retained operation payloads,
+authentication and resource effects remain with their owning later slices.
+
+After schema creation, the explicit protected `DeploymentMetadata`/`HostMetadata`
+contracts may be bound through their owning infrastructure adapters in a caller-owned
+transaction. Matching metadata returns without update; mismatches never rebind/reset.
+Physical host/device/quota proof is still required before any resource authority/start.
+No public initializer endpoint or automatic startup fallback is registered.
 
 ## Component packaging requirements
 
@@ -84,5 +125,9 @@ fresh installed environment with no checkout/CWD dependency. Missing/wrong resou
 must reject before destination access. Include negative packaging tests and keep
 unimplemented sets unavailable: shipping an empty `versions/` does not qualify a release.
 No secrets, store contents, default URLs, runtime fallback DDL or alternate test schema
-may ship. Current staging/installation scripts and wheel metadata remain unchanged;
-H01.5 specifies proof inputs and H02 implements actual packaging/installation checks.
+may ship. H02.4 implements explicit `--component` staging/installation verification,
+per-component file/hash manifests and actual installed OCI/agent-bundle checks. The
+default local script modes and wheel metadata remain unchanged. See the
+[candidate build runbook](../../docs/hosting/deployment/packaging-and-installation.md) and
+[scoped evidence](../../docs/hosting/qualification/reports/HOSTED_MVP_H02_4_HANDOFF.md).
+Shipping declared unavailable resource sets does not establish readiness or qualify a release.

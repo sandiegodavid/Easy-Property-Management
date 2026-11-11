@@ -6,7 +6,8 @@ and its pinned import manifest. Historical systemd/ext4 reports do not qualify D
 
 ## Setup and invocation
 
-H02 must first finish its detailed host/agent/Docker design. Prepare two synthetic
+H02's accepted design fixes the host/agent/Docker boundaries. Pin actual protected
+inputs before execution. Prepare two synthetic
 operators on an explicitly disposable Linux filesystem; pin kernel, filesystem,
 mounts, UID mapping, enforcement mechanism, seccomp/capability profile and all
 workspace/control/scratch byte/inode ceilings. Input fixes 4,096-byte write chunks,
@@ -43,6 +44,19 @@ rerun resource allocation as a new request. H02 pins actual native/Docker/GCP se
 | `one_writer_and_drain` | Attempt second writer and mutation during maintenance drain; prove source fences and retained original-result lookup, not process-lock folklore. |
 | `warm_population_capacity` | Admit one through five warm synthetic operators sequentially; record resident memory/CPU/I/O/headroom under fixed workload plus backup activity. Attempt sixth only if qualified headroom permits; no hard-coded cap. |
 | `concurrent_admission_commitments` | Synchronize two admission requests that individually fit but jointly exceed the remaining envelope; at most the qualified capacity commits. Pending/unknown reservations count; repeat after lost response/restart. |
+| `unique_principal_retention` | Allocate distinct persisted host UID/GID pairs after system/container collision checks; replace and retire runtimes without recycling principals while any owned resource remains. |
+| `immutable_child_effect_replay` | One original parent drives multiple deterministic effect slots. Reserve immutable canonical requests before effects; lost responses inspect original receipts. Changed semantics conflict, failed reservation commits perform no effect, and crash recovery never allocates a second resource. |
+| `monotonic_ingress_fences` | Persist held/blocked authority before effects. Unseen stale enables and historical retries cannot undo a newer fence; missing inventory fails closed. Restore stage/switch remains unavailable in H02. |
+| `exact_host_gateway_denial` | Verify registered origin/binding/generation and reject unknown hosts, direct-origin access, forged forwarding headers, sibling/host-control access and bypasses over IPv4/IPv6. Failed Caddy reload cannot count as verified denial. |
+| `long_lived_connection_containment` | Keep authenticated streaming/socket connections open while disabling; verify containment or stop/fence the runtime. Unavailable source revocation remains unresolved even after external containment succeeds. |
+| `single_guarded_restart_owner` | Disable Docker automatic restart. Exercise actual reboot, failed health checks and supervisor restart; mount/quota/inventory/deny checks precede every start. Unknown prerequisites leave affected runtimes stopped. |
+| `metadata_and_egress_isolation` | From actual operator containers attempt metadata/link-local, alternate-name, redirect, rebinding and private endpoint routes. Only approved HTTPS/DNS egress works; no VM service-account credential is obtainable. |
+| `scoped_secret_delivery` | Verify component-specific read-only secret delivery and scoped bootstrap/registry permissions. Operator cannot read Tunnel, agent, sibling or platform administration credentials; no image/log/export contains raw secret material. H05 object/key isolation remains a separate gate. |
+
+Revision 2 adds the accepted H02 ingress, effect-identity, principal, restart and
+cloud-boundary cases. Revision-1 reports remain historical and do not cover these
+cases. H02.1 changes the specification only; no native, Docker or GCP execution is
+claimed and the reserved executor remains unavailable.
 
 ## Evidence and cleanup
 

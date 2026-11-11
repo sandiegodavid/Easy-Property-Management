@@ -1,6 +1,6 @@
 # Plans, budgets and demand gates
 
-[Hosted MVP design index](../HOSTED_MVP_DESIGN.md) · [Schema catalog](../../../DATABASE_SCHEMA.md)
+[Hosted MVP design index](../HOSTED_MVP_DESIGN.md) · [Schema catalog](../../../database/README.md)
 
 Part of the accepted HOSTED-001 design. Requirements here do not establish implementation, deployment or qualification; Pilot 0 exceptions are in the [delivery plan](delivery-plan.md).
 
@@ -24,6 +24,11 @@ In this guide: [Plans and financial envelope](#plans-and-financial-envelope) · 
 Prices are provisional USD monthly product prices, not researched market benchmarks
 or authorization to charge. Measure representative portfolios before publishing
 allowances. Use exact decimal bytes: 50,000,000 / 200,000,000 / 1,000,000,000.
+Each allowance requires a separately [qualified physical byte/inode profile](subscriptions-storage-and-runtime.md#per-tier-physical-storage-sizing-acceptance),
+measured peaks and justified margins, plus independent exhaustion/recovery tests.
+The Free gate precedes Pilot 0; paid gates precede tier activation. No fixed ratio
+or existing trial ceiling establishes sizing.
+
 There is no fixed property/space entitlement in this fresh plan. Recovery assistance
 and data export remain available to Free operators; paid plans improve available
 recovery points and history, rather than charging for release of existing data.
