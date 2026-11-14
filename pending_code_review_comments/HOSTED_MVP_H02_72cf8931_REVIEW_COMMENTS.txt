@@ -1,0 +1,20 @@
+Review: commit 72cf8931 against H02 in docs/hosting/design/mvp/delivery-plan.md
+Review date: 2026-11-13
+Branch: hosted_mvp
+
+Specification — protected host initialization
+
+1. [P2] Verify the live data filesystem before creating host authority
+Status: open
+File: application/deploy/hosted-mvp/gcp/install_services.py:114-117
+Related: application/deploy/hosted-mvp/gcp/install_services.py:124-146
+
+The installer trusts phase=ready in the persisted bootstrap file and immediately creates the host directory, metadata and inventory. It never checks that /srv/epm/data is currently mounted from the recorded UUID with the required quota accounting/enforcement. Bootstrap metadata survives an unmount, missing disk or replacement mount. Running the installer in that state writes authority onto the boot filesystem or wrong data disk; later mounting the intended disk hides those records. The systemd mount dependencies are installed after these writes and cannot protect initialization. An isolated reproduction with retained ready metadata and an ordinary unmounted directory created both metadata.json and inventory.sqlite without issuing any mount inspection. Verify the live mount/UUID, required options and quota enforcement before any filesystem or database mutation; reject missing/wrong mounts without writes. Add regressions retaining ready metadata while the actual mount is absent, replaced or unenforced.
+
+Specification — exact-platform reboot qualification
+
+2. [P2] Compare the running kernel with the recorded reboot-proof kernel
+Status: open
+File: application/deploy/hosted-mvp/gcp/qualify_host.py:146-152
+
+The reboot continuation checks a changed boot ID and hashes /boot/vmlinuz-<recorded kernel>, but never checks which kernel is currently running. After booting another installed kernel, the old kernel image normally remains present and unchanged. If retained quota/lock observations match, after() still publishes phase=passed carrying the old kernel pin. An isolated reproduction with a different running release and unchanged old image produced a passed report without observing the running release. This permits a changed platform to inherit the exact-kernel GCP reboot qualification. Compare the actual running release/architecture with the original observations and hash the corresponding running-kernel image before accepting the continuation. Add a regression where a different kernel is running while the old image remains installed.
