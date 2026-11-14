@@ -5,16 +5,37 @@ Branch: hosted_mvp
 Specification — protected host initialization
 
 1. [P2] Verify the live data filesystem before creating host authority
-Status: open
+Status: resolved (2026-11-13)
 File: application/deploy/hosted-mvp/gcp/install_services.py:114-117
 Related: application/deploy/hosted-mvp/gcp/install_services.py:124-146
 
 The installer trusts phase=ready in the persisted bootstrap file and immediately creates the host directory, metadata and inventory. It never checks that /srv/epm/data is currently mounted from the recorded UUID with the required quota accounting/enforcement. Bootstrap metadata survives an unmount, missing disk or replacement mount. Running the installer in that state writes authority onto the boot filesystem or wrong data disk; later mounting the intended disk hides those records. The systemd mount dependencies are installed after these writes and cannot protect initialization. An isolated reproduction with retained ready metadata and an ordinary unmounted directory created both metadata.json and inventory.sqlite without issuing any mount inspection. Verify the live mount/UUID, required options and quota enforcement before any filesystem or database mutation; reject missing/wrong mounts without writes. Add regressions retaining ready metadata while the actual mount is absent, replaced or unenforced.
 
+Resolution (2026-11-13): install_services.install() verifies the live mount before its first directory mutation (install_services.py:118). The existing read-only ProjectQuota filesystem proof is shared as verify_project_filesystem(), including protected paths, exact target/UUID/ext4/block-device identity, required mount options, ext4 quota features and kernel accounting/enforcement flags. It does not allocate a project or create a probing directory. Regressions retain ready bootstrap bytes while rejecting absent/wrong mounts, wrong filesystem/options, disabled accounting/enforcement, missing features and inspection failure, with no authority writes. The valid case proves all inspections precede the first mutation.
+
+
 Specification — exact-platform reboot qualification
 
 2. [P2] Compare the running kernel with the recorded reboot-proof kernel
-Status: open
+Status: resolved (2026-11-13)
 File: application/deploy/hosted-mvp/gcp/qualify_host.py:146-152
 
 The reboot continuation checks a changed boot ID and hashes /boot/vmlinuz-<recorded kernel>, but never checks which kernel is currently running. After booting another installed kernel, the old kernel image normally remains present and unchanged. If retained quota/lock observations match, after() still publishes phase=passed carrying the old kernel pin. An isolated reproduction with a different running release and unchanged old image produced a passed report without observing the running release. This permits a changed platform to inherit the exact-kernel GCP reboot qualification. Compare the actual running release/architecture with the original observations and hash the corresponding running-kernel image before accepting the continuation. Add a regression where a different kernel is running while the old image remains installed.
+
+Resolution (2026-11-13): qualify_host.after() compares platform.release()/machine() with the recorded kernel/architecture before checking retained resources (qualify_host.py:151). It hashes /boot/vmlinuz-<running release> and records the observed after-kernel, architecture and image hash. Regressions retain the original image while changing running release/architecture; both reject without writing a passed report. Changed running-image bytes also reject. Matching platform/bytes plus retained observations can publish the result.
+
+
+Focused validation (2026-11-13)
+
+Command (from application/):
+.venv/bin/python -m pytest scripts/tests/test_hosted_gcp.py scripts/tests/test_hosted_lab.py apps/server/app/modules/hosted_admin/tests/test_project_quota.py apps/server/app/modules/host_agent/tests/test_private_storage.py apps/server/app/modules/host_agent/tests/test_runtime_effects.py -q
+Result: 95 passed. Ruff check and ruff format --check pass on all four changed Python files using application/pyproject.toml. No full suite, frontend change or cloud/VM mutation.
+
+Validation matrix:
+- Happy paths: matching live mount reaches first-write boundary only after identity/features/accounting/enforcement checks; matching running platform and retained observations publish a reboot result.
+- Invalid combinations: stale ready metadata, absent/wrong UUID/target/type/options, quota accounting/enforcement loss, inspection errors, different running kernel/architecture and changed image bytes reject.
+- Retry/idempotency: rejected mount leaves bootstrap bytes and destination unchanged for a later valid retry; no replacement authority or passed report is created on rejection. Existing resource/receipt regressions remain passing.
+- Transaction rollback: verification occurs before authority creation; no schema/transaction protocol changed. Existing private preparation/runtime failure regressions pass.
+- Persistence/schema: no DDL or migration changes; unchanged old kernel image cannot carry a pass to a different running platform.
+- Backup/restore: no backup/restore behavior changed. Native quota/reboot qualification was not rerun; existing evidence retains its original source pins.
+- Query/bounds: bounded read-only mount/feature/quota inspections precede setup; no recursive scan, provider call or service start is needed for rejection.

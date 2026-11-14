@@ -6,6 +6,7 @@ import os
 from hashlib import sha256
 import json
 from pathlib import Path
+import platform
 import subprocess
 import sys
 
@@ -147,9 +148,13 @@ def after(root):
     current_boot = Path("/proc/sys/kernel/random/boot_id").read_text().strip()
     if state["boot_id"] == current_boot:
         raise ValueError("An actual VM reboot is required")
-    kernel = Path("/boot") / ("vmlinuz-" + state["kernel"])
-    if sha256(kernel.read_bytes()).hexdigest() != state["kernel_sha256"]:
-        raise ValueError("Installed kernel bytes changed")
+    running_kernel, running_machine = platform.release(), platform.machine()
+    if (running_kernel, running_machine) != (state["kernel"], state["machine"]):
+        raise ValueError("Running kernel or architecture changed across reboot")
+    kernel = Path("/boot") / ("vmlinuz-" + running_kernel)
+    kernel_hash = sha256(kernel.read_bytes()).hexdigest()
+    if kernel_hash != state["kernel_sha256"]:
+        raise ValueError("Running-kernel image bytes changed")
     uuid = json.loads(call("findmnt", "-J", "-M", DATA, "-o", "UUID"))["filesystems"][0]["uuid"]
     if uuid != state["filesystem_uuid"]:
         raise ValueError("The retained filesystem identity changed")
@@ -171,7 +176,14 @@ def after(root):
         if lock.stat().st_ino != state["lock_inodes"][index]:
             raise ValueError("Stable writer lock changed across reboot")
         verify_writer_lock(lock, owner)
-    state.update(after_boot_id=current_boot, phase="passed", retained_data_and_six_projects=True)
+    state.update(
+        after_boot_id=current_boot,
+        after_kernel=running_kernel,
+        after_machine=running_machine,
+        after_kernel_sha256=kernel_hash,
+        phase="passed",
+        retained_data_and_six_projects=True,
+    )
     (root / "h02-gcp-after.json").write_text(json.dumps(state, indent=2) + "\n")
     print(root / "h02-gcp-after.json")
 

@@ -111,80 +111,89 @@ def attributes(descriptor):
     return struct.unpack("=5I8s", buffer)
 
 
+def verify_project_filesystem(mount, filesystem_uuid, *, required_options=()):
+    """Read-only filesystem identity, features and live quota-enforcement proof."""
+    if sys.platform != "linux" or os.geteuid() != 0:
+        raise QuotaUnavailable("admin_project_probe_requires_root_linux")
+    with protected_directory(mount):
+        result = subprocess.run(
+            [
+                "/usr/bin/findmnt",
+                "--json",
+                "--target",
+                str(mount),
+                "--output",
+                "TARGET,SOURCE,FSTYPE,UUID,OPTIONS",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        rows = json.loads(result.stdout)["filesystems"]
+        if len(rows) != 1:
+            raise QuotaUnavailable()
+        row = rows[0]
+        device = Path(row["source"])
+        if (
+            row["target"] != str(mount)
+            or row["fstype"] != "ext4"
+            or row["uuid"] != filesystem_uuid
+            or not set(required_options) <= set(row.get("options", "").split(","))
+            or not device.is_absolute()
+            or not stat.S_ISBLK(device.stat().st_mode)
+            or device.stat().st_rdev != mount.stat().st_dev
+        ):
+            raise QuotaUnavailable("admin_project_filesystem_changed")
+    features = subprocess.run(
+        ["/usr/sbin/tune2fs", "-l", str(device)],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    ).stdout
+    fields = dict(line.split(":", 1) for line in features.splitlines() if ":" in line)
+    if (
+        not {"project", "quota"} <= set(fields.get("Filesystem features", "").split())
+        or int(fields.get("Inode size", "0")) < 256
+    ):
+        raise QuotaUnavailable("admin_project_features_unavailable")
+    _quota_control(device, 0x800005, QuotaInfo())
+    # Q_GETINFO proves accounting only: ext4 keeps it on after quotaoff.
+    # The generic VFS Q_XGETQSTATV ABI separately reports enforcement.
+    status = ctypes.create_string_buffer(256)
+    status[0] = 1
+    _quota_control(device, 0x5808, status)
+    flags = struct.unpack_from("=H", status.raw, 2)[0]
+    if flags & 0x30 != 0x30:  # FS_QUOTA_PDQ_ACCT | FS_QUOTA_PDQ_ENFD
+        raise QuotaUnavailable("admin_project_enforcement_unavailable")
+    return device
+
+
+def _quota_control(device, command, value, project_id=0):
+    libc = ctypes.CDLL(None, use_errno=True)
+    libc.quotactl.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_void_p]
+    libc.quotactl.restype = ctypes.c_int
+    result = libc.quotactl(
+        (command << 8) | 2,
+        os.fsencode(device),
+        project_id if command not in {0x800005, 0x5808} else 0,
+        ctypes.byref(value),
+    )
+    if result:
+        raise QuotaUnavailable("admin_project_enforcement_unavailable")
+    return value
+
+
 class ProjectQuota:
     def __init__(self, binding):
         self.binding = binding
 
     def filesystem(self):
-        if sys.platform != "linux" or os.geteuid() != 0:
-            raise QuotaUnavailable("admin_project_probe_requires_root_linux")
-        binding = self.binding
-        with protected_directory(binding.mount):
-            result = subprocess.run(
-                [
-                    "/usr/bin/findmnt",
-                    "--json",
-                    "--target",
-                    str(binding.mount),
-                    "--output",
-                    "TARGET,SOURCE,FSTYPE,UUID",
-                ],
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            rows = json.loads(result.stdout)["filesystems"]
-            if len(rows) != 1:
-                raise QuotaUnavailable()
-            row = rows[0]
-            device = Path(row["source"])
-            if (
-                row["target"] != str(binding.mount)
-                or row["fstype"] != "ext4"
-                or row["uuid"] != binding.filesystem_uuid
-                or not device.is_absolute()
-                or not stat.S_ISBLK(device.stat().st_mode)
-                or device.stat().st_rdev != binding.mount.stat().st_dev
-            ):
-                raise QuotaUnavailable("admin_project_filesystem_changed")
-        features = subprocess.run(
-            ["/usr/sbin/tune2fs", "-l", str(device)],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        ).stdout
-        fields = dict(line.split(":", 1) for line in features.splitlines() if ":" in line)
-        if (
-            not {"project", "quota"} <= set(fields.get("Filesystem features", "").split())
-            or int(fields.get("Inode size", "0")) < 256
-        ):
-            raise QuotaUnavailable("admin_project_features_unavailable")
-        self._control(device, 0x800005, QuotaInfo())
-        # Q_GETINFO proves accounting only: ext4 keeps it on after quotaoff.
-        # The generic VFS Q_XGETQSTATV ABI separately reports enforcement.
-        status = ctypes.create_string_buffer(256)
-        status[0] = 1
-        self._control(device, 0x5808, status)
-        flags = struct.unpack_from("=H", status.raw, 2)[0]
-        if flags & 0x30 != 0x30:  # FS_QUOTA_PDQ_ACCT | FS_QUOTA_PDQ_ENFD
-            raise QuotaUnavailable("admin_project_enforcement_unavailable")
-        return device
+        return verify_project_filesystem(self.binding.mount, self.binding.filesystem_uuid)
 
     def _control(self, device, command, value):
-        libc = ctypes.CDLL(None, use_errno=True)
-        libc.quotactl.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_void_p]
-        libc.quotactl.restype = ctypes.c_int
-        result = libc.quotactl(
-            (command << 8) | 2,
-            os.fsencode(device),
-            self.binding.project_id if command not in {0x800005, 0x5808} else 0,
-            ctypes.byref(value),
-        )
-        if result:
-            raise QuotaUnavailable("admin_project_enforcement_unavailable")
-        return value
+        return _quota_control(device, command, value, self.binding.project_id)
 
     def initialize_empty(self):
         """Root-owned EMPTY destination only; never relabel a populated tree."""

@@ -20,6 +20,7 @@ from app.modules.host_agent.infrastructure.service_config import ServiceInputs, 
 from app.modules.host_agent.infrastructure.tunnel_credentials import validate_tunnel_credential
 from app.modules.host_agent.application.dispatch import HostAgentDenied
 from app.modules.host_agent.application.build_inputs import PrincipalRange
+from app.modules.hosted_admin.infrastructure.project_quota import verify_project_filesystem
 from app.platform.config import application_root
 from app.platform.hosted_schema import initialize_store
 from app.platform.schema_resources import HostedStore
@@ -114,6 +115,11 @@ def install(project, domain, tunnel_id):
     disk = json.loads(Path("/etc/epm/bootstrap/data.json").read_text())
     if disk["phase"] != "ready":
         raise ValueError("Retained data disk is not ready")
+    verify_project_filesystem(
+        ROOT.parent,
+        disk["uuid"],
+        required_options={"rw", "prjquota", "nodev", "nosuid", "noexec"},
+    )
     directory(ROOT, 0o700)
     metadata_path = ROOT / "metadata.json"
     if metadata_path.exists():

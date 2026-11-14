@@ -66,7 +66,12 @@ Unavailable owning stores must stay unavailable without creating destinations.
 
 After disposable fixture checks have finished, run `install_services.py` as root
 with `EPM_H02_QUALIFICATION=1` and explicit project/domain/Tunnel arguments. It
-initializes an empty owning inventory, preserves the host/filesystem binding,
+checks the live data mount before its first directory/metadata/inventory mutation:
+exact mount target and recorded UUID, ext4 on the matching block device, required
+`rw,prjquota,nodev,nosuid,noexec` options, filesystem quota features, and kernel project
+quota accounting **and enforcement**. Retained `phase=ready` metadata alone is not
+readiness. Missing/replaced/unenforced mounts reject without creating authority.
+It then initializes an empty owning inventory, preserves the host/filesystem binding,
 fetches only the scoped credential, validates it in private staging before publication,
 installs hardened units and regenerates closed
 projections. Only an empty provider-generated `Endpoint` field is removed; alternate
@@ -101,7 +106,9 @@ or entitlement measurements.
 Perform an actual guest reboot with `systemctl reboot`. Then run
 `gcp/qualify_host.py after --root <direct-disk lab>` and
 `lab/qualify_reboot.py after --root <container reboot lab>` from the same snapshot.
-Require a changed Linux boot ID with unchanged kernel/source pins, filesystem UUID,
+Require a changed Linux boot ID with unchanged **running** kernel release/architecture
+and source pins. Hash the image corresponding to that running release; an unchanged
+older image remaining in `/boot` cannot qualify a different running kernel. Verify filesystem UUID,
 all six quota observations and writer-lock inodes. Inspect retained Docker identities
 before restarting any fixture: both containers must be stopped with restart disabled.
 Recheck the permanent units, closed projections and private credential isolation after
