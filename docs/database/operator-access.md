@@ -4,6 +4,11 @@
 
 Part of the schema master. Proposed hosted tables are design contracts, not claims of implemented schema. Executable definitions belong exclusively under `application/database/`; see [resource ownership](overview.md#required-schema-definition-location).
 
+The [H03 design](../hosting/design/HOSTED_MVP_H03_DESIGN.md) defines accepted
+[authentication state](#h03-authentication-state) below under D1–D16. H03 delivers
+the complete current access-store structural baseline; H04 retains real policy/usage
+population and growth-admission behavior. No production schema is changed by this note.
+
 In this guide: [Pilot 0 per-operator access store](#pilot-0-per-operator-access-store) · [`access_meta` — H03/H04](#access_meta--h03h04) · [`access_sessions` — H03](#access_sessions--h03) · [`access_receipts` — H03/H04](#access_receipts--h03h04) · [`access_audit` — H03](#access_audit--h03) · [`usage_state` — H04](#usage_state--h04) · [`usage_reservations` — H04](#usage_reservations--h04) · [`draft_leases` — H03 reuse existing unfinished-form fencing](#draft_leases--h03-reuse-existing-unfinished-form-fencing)
 
 ## Pilot 0 per-operator access store
@@ -195,4 +200,104 @@ Index `(expires_at)`. Logical session reference: no cascading deletion that sile
 releases an unresolved business attempt. Check session/grant/epoch and current form
 ownership through owning ports; explicit takeover preserves existing conflict semantics.
 No raw unfinished form body in this access store.
+
+## H03 authentication state
+
+<a id="proposed-h03-authentication-state"></a>
+
+Status: accepted November 13, 2026 under H03 D1–D16; not implemented. Definitions must be
+implemented only in `application/database/hosted-access-migrations/`; remove the
+legacy runtime DDL creator rather than introducing compatibility translation.
+
+### `source_login_attempts` — H03
+
+Owns the destination browser challenge. Central verification alone cannot replace
+proof that the same destination browser initiated the handoff.
+
+| Column | Type | Nullable | Default | Description / column rules |
+| --- | --- | --- | --- | --- |
+| `attempt_id` | `ID` | No | — | PK; public non-secret correlation identity. |
+| `browser_challenge_hash` | `HASH` | No | — | UNIQUE hash of a short-lived host-only challenge cookie. |
+| `access_epoch` | `REV` | No | — | Source assignment fence captured at initiation. |
+| `resource_generation` | `REV` | No | — | Exact source incarnation; stale binding cannot complete. |
+| `return_path` | `TEXT` | No | — | Validated relative UI route <=1,000 characters; no external URL or raw capability. |
+| `remembered` | `BOOLEAN` | No | — | Explicit user choice; not a token lifetime override. |
+| `state` | `TEXT` | No | — | CHECK pending, redeeming, completed or expired. |
+| `handoff_id` | `ID` | Yes | — | UNIQUE logical central handoff reference, not a cross-store FK. |
+| `continuation_id` | `ID` | Yes | — | Logical email continuation being paired; null for ordinary direct login. Public ID alone grants nothing. |
+| `binding_assertion_hash` | `HASH` | Yes | — | Hash of the emitted one-use signed destination binding, created only after observing this attempt's local browser cookie. |
+| `binding_expires_at` | `TIME` | Yes | — | Non-null with binding_assertion_hash; <=attempt expiry and <=emission time+five minutes. |
+| `created_at` | `TIME` | No | — | Creation time. |
+| `expires_at` | `TIME` | No | — | >created_at, at most fifteen minutes later. |
+| `revision` | `REV` | No | — | One-use/CAS transition fence. |
+
+Index `(state, expires_at, attempt_id)`. Completion requires the matching browser,
+central Origin, handoff and current source scope/epoch/generation. Cross-device
+completion creates a new local challenge and signed binding for a central-browser-bound
+continuation; it never substitutes a public ID for the old cookie. The assertion
+binds continuation, source attempt/challenge, registered target, epoch/generation,
+one-use nonce and expiry; it travels by POST body, not URL. Central verifies it through
+owning ports and pairs at most once. Failed/lost pairing cannot retarget a completed
+attempt. Purge terminal attempts only after the minimum 24-hour hold and after owning
+session/receipt reconciliation no longer requires them; unknown outcomes retain evidence.
+
+### H03 additions to `access_sessions`
+
+| New column | Type | Nullable | Default | Description / column rules |
+| --- | --- | --- | --- | --- |
+| `session_id` | `ID` | No | — | UNIQUE public revocation selector; never expose session_hash to a portal. |
+| `managed_session_id` | `ID` | No | — | Logical central managed session reference, no cross-store FK. |
+| `managed_observation_revision` | `REV` | No | — | Highest applied central proof/status revision. |
+| `revocation_valid_until` | `TIME` | No | — | Signed current provider-status deadline; <=managed_valid_until. |
+| `remembered_until` | `TIME` | No | — | Original <=30-day absolute lineage deadline, retained through renewal. |
+| `display_label` | `TEXT` | No | — | Coarse sanitized browser/device label <=120 characters, not trusted identity. |
+| `renewed_from_session_id` | `ID` | Yes | — | UNIQUE FK access_sessions.session_id, ON DELETE RESTRICT; previous row replaced by this session, null for a new sign-in lineage. |
+
+Session expiry <=remembered_until and <=managed_valid_until; admission additionally
+requires current revocation freshness, source access/session generation/epoch and no
+maintenance gate. Managed proof renewal requires fresh authentication and a newly
+verified handoff for the same subject/scope/lineage. It always creates a new session
+row/cookie/CSRF token, with renewed_from_session_id and the original remembered_until;
+it does not refresh an old row in place. In one immediate transaction, check the
+original receipt first, then current source fences/proof and the live cap, revoke the
+prior row and commit the replacement/receipt/audit. Monotonic signed observations may
+update revocation freshness, but cannot extend identity proof or resurrect a session.
+
+A merely expired, unrevoked, generation/epoch-current row within remembered_until is
+correlation only, never request authority. Its replacement needs a free live slot;
+otherwise return session_limit_reached (409) and the fresh-auth revoke-old-device flow.
+Replacing an active row frees that row's slot atomically. Revoked, stale-generation/
+epoch/binding or absolute-expired rows cannot be renewed; a permitted fresh sign-in
+starts a new lineage. Live-cap counting includes unrevoked/current rows with expires_at
+> now even when provider-status freshness is temporarily stale. Serialize new issuance,
+renewal and revocation under the source mutation gate/transaction; UNIQUE predecessor
+prevents different handoffs replacing one old row twice. Recheck logout/fences before
+commit; a stale proof cannot undo all-device logout.
+
+Never emit an old or replacement bearer from a replayed receipt. If the new cookie
+response is lost, keep its row/slot/result and require fresh sign-in to recover access.
+Old cookie and edit leases immediately lose authority; explicit current-revision lease
+reacquisition follows same-identity authentication and preserves form input. Retain
+predecessor rows while referenced; reclaim expired replacement chains leaf-first only
+after receipt/lineage holds retire, never through cascading deletion.
+
+All-device logout invalidates the generation and existing edit leases.
+Session lists use session_id/current marker/coarse label/last-seen only; no proof/fence,
+provider cookie, hash or filesystem path is returned. Retain the existing 32-live-session
+cap, with a fresh-authenticated bounded revoke-old-device flow before issuing at cap.
+
+Add `issue_session`, `refresh_session` and `revoke_session` to the closed source receipt
+vocabulary when finalizing H03 contracts. Session issuance and its receipt/audit/attempt
+completion commit together. UNIQUE handoff_id prevents a second source session on
+retry; receipts contain safe references only, never raw cookies. Existing login-port
+actions and generic source envelopes must agree on which owner issues each receipt.
+
+### Draft and restoration constraints
+
+Adapt `draft_leases` to session_hash and current source access_epoch without retaining
+form bodies. A revoked/expired session cannot renew a lease or commit through a stale
+editor. Revoke/restore invalidation must not delete unfinished forms or unresolved
+business command attempts. The application mutation gate orders source admission
+against source-local revocation while each business module keeps its own transaction.
+There is no cross-store FK or implied atomic access/business commit.
 

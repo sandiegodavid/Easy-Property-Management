@@ -236,3 +236,58 @@ current access epoch and preceding binding revision. It does not manufacture a n
 command by copying a newer epoch onto old intent. Missing/stale authority remains
 fail-closed; independent physical/profile/external-deny checks still apply. Lookup
 loads only the matching command in one SQL query, not the target's entire history.
+
+## H03 authentication routing extension
+
+Accepted November 13, 2026 under [H03 D7/D8](../hosting/design/HOSTED_MVP_H03_DESIGN.md#resolved-design-decisions);
+not implemented by the H02 baseline. Implement in the owning greenfield inventory
+resources with the H03 host contracts and native qualification. No runtime DDL or
+compatibility migration. These fields are host-owned routing evidence, not source
+session authorization or a second editable operator registry.
+
+### H03 additions to `ingress_bindings`
+
+| New column | Type | Nullable | Default | Description / column rules |
+| --- | --- | --- | --- | --- |
+| `auth_route_state` | `TEXT` | No | — | CHECK closed or ready; new bindings explicitly initialize closed. |
+| `auth_access_epoch` | `REV` | Yes | — | Exact access fence whose auth-only readiness was verified; must equal access_epoch when ready. |
+| `auth_manifest_ref` | `REF` | Yes | — | Protected manifest identifying the exact source auth composition, artifact and fixed route/method set. |
+| `auth_manifest_sha256` | `HASH` | Yes | — | Immutable manifest content pin. |
+| `auth_operation_id` | `ID` | Yes | — | FK host_receipts; original verified apply_auth_routes child effect. |
+| `auth_verified_at` | `TIME` | Yes | — | Time host inspection established this route/artifact/binding readiness. |
+
+When closed, all five evidence fields are null. When ready, all are present, the
+epoch equals current ingress authority, and desired_state cannot be blocked. A
+new deny/epoch change closes and clears auth readiness in the same inventory
+transaction; a stale auth result cannot reopen it. Auth-only updates carry the
+existing expected revision and advance it once, retaining the monotonic fence.
+
+Extend the closed host-effect/receipt vocabulary with `apply_auth_routes`. Its
+typed payload contains registered IDs and a protected manifest reference/hash,
+never arbitrary paths, hostnames or route strings. Persist original intent before
+gateway effects and verify the current binding/generation, artifact and loaded
+projection before recording readiness. Matching retries inspect the original effect;
+unknown does not become ready. H03.1 seals the corresponding observation/result
+fields and state checks; H03.6 implements the owning driver.
+
+For held bindings with verified auth readiness, allow only GET `/auth/start`, POST
+`/auth/complete` and GET `/auth/status`; no generic prefix match, business API, file
+download or arbitrary static resource fallback. HEAD/OPTIONS and other methods deny
+unless explicitly qualified in the manifest. Blocked bindings never admit a handoff.
+Eligible business routing still requires independent current H04/H05 readiness.
+
+### Shared Admin and login route bindings
+
+Admin/login are shared deployment services, not Operator allocations. Pin their
+exact origins and registered private endpoint/artifact in protected deployment
+configuration and the Admin component manifest. Validate the central origin against
+`control_meta.login_origin` through the owning control port; do not read the Admin
+database directly from a gateway or invent Operator rows for these services.
+
+These reviewed deployment inputs generate a protected routing projection. They
+cannot be selected by a browser or Operator field, and are not another editable
+account registry. Candidate identity qualification uses explicitly pinned candidate
+artifacts; production assignment/promotion requires the actual qualified Admin
+component. Shared login and Admin may use one backend artifact, but their hostname,
+route allowlists, cookies and role/session checks stay distinct. Missing/corrupt pins
+or an unverified replacement keep the affected routes closed.

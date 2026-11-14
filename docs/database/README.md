@@ -29,6 +29,12 @@ Read **overview → the relevant store → lifecycle and validation**. For opera
 
 ## Related references
 
+H03 D1–D16 were accepted November 13, 2026. Its unimplemented schema extensions are
+part of this master: [central identity flow state](admin-identity.md#h03-flow-state),
+[source authentication state](operator-access.md#h03-authentication-state), and
+[protected authentication routing](host-inventory.md#h03-authentication-routing-extension).
+Acceptance of the dictionary does not change the currently implemented baselines.
+
 - [Hosted MVP design](../hosting/design/HOSTED_MVP_DESIGN.md).
 - [H01 schema/contracts handoff](../hosting/design/HOSTED_MVP_H01_DESIGN.md).
 - [Executable database resources](../../application/database/README.md).

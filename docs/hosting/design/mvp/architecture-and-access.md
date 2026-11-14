@@ -124,6 +124,18 @@ sessions/verified entitlements survive a temporary provider outage only within t
 existing validity; never extend expired authority indefinitely. No provider request
 on every business read. Exact origin/CSRF and current source authority still apply.
 
+[H03 D1–D16](../HOSTED_MVP_H03_DESIGN.md#resolved-design-decisions), accepted November
+13, 2026, fix the initial policy: provider server cookies last at most fourteen days,
+with explicit fresh-auth renewal inside the original thirty-day EPM remembered-session
+ceiling. Periodic prompts are accepted; no server refresh-token vault or promise of
+thirty prompt-free days. Provider revocation observations are at most five minutes
+old; admission pauses when their verified freshness expires, without a provider call
+on each business read. Use backend-recognized email-link completion and Google plus
+managed TOTP for Admin; matching password-provider text is not email-link proof.
+Verified provider realms map to immutable protected issuer aliases after exact token
+validation. The same decisions define auth-only routing and the private source relay;
+they do not qualify normal business access before H04/H05.
+
 Admin requires MFA and an explicit Admin role. Customer identity is not an Admin role. Link Google/email sign-in methods only
 through the managed provider's verified account-linking flow; matching email text
 alone must not silently merge identities or create another workspace.

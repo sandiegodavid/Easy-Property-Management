@@ -37,3 +37,12 @@ release-compatibility and post-reopen data-preservation requirements. [HOSTED-00
 The qualification host is retained and stopped. Scoped evidence does not promote a
 release or authorize invitations. Dated reports and the archived ordered plan are
 provenance, not the primary reading sequence.
+
+## Managed identity and sessions
+
+- [H03 detailed design and implementation plan](HOSTED_MVP_H03_DESIGN.md): accepted
+  Google/email-link login, Admin MFA, browser-bound handoff, source sessions, device/
+  renewal UI, private transport and twelve ordered work units. D1–D16 were accepted
+  November 13, 2026; implementation and provider/native qualification remain pending.
+- [Provider research](../../research/HOSTED_MVP_H03_IDENTITY_RESEARCH.md): current
+  primary-source constraints; provider configuration and acceptance remain unperformed.
