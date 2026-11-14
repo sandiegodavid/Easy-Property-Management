@@ -1,13 +1,13 @@
 # Operator access, sessions and usage control
 
-[Database schema catalog](README.md) · [Shared conventions](overview.md)
+[Database schema master](overview.md) · [Shared conventions](overview.md)
 
 Part of the schema master. Proposed hosted tables are design contracts, not claims of implemented schema. Executable definitions belong exclusively under `application/database/`; see [resource ownership](overview.md#required-schema-definition-location).
 
 The [H03 design](../hosting/design/HOSTED_MVP_H03_DESIGN.md) defines accepted
 [authentication state](#h03-authentication-state) below under D1–D16. H03 delivers
 the complete current access-store structural baseline; H04 retains real policy/usage
-population and growth-admission behavior. No production schema is changed by this note.
+population and growth-admission behavior. H03.2 delivers the current structural baseline; its initialization grants no authentication or usage authority.
 
 In this guide: [Pilot 0 per-operator access store](#pilot-0-per-operator-access-store) · [`access_meta` — H03/H04](#access_meta--h03h04) · [`access_sessions` — H03](#access_sessions--h03) · [`access_receipts` — H03/H04](#access_receipts--h03h04) · [`access_audit` — H03](#access_audit--h03) · [`usage_state` — H04](#usage_state--h04) · [`usage_reservations` — H04](#usage_reservations--h04) · [`draft_leases` — H03 reuse existing unfinished-form fencing](#draft_leases--h03-reuse-existing-unfinished-form-fencing)
 
@@ -106,6 +106,7 @@ as proof that the Operator service applied the change.
 | Column | Type | Nullable | Default | Description / column rules |
 | --- | --- | --- | --- | --- |
 | `operation_id` | `ID` | No | — | Original owning operation identity; see local FK or logical-reference rules. PK. |
+| `idempotency_key` | `KEY` | Yes | — | Original source lifecycle command key. Unique within its receipt kind. Handoff operations use their verified operation IDs. |
 | `request_hash` | `HASH` | No | — | Hash of the canonical consequential request parameters. |
 | `kind` | `TEXT` | No | — | Typed operation/effect kind; see allowed values below. |
 | `access_epoch` | `REV` | No | — | Access authority fence; stale operations must not override it. |
@@ -114,7 +115,8 @@ as proof that the Operator service applied the change.
 | `recorded_at` | `TIME` | No | — | Time the record or event was persisted. |
 
 CHECK kind IN (`initialize_binding`, `enable`, `disable`, `revoke_sessions`,
-`rebind`, `claim`, `maintenance_fence`, `restore_binding`, `apply_policy`).
+`rebind`, `claim`, `maintenance_fence`, `restore_binding`, `apply_policy`,
+`issue_session`, `refresh_session`, `revoke_session`).
 Persist result/audit and owning access mutation atomically; use the receipt for retry
 without returning a raw session token. Expired authority cannot be extended by replay.
 
@@ -193,21 +195,22 @@ the form contents, and supports controlled takeover without silent conflicting e
 | `session_hash` | `HASH` | No | — | Hash of the session secret; no raw cookie is stored. |
 | `lease_token_hash` | `HASH` | No | — | Hash of the edit-ownership lease secret. UNIQUE. |
 | `access_epoch` | `REV` | No | — | Access authority fence; stale operations must not override it. |
+| `restore_generation` | `REV` | No | — | Last source restore generation observed by the issuing session request. |
 | `expires_at` | `TIME` | No | — | Expiry of this temporary capability/session/lease, not of the operator account. |
 | `renewed_at` | `TIME` | No | — | Most recent edit-lease renewal time. |
 
-Index `(expires_at)`. Logical session reference: no cascading deletion that silently
-releases an unresolved business attempt. Check session/grant/epoch and current form
-ownership through owning ports; explicit takeover preserves existing conflict semantics.
-No raw unfinished form body in this access store.
+Indexes cover `expires_at` and `session_hash`. No cascading foreign key connects
+leases to business records. Advance the source fence to invalidate authority
+without changing unfinished forms or unresolved attempts. Takeover requires
+the current saved-form revision. No unfinished form content is stored here.
 
 ## H03 authentication state
 
 <a id="proposed-h03-authentication-state"></a>
 
-Status: accepted November 13, 2026 under H03 D1–D16; not implemented. Definitions must be
-implemented only in `application/database/hosted-access-migrations/`; remove the
-legacy runtime DDL creator rather than introducing compatibility translation.
+Status: H03.2 executable resources, validation, disabled binding and cleanup delivered
+under `application/database/hosted-access-migrations/`. Runtime DDL is removed; no
+legacy translation or authentication implementation is supplied.
 
 ### `source_login_attempts` — H03
 
@@ -224,6 +227,7 @@ proof that the same destination browser initiated the handoff.
 | `remembered` | `BOOLEAN` | No | — | Explicit user choice; not a token lifetime override. |
 | `state` | `TEXT` | No | — | CHECK pending, redeeming, completed or expired. |
 | `handoff_id` | `ID` | Yes | — | UNIQUE logical central handoff reference, not a cross-store FK. |
+| `renewal_session_id` | `ID` | Yes | — | FK to the predecessor selected by the source cookie. Retained through expiry and cleanup reconciliation. |
 | `continuation_id` | `ID` | Yes | — | Logical email continuation being paired; null for ordinary direct login. Public ID alone grants nothing. |
 | `binding_assertion_hash` | `HASH` | Yes | — | Hash of the emitted one-use signed destination binding, created only after observing this attempt's local browser cookie. |
 | `binding_expires_at` | `TIME` | Yes | — | Non-null with binding_assertion_hash; <=attempt expiry and <=emission time+five minutes. |
@@ -241,6 +245,16 @@ owning ports and pairs at most once. Failed/lost pairing cannot retarget a compl
 attempt. Purge terminal attempts only after the minimum 24-hour hold and after owning
 session/receipt reconciliation no longer requires them; unknown outcomes retain evidence.
 
+### `source_recent_challenges` — H03
+
+Stores a one-use challenge ID, the exact owning session FK and request hash, and
+the creation, expiry and nullable consumption times. Challenges last at most
+five minutes. Verification binds a fresh managed proof, the current local
+session and its CSRF evidence, and the exact request hash. The sensitive action
+consumes the challenge in its own source write transaction. Rollback leaves
+the challenge available, and expiry cleanup preserves referenced sessions until
+eligible challenges are removed.
+
 ### H03 additions to `access_sessions`
 
 | New column | Type | Nullable | Default | Description / column rules |
@@ -250,6 +264,7 @@ session/receipt reconciliation no longer requires them; unknown outcomes retain 
 | `managed_observation_revision` | `REV` | No | — | Highest applied central proof/status revision. |
 | `revocation_valid_until` | `TIME` | No | — | Signed current provider-status deadline; <=managed_valid_until. |
 | `remembered_until` | `TIME` | No | — | Original <=30-day absolute lineage deadline, retained through renewal. |
+| `remembered` | `BOOLEAN` | No | `false` | Original persistence choice retained through renewal. A remembered cookie remains a lineage selector until the absolute deadline. |
 | `display_label` | `TEXT` | No | — | Coarse sanitized browser/device label <=120 characters, not trusted identity. |
 | `renewed_from_session_id` | `ID` | Yes | — | UNIQUE FK access_sessions.session_id, ON DELETE RESTRICT; previous row replaced by this session, null for a new sign-in lineage. |
 
@@ -286,18 +301,23 @@ Session lists use session_id/current marker/coarse label/last-seen only; no proo
 provider cookie, hash or filesystem path is returned. Retain the existing 32-live-session
 cap, with a fresh-authenticated bounded revoke-old-device flow before issuing at cap.
 
-Add `issue_session`, `refresh_session` and `revoke_session` to the closed source receipt
-vocabulary when finalizing H03 contracts. Session issuance and its receipt/audit/attempt
+H03.1 seals `issue_session`, `refresh_session` and `revoke_session` in the closed source
+receipt vocabulary above; H03.2 implements the executable baseline. Session issuance and its receipt/audit/attempt
 completion commit together. UNIQUE handoff_id prevents a second source session on
 retry; receipts contain safe references only, never raw cookies. Existing login-port
 actions and generic source envelopes must agree on which owner issues each receipt.
 
 ### Draft and restoration constraints
 
-Adapt `draft_leases` to session_hash and current source access_epoch without retaining
-form bodies. A revoked/expired session cannot renew a lease or commit through a stale
-editor. Revoke/restore invalidation must not delete unfinished forms or unresolved
-business command attempts. The application mutation gate orders source admission
-against source-local revocation while each business module keeps its own transaction.
-There is no cross-store FK or implied atomic access/business commit.
+Managed source leases bind the session hash, access epoch, and restore generation.
+A revoked or expired session cannot renew a lease or commit through a stale editor.
+Revocation and restore preserve unfinished forms and unresolved attempts. The
+in-process mutation gate orders workspace commits against source-local revocation.
+Each store retains its own transaction.
+
+On a managed writer connection, a receipt guard matches the owning namespace
+and operation key to the indexed durable attempt in the workspace. That attempt
+identifies the edit lease required for the commit. A client-supplied form
+identifier cannot override it. The guard is connection-local and is absent
+from portable workspace backups.
 

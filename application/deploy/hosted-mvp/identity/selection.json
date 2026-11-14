@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "revision": 3,
+  "configuration_state": "selected_not_verified",
+  "realm": {
+    "version": 1,
+    "alias": "identity-epmdemo-v1",
+    "project_id": "project-47b72bb7-ba90-42c9-910",
+    "tenant_id": null,
+    "issuer": "https://securetoken.google.com/project-47b72bb7-ba90-42c9-910",
+    "audience": "project-47b72bb7-ba90-42c9-910"
+  },
+  "origins": {
+    "central": "https://login.epmdemo.xyz",
+    "admin": "https://admin.epmdemo.xyz",
+    "google_callback": "https://login.epmdemo.xyz/__/auth/handler",
+    "email_callback": "https://login.epmdemo.xyz/auth/email/continue"
+  },
+  "firebase_web": {
+    "version": "13.3.0",
+    "sha256": "66108d838941865240f697bc5ef4f1ae40f61fe7f47a53bdcaa50c58269bdbd2"
+  },
+  "firebase_admin": {
+    "version": "7.8.0",
+    "sha256": "1cb353371ad14c3233a2ddf86c85b665341123b6c5df73b3cb84e7def45397dc"
+  },
+  "provider_config_ref": "identity-provider-epmdemo-v1",
+  "provider_config_sha256": null,
+  "central_signing_key_ref": "identity-central-ed25519-v1",
+  "source_signing_key_registry_ref": "identity-source-ed25519-registry-v1",
+  "rate_key_ref": "identity-rate-hmac-v1",
+  "rate_key_rotation_ms": 86400000,
+  "rate_retention_ms": 90000000,
+  "deployment_sends_per_day": 9,
+  "provider_sends_per_day": 10
+}

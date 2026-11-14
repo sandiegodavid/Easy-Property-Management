@@ -1,6 +1,6 @@
 # Inventory and host commands
 
-[Foundation guides](README.md) · [Schema catalog](../../database/README.md) · [Owning initializer usage](../../../application/database/README.md#h022-owning-runner-usage)
+[Foundation guides](README.md) · [Schema catalog](../../database/overview.md) · [Owning initializer usage](../../database/schema-resources.md#owning-runner-usage)
 
 ## Store ownership and initialization
 
@@ -11,7 +11,7 @@ a direct revision stamp, an alternate registry or a startup fallback.
 
 | Store | Implemented boundary |
 | --- | --- |
-| Main Admin | Complete 13-table Pilot 0 structural closure, including local identity, operations, release-assignment and monitoring dependencies. Initialization seeds no operator, session or qualified release. |
+| Main Admin | Complete Pilot 0 structural closure (17 tables after the H03.2 identity extension), including local identity, operations, release-assignment and monitoring dependencies. Initialization seeds no operator, session or qualified release. |
 | Host inventory | Host identity, retained principals, resource bindings, project assignments, ingress authority and host receipts; current generation, immutable intent/result and allocation constraints. |
 | Hosted access and separate recovery stores | Owning baselines/initializers remain unavailable until identity and recovery delivery. Discovery or a scaffold is not readiness. |
 

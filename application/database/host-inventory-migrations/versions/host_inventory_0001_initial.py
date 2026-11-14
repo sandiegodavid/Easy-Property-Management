@@ -136,7 +136,7 @@ def _effects():
             "kind",
             (
                 "prepare_resources initialize_container repair_runtime start_container "
-                "stop_container apply_limits apply_ingress_policy stage_restore "
+                "stop_container apply_limits apply_ingress_policy apply_auth_routes stage_restore "
                 "switch_binding retire_resources"
             ),
         ),
@@ -180,6 +180,24 @@ def _effects():
         f("verified_at", "TIME", nullable=True),
         f("updated_at", "TIME"),
         f("revision", "REV"),
+        f("auth_route_state", "CODE", default="closed"),
+        f("auth_access_epoch", "REV", nullable=True),
+        f("auth_manifest_ref", "REF", nullable=True),
+        f("auth_manifest_sha256", "HASH", nullable=True),
+        f("auth_operation_id", "ID", nullable=True),
+        f("auth_verified_at", "TIME", nullable=True),
+        fk("auth_operation_id", "host_receipts.operation_id"),
+        c("auth_route_state", "closed ready"),
+        sa.CheckConstraint(
+            "(auth_route_state='closed' AND auth_access_epoch IS NULL AND "
+            "auth_manifest_ref IS NULL AND auth_manifest_sha256 IS NULL AND "
+            "auth_operation_id IS NULL AND auth_verified_at IS NULL) OR "
+            "(auth_route_state='ready' AND auth_access_epoch IS NOT NULL AND "
+            "auth_access_epoch=access_epoch AND desired_state!='blocked' AND "
+            "auth_manifest_ref IS NOT NULL AND auth_manifest_sha256 IS NOT NULL AND "
+            "auth_operation_id IS NOT NULL AND auth_verified_at IS NOT NULL)",
+            name="ck_auth_route_evidence",
+        ),
         fk(
             "binding_id operator_id workspace_id resource_generation",
             (
@@ -259,7 +277,8 @@ def _guards():
     op.execute(
         (
             "CREATE TRIGGER ingress_initial_held BEFORE INSERT ON ingress_bindings "
-            "WHEN NEW.desired_state!='held' OR NEW.verified_state!='unknown' BEGIN "
+            "WHEN NEW.desired_state!='held' OR NEW.verified_state!='unknown' "
+            "OR NEW.auth_route_state!='closed' BEGIN "
             "SELECT RAISE(ABORT, 'new ingress must be held'); END"
         )
     )
@@ -270,6 +289,15 @@ def _guards():
             "NEW.updated_at<OLD.updated_at BEGIN SELECT RAISE(ABORT, 'stale "
             "ingress fence'); END"
         )
+    )
+
+    op.execute(
+        "CREATE TRIGGER ingress_auth_receipt BEFORE UPDATE ON ingress_bindings "
+        "WHEN NEW.auth_route_state='ready' AND NOT EXISTS ("
+        "SELECT 1 FROM host_receipts r WHERE r.operation_id=NEW.auth_operation_id "
+        "AND r.binding_id=NEW.binding_id AND r.access_epoch=NEW.access_epoch "
+        "AND r.kind='apply_auth_routes' AND r.state='applied') BEGIN "
+        "SELECT RAISE(ABORT, 'auth routes require a current applied receipt'); END"
     )
 
 

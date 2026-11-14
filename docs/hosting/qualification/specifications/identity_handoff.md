@@ -18,8 +18,15 @@ source-channel authentication; old Cloudflare Access assertions are not substitu
 .venv/bin/python -m app.platform.hosted_proofs execute --spec ../docs/hosting/qualification/specifications/identity_handoff.json --inputs /private/proof/inputs.json --output /private/proof/report.json --phase run
 ```
 
-Currently exits 3. H03's driver must pin real provider/browser launch and cleanup
-commands after its detailed design; no identity calls are performed by H01.
+Currently exits 3. H03.1 supplies typed inputs/assertions and revision-2 cases, not an
+executor. H03.12 must pin real provider/browser launch and cleanup commands; no identity
+calls are performed by the contract tests. See the [contract baseline](../../foundation/identity-contracts.md).
+
+The [H04/H05 handoff](../../design/mvp/delivery-plan.md#deployed-operator-handoff-and-session-qualification)
+assigns the deployed cases that need a ready workspace or verified recovery
+point. Retain unavailable results for those observations until the owning
+slices qualify them. H03 still owns component coverage and deployed
+identity-only proof, including the held-route denials.
 
 ## Workload / controls
 
@@ -36,6 +43,9 @@ commands after its detailed design; no identity calls are performed by H01.
 | `no_secret_url_log` | Inspect sanitized URL/history/referrer/log/artifact inventories. No ID/session token or EPM handoff code in URLs; no raw credentials/assertions/action codes in logs, referrers or retained traces. H03 D10 permits only unavoidable initial invitation/provider email-action links, immediately scrubbed with query/referrer/edge capture protected; use fragment invitation capabilities and body-only EPM handoffs. Test with synthetic marker capabilities only. |
 | `multi_device_draft_fences` | Two independent devices edit same/different forms. Renew live/expired sessions at the 32-session cap and concurrently with issuance/logout; rotate cookie/CSRF, deny revoked/generation-stale revival and require explicit lease reacquisition. Lost renewal response never reissues its bearer. Preserve input/focus/scroll; no command replay. |
 | `local_mode_independent` | Launch supported local Operator without cloud identity/Admin resources; reject production-local hosted roles and development identity adapters. |
+| `renewal_cap_and_lineage` | Replace a live predecessor at 32 sessions; reject expiry-only renewal at the full cap. Race renewal, issuance and logout; preserve the original remembered deadline and never replay a bearer. |
+| `identity_dependency_cleanup` | Retain live-lineage and pending/unknown-effect dependencies under FK RESTRICT, then reclaim terminal leaves in bounded passes without cascade or reference rewriting. |
+| `provider_outage_deadlines` | Refuse new authority once the existing five-minute status or managed-proof deadline expires; timeout cannot extend either deadline or imply revocation. |
 
 ## Evidence / cleanup
 
@@ -50,7 +60,8 @@ govern these cases: real Google/email-link provenance, completed Google/TOTP Adm
 explicit renewal under the original thirty-day ceiling, bounded five-minute provider
 revocation freshness and source-local/current external fences. A two-week managed
 cookie is not a thirty-day proof; a fresh token iat is not recent authentication.
-H03.1 updates executable input/report assertions with these rules before execution;
+H03.1 provides `IdentityProofInputs`, `IdentityAssertions` and `validate_identity_report`
+with these rules for the later owning driver;
 case identifiers remain stable and a Markdown update is not a passing report.
 
 Identity persistence qualification must also exercise dependency-aware cleanup: an

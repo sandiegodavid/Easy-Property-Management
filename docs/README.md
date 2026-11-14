@@ -39,7 +39,12 @@ For a specific change, read its owning module, relevant shared platform contract
 
 ## Shared contracts
 
-- [Database schema catalog](database/README.md): start with shared ownership/conventions, then use the focused per-store dictionaries in `database/` for Admin, inventory, access and recovery. Initialization, validation and later-slice additions have their own guide.
+- [Developer tools and demo guides](development/README.md): script reference, external
+  synthetic workspace setup and seeded-demo browser acceptance.
+- [Shared hosted contract rules](platform/hosted-contracts.md): canonical intent,
+  original outcomes and bounded read envelopes; identity-specific behavior remains
+  in its [owning guide](hosting/foundation/identity-contracts.md).
+- [Database schema master](database/overview.md): start with shared ownership and conventions, then use the focused per-store dictionaries in `database/` for Admin, inventory, access and recovery. It also links initialization and validation guidance.
 
 - [Persistence, transactions and validation](platform/persistence.md).
 - [API errors, reads and original-result recovery](platform/api-contracts.md).
@@ -65,6 +70,10 @@ For a specific change, read its owning module, relevant shared platform contract
 When implementing a feature, update its module guide for verified behavior and keep the active design focused on the remaining difference. Update API/model/baseline/validators/generated contracts together where applicable. Record acceptance evidence in the active plan, then update backlog status. When acceptance is complete, archive the active feature design and link its outcome from the backlog to the current module guide.
 
 Keep shared rules in platform guides, domain policy in the owning module and status/dependencies in the backlog. Link exact code/schema/test entry points instead of duplicating every field or full API schema. Preserve necessary rationale/history in the archive, and extract unfinished obligations before archiving a plan. An unverified design-versus-code discrepancy belongs in active work/review; it must not be described as current capability.
+
+Under `application/`, keep READMEs short: directory purpose and links to the owning
+guide. Detailed developer instructions belong here; operator task instructions belong
+in `manual/`. Update the authoritative guide and its navigation links together.
 
 When an operator-facing route, action, setup command or capability changes, update the corresponding [manual chapter](../manual/README.md) and its [operation index](../manual/operation-index.md). Keep developer internals in these guides and operator task steps in the manual.
 

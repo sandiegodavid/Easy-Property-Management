@@ -1,6 +1,6 @@
 # H02 quota reuse and schema implementation contracts
 
-[Hosted MVP design index](../HOSTED_MVP_DESIGN.md) · [Schema catalog](../../../database/README.md)
+[Hosted MVP design index](../HOSTED_MVP_DESIGN.md) · [Schema catalog](../../../database/overview.md)
 
 Part of the accepted HOSTED-001 design. Requirements here do not establish implementation, deployment or qualification; Pilot 0 exceptions are in the [delivery plan](delivery-plan.md).
 
@@ -30,7 +30,7 @@ and exact source/tool/configuration pins when producing new qualification eviden
 H02 detailed design must define these steps before integration:
 
 1. Map ProjectBinding/host operations to the current inventory, project-ID uniqueness,
-   source fences and private resource roots in the [schema master](../../../database/README.md).
+   source fences and private resource roots in the [schema master](../../../database/overview.md).
    Retaining the old package namespace for import reproducibility does not authorize
    importing the old Admin schema/router/provisioning implementation.
 2. Rerun current-source primitive qualification in an isolated Linux laboratory. Use
@@ -63,7 +63,7 @@ establish proof; this documentation does not perform VM/cloud changes or new run
 
 #### Schema ownership and acceptance contract
 
-The [database schema master](../../../database/README.md) is the single dictionary for
+The [database schema master](../../../database/overview.md) is the single dictionary for
 store ownership, tables/columns, relationships, initialization and schema acceptance.
 [H01 detailed design](../HOSTED_MVP_H01_DESIGN.md) defines the corresponding use cases,
 source inventory, typed contracts, UI handoff and proof plans. Both are design, not

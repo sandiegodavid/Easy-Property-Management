@@ -37,7 +37,9 @@ where = ["apps/server"]
 # Only compiled public web files belong in the wheel, never workspace content,
 # source maps, environment files, or arbitrary contents of the build directory.
 [tool.setuptools.package-data]
-app = ["web_build/index.html", "web_build/assets/*.js", "web_build/assets/*.css",
+app = ["central_build/dist/index.html", "central_build/dist/assets/*.js", "central_build/dist/assets/*.css",
+       "admin_build/dist/index.html", "admin_build/dist/assets/*.js", "admin_build/dist/assets/*.css",
+       "web_build/index.html", "web_build/assets/*.js", "web_build/assets/*.css",
        "web_build/assets/*.svg", "web_build/assets/*.png", "web_build/assets/*.jpg",
        "web_build/assets/*.webp", "web_build/assets/*.ico", "web_build/assets/*.woff2"]
 

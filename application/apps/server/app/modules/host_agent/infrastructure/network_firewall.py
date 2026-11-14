@@ -126,6 +126,47 @@ def firewall_document(bridges, settings):
                 ),
                 match({"payload": {"protocol": "ip6", "field": "hoplimit"}}, 255),
             )
+    shared = settings.shared_identity
+    if shared is not None:
+        target = shared.bridge()
+        # The shared service listens on IPv4. The IPv6 bridge allocation stays
+        # isolated, with no service or proxy exception.
+        rule(
+            "output",
+            meta("oifname", target.interface),
+            meta("skuid", settings.gateway_uid),
+            address("ip", "saddr", target.gateway4),
+            address("ip", "daddr", target.address4),
+            port("dport", 8000),
+        )
+        rule(
+            "input",
+            meta("iifname", target.interface),
+            established(),
+            address("ip", "saddr", target.address4),
+            address("ip", "daddr", target.gateway4),
+            port("sport", 8000),
+        )
+        rule(
+            "input",
+            meta("iifname", target.interface),
+            address("ip", "saddr", target.address4),
+            address("ip", "daddr", target.gateway4),
+            port("dport", shared.proxy_port),
+        )
+        rule(
+            "output",
+            meta("oifname", target.interface),
+            meta("skuid", shared.proxy_uid),
+            established(),
+            address("ip", "saddr", target.gateway4),
+            address("ip", "daddr", target.address4),
+            port("sport", shared.proxy_port),
+        )
+        rule("input", port("dport", shared.proxy_port), verdict="drop")
+        rule("output", address("ip", "daddr", target.ipv4), verdict="drop")
+        rule("output", address("ip6", "daddr", target.ipv6), verdict="drop")
+
     # Host daemons must not bypass their file isolation by fetching VM credentials
     # from metadata/private control endpoints. Root bootstrap remains a separate role.
     for protocol, ranges in (

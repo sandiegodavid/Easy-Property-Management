@@ -125,7 +125,7 @@ def test_real_workspace_identity_and_stable_lock_no_schema_creation(values):
     inode = lock_path.stat().st_ino
     with HostedWriterLock(lock_path), pytest.raises(WorkspaceOperationInProgressError):
         startup.validate_startup(binding, APPLICATION)
-    with pytest.raises(SchemaResourcesUnavailable):
+    with pytest.raises(FileNotFoundError):
         startup.validate_startup(binding, APPLICATION)
     assert list((Path(values["control_path"]) / "data").iterdir()) == []
     assert not (workspace.paths.root.parent / ".workspace.server.lock").exists()

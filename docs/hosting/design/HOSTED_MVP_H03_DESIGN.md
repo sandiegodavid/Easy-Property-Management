@@ -2,11 +2,22 @@
 
 [Delivery plan](mvp/delivery-plan.md#implementation-slices) · [Architecture](mvp/architecture-and-access.md) · [Identity schema](../../database/admin-identity.md) · [Source access schema](../../database/operator-access.md)
 
-Status: design decisions D1–D16 accepted November 13, 2026; implementation not started.
+Status: D1–D16 accepted November 13, 2026; H03.1 contracts and H03.2 identity persistence delivered November 14, 2026. H03.3 provider adapters are delivered. H03.4 Admin identity implementation and local validation are delivered. H03.5 central identity implementation and local validation are delivered. H03.6 gateway and relay foundations and focused local validation are delivered. H03.7 handoff implementation and focused local validation are delivered. H03.8 source session lifecycle implementation and focused local validation are delivered. H03.9 Operator session and device workflows and focused local validation are delivered. H03.10 managed business and draft admission and focused local validation are delivered. H03.11 candidate packaging, scoped credential delivery, and private GCP shared and Operator source registrations are validated. Public identity activation and interactive qualification remain in H03.12.
+[H03.3 continuation checkpoint](HOSTED_MVP_H03_3_CHECKPOINT.md) records component evidence and the handoff to later slices.
+[H03.4 checkpoint](HOSTED_MVP_H03_4_CHECKPOINT.md) records Admin implementation, local validation and the deployed qualification handoff.
+[H03.5 checkpoint](HOSTED_MVP_H03_5_CHECKPOINT.md) records durable attempts, claim receipts, central UI, continuation pairing and the later source-side dependencies.
+[H03.6 checkpoint](HOSTED_MVP_H03_6_CHECKPOINT.md) records gateway and private relay evidence and the handoff to later slices.
+[H03.7 checkpoint](HOSTED_MVP_H03_7_CHECKPOINT.md) records the local destination flow and its deployment dependencies.
+[H03.8 checkpoint](HOSTED_MVP_H03_8_CHECKPOINT.md) records source authority, lifecycle evidence and the handoff to later slices.
+[H03.9 checkpoint](HOSTED_MVP_H03_9_CHECKPOINT.md) records the browser workflows, focused evidence and deployment boundaries.
+[H03.10 checkpoint](HOSTED_MVP_H03_10_CHECKPOINT.md) records managed business admission, lease enforcement and local validation.
+[H03.11 checkpoint](HOSTED_MVP_H03_11_CHECKPOINT.md) records installed candidate progress and the remaining provider and deployment gates.
+[H03.12 checkpoint](HOSTED_MVP_H03_12_CHECKPOINT.md) records component results and the remaining native and deployed qualification sequence.
 The [resolved decisions](#resolved-design-decisions) define the implementation defaults.
-This documentation update performs no code, provider configuration, host changes,
-invitation to a real operator or release promotion.
-Assessment baseline: `hosted_mvp` at `ef85c625`; repin before implementation.
+H03.1 supplies contracts and component fixtures only; no provider configuration, host
+changes, real invitation or release promotion. See the [contract baseline](../foundation/identity-contracts.md)
+for exact selected inputs, validation and remaining qualification.
+H03.1 implementation baseline: `hosted_mvp` at `27c20059d1e81353c1e5c80345b0b31721b38016`.
 
 Read scope → workflows → trust and persistence → implementation order → decisions.
 Column definitions live only in the schema master. The
@@ -49,7 +60,7 @@ all-store artifact promotion remain H05/H06 gates.
 | --- | --- | --- |
 | Identity and source ports | `modules/hosted_access/application/login_contracts.py`, `source_contracts.py`, `platform/hosted_contracts/authority.py` | Reuse envelopes, scope, epoch and original-result rules. Implement verification of referenced evidence; a validated DTO is not authorization. Add missing lifecycle/method/session-proof fields explicitly. |
 | Obsolete authentication to replace | `hosted_access/infrastructure/cloudflare_identity.py`, `application/configuration.py`, `application/service.py` | Existing Cloudflare assertions, manual enrollment, `hosted_demo`, expiry, capability choices and loop-image constants are obsolete for fresh hosting. Replace their production composition; no legacy data migration or supported alternative authentication mode. |
-| Source schema | `hosted_access/infrastructure/schema.py`, `session_store.py`, `database/hosted-access-migrations/` | The runtime DDL is obsolete; the owning resource set is unavailable. H03 delivers one current baseline/validator/initializer under `application/database/`, then adapters reflect it. |
+| Source schema | `database/hosted-access-migrations/`, `hosted_access/infrastructure/schema_store.py` | H03.2 delivers the current resource-only baseline, validators and disabled binding. Runtime DDL is removed; obsolete store construction fails closed. See [identity persistence](../foundation/identity-persistence.md). |
 | Admin structure | `database/admin-migrations/versions/admin_0001_initial.py` | Main-Admin structural closure exists. Identity behavior, transient flow state and managed-session provenance do not. Implement the accepted H03 fields/tables in this greenfield baseline; do not create a competing auth database. |
 | Gateway and network | `host_agent/infrastructure/gateway.py`, `host_services.py`, `network_firewall.py`, `unix_transport.py` | H02 denies eligible routing and supplies host-effect transport, not central login routing or source RPC. H03 must deliver the narrow extensions below and requalify isolation. |
 | Launch | `hosted_candidates/startup.py`, `runtime.py` | Normal candidates deliberately remain unavailable while recovery resources are absent. H03 needs an explicit identity qualification composition, not a permissive edit to normal startup. |
@@ -286,8 +297,9 @@ H03 extends H02 ingress in two explicitly reviewed ways:
 The accepted [inventory extension](../../database/host-inventory.md#h03-authentication-routing-extension)
 defines auth-only readiness and its host receipt. Shared Admin/login routes use protected
 component manifests and exact deployment origins rather than fake Operator rows or a
-second editable allocation ledger. H03.1 seals typed contracts against that dictionary;
-H03.6 implements and qualifies them. H02's current closed projection remains authoritative
+second editable allocation ledger. H03.1 seals typed contracts against that dictionary. H03.6 implements and validates
+the gateway and relay foundations locally. H03.11 installs and registers the components.
+H03.12 qualifies the deployed routes. H02's closed projection remains authoritative
 until the replacement passes its gates.
 
 ## Persistence and trust contracts
@@ -345,7 +357,7 @@ from owning schemas. Public URLs carry no authority-bearing query values.
 | Central `/auth/start`, `/auth/email-link`, `/auth/complete`, `/auth/email/continue` | Bounded method-specific attempt; generic unassigned/delivery text; recognized managed proof; central-cookie plus signed-source pairing on email return; fixed redirect/form destination. Do not expose operator existence or an arbitrary-token login endpoint. |
 | Operator `/auth/start`, `/auth/complete` | Destination challenge, central-bound redemption and cookie response. Cross-origin exception exists only on the completion POST, with exact central Origin and challenge checks. |
 | `/api/hosted/session` | Current safe identity/scope, capabilities, expiry/renewal requirement, CSRF token and support. No demo expiry, raw issuer, internal fence/proof, session hash, paths or policy record. |
-| `/api/hosted/sessions` | Bounded device page, current-device marker, coarse browser label and last seen; opaque public session IDs. Revoke one/all through CSRF-protected commands and original-result lookup. |
+| `/api/hosted/sessions` | Bounded live device list with current-device marker, coarse browser label, last seen and opaque public session IDs. Sign out from one or all devices through exact-origin, CSRF-protected commands. Check a lost sign-out response with its short-lived operation proof. |
 | Admin `/auth/*`, `/api/admin/session` | MFA enrollment/challenge, current explicit principal, eight-hour expiry, recent-auth requirement and sign out. No business payload. |
 | Private identity/source ports | Fixed command/observe/original calls with typed authority, immutable operation and receipt. Missing owner returns unavailable; safe projections never become authorization. |
 
@@ -416,18 +428,33 @@ browser, artifact and native acceptance remain execution gates, not unmade decis
 
 | Order | Work unit | Exit evidence |
 | --- | --- | --- |
-| H03.1 | Translate accepted D1–D16 into exact provider/setup inputs, versioned typed contracts, state checks and proof cases. Pin the configured realm, callbacks, signed grant audience/key custody, route manifest and method/renewal policy. | Contracts match the schema master and accepted defaults, with negative fixtures and no undocumented authority. Actual provider/mail/native observations stay unavailable until executed. |
-| H03.2 | Implement resource-owned greenfield Admin identity additions and complete access baseline, validators/initializers. Remove runtime DDL path. | Fresh/read-only reinit, exact checks/FKs/indexes, rollback and installed resource tests; dependency-aware expiry cleanup retains live-lineage/unknown-effect evidence without cascades. No implicit operator/policy/session seed. |
-| H03.3 | Deliver protected managed-provider configuration and verifier; central Google and backend-mediated email-link flow, bounded mail/revocation/key adapters. | Wrong realm/method/subject/verified-email/time deny; real test-project method and quota proof; no raw credentials in reports. |
-| H03.4 | Implement protected Admin bootstrap, Google/TOTP enrollment/challenge, session middleware and minimal usable Admin sign-in/shell/logout. | No first-user bootstrap, no Operator-to-Admin grant, recent MFA proof and explicit account/factor recovery runbook. |
-| H03.5 | Implement durable login attempts, email continuations, invitation identity binding/reissue and central identity receipts. | Unique claim and code reservation under concurrency; central-browser-bound continuation and destination round trip; original-attempt supersession; provider timeout/send ambiguity and receipt rollback retain identity. H04 readiness port unavailable by default. |
-| H03.6 | Implement protected shared-host/auth-only routing and scoped Unix control relay/source listener, including provider egress. | Actual dual-stack/peer/host/path/method/forged-header denials and reboot persistence; held exposes only authentication; no direct Operator-to-Admin network opening. |
-| H03.7 | Implement signed destination pairing, handoff redemption and source session issuance, with scoped identity observations and cross-store reconciliation. | Four browser contexts cannot swap continuation/source assertions/challenges/hosts; two devices racing one link yield one verified pairing. Lost responses expose only original safe results, no token replay. |
-| H03.8 | Implement source session authorization, atomic renewal replacement/cap admission, bounded provider-status refresh, recent-auth challenges and disable/rebind/enable primitives. | Active and expiry-only renewals obey the live cap; concurrent issuance cannot exceed 32; logout/epoch changes prevent revival. External deny and H04/H05 gates remain independent. |
-| H03.9 | Deliver Operator session/renewal/security UI and device/all-device logout, including cap handling. | Safe projections, async states, popup/fallback, explicit continuation, same/different identity and two-device acceptance. |
-| H03.10 | Adapt draft ownership and request admission to current source sessions; preserve local composition and existing forms/submission recovery. | Explicit lease reacquisition after cookie rotation; same-form takeover and distinct-form editing; revoke/expiry/restore fences preserve data; no automatic resubmission or cross-store transaction assumption. |
-| H03.11 | Package separate authentication candidates and local development setup; integrate fixed origins, secrets and private manifests. | Installed without checkout; no legacy expiry/Cloudflare fallback, missing H04/H05 resources explicit; production rejects development adapters. |
-| H03.12 | Run focused component, real-provider, deployed HTTPS/browser and native changed-boundary qualification; publish sanitized evidence/runbooks. | Identity proof cases and matrix below, changed-file lint/type checks, source/image/provider/config pins and honest remaining H04–H06 gates. No real operator admission. |
+| H03.1 — delivered (contracts only) | Translate accepted D1–D16 into exact provider/setup inputs, versioned typed contracts, state checks and proof cases. Pin the configured realm, callbacks, signed grant audience/key custody, route manifest and method/renewal policy. | Contracts match the schema master and accepted defaults, with negative fixtures and no undocumented authority. Actual provider/mail/native observations stay unavailable until executed. |
+| H03.2 — delivered (schema/component evidence) | Implement resource-owned greenfield Admin identity additions and complete access baseline, validators/initializers. Remove runtime DDL path. | Fresh/read-only reinit, exact checks/FKs/indexes, rollback and installed resource tests; dependency-aware expiry cleanup retains live-lineage/unknown-effect evidence without cascades. No implicit operator/policy/session seed. |
+| H03.3 — delivered (provider adapters) | Deliver the protected provider configuration loader, token verifier, Google and backend-mediated email-link adapters, and bounded mail, revocation and key handling. | Focused evidence covers proof rejection and adapter bounds. Later slices own composition, provider setup acceptance and live qualification. |
+| H03.4 — delivered (Admin implementation and local validation) | Protected audited bootstrap, Google/TOTP enrollment/challenge, browser-bound proof exchange, Admin session handling, sign-in/shell/logout UI and installed entry point. | 50 focused Python tests, seven synthetic-provider browser tests, local TLS and wheel checks pass. Account/factor recovery is documented. H03.11 and H03.12 own deployment and live qualification below. |
+| H03.5 — delivered (central implementation) | Implement durable login attempts, email continuations, invitation identity binding/reissue and central identity receipts. Wire the Google and backend-mediated email-link adapters into central sign-in with durable mail admission and code reservation. | Unique claim and code reservation under concurrency; central-browser-bound continuation, exact-origin source form return and atomic pairing receipt; original-attempt supersession; provider timeout/send ambiguity and receipt rollback retain identity. H04 readiness port unavailable by default. |
+| H03.6 — delivered (gateway and relay foundations) | Implement auth-only projections, exact shared-host route matching, protected source lookup, peer-authenticated Unix relay transport, and the central provider egress policy. | Focused local tests and pinned Caddy matcher checks pass. See the checkpoint for evidence and deployment handoff. |
+| H03.7 — delivered (handoff implementation and focused local validation) | Implement the owning destination attempt, signed source assertion issuance and verification, one-use handoff issuance and redemption, and source session issuance. Deliver the destination-side round trip with the H03.5 central return route, with scoped identity observations and cross-store reconciliation. Compose handoff dispatch in the Operator process with its public listener and owning mutation gate. | Four browser contexts cannot swap continuation/source assertions/challenges/hosts; two devices racing one link yield one verified pairing. Lost responses expose only original safe results, no token replay. |
+| H03.8 — delivered (source session lifecycle and focused local validation) | Implement source session authorization, atomic renewal replacement/cap admission, bounded provider-status refresh, recent-auth challenges and disable/rebind/enable primitives. Wire the owning source lifecycle operations and original receipts to authenticated dispatch. | Active and expiry-only renewals obey the live cap; concurrent issuance cannot exceed 32; logout/epoch changes prevent revival. External deny and H04/H05 gates remain independent. |
+| H03.9 — delivered (Operator session and device workflows) | Deliver Operator session/renewal/security UI and device/all-device logout, including cap handling. | Safe projections, async states, popup/fallback, explicit continuation, same/different identity and two-device acceptance. |
+| H03.10 — delivered (managed admission and focused local validation) | Adapt draft ownership and request admission to current source sessions; preserve local composition and existing forms/submission recovery. | Explicit lease reacquisition after cookie rotation; same-form takeover and distinct-form editing; durable prepared commits require the owning form lease. Revocation during multipart staging rolls back bytes and the receipt while preserving the original attempt. Expiry and restore checks preserve data. |
+| H03.11 — delivered (private infrastructure qualification) | Package separate authentication candidates and local development setup; integrate fixed origins, secrets and private manifests. Confirm current project billing and the effective daily email-link sending allowance from provider evidence. Prepare the protected configuration for qualification and verify the deployment ceiling is below that allowance. Qualify the installed Admin entry point and protected provider credential delivery in the deployed candidate. Register the source listener and relay with protected socket ownership and peer identities. Register the shared Admin/login endpoints, TLS identity and exact asset paths, connect a working Firebase helper origin, and configure central-only provider egress and trusted ingress. | Installed without checkout; no legacy expiry/Cloudflare fallback, missing H04/H05 resources explicit; production rejects development adapters. |
+| H03.12 | Run focused component, real-provider, deployed HTTPS/browser and native changed-boundary qualification; publish sanitized evidence/runbooks. | Use the approved test account to verify Google completion and server-cookie issuance, email delivery and one-use completion, and provider revocation or disable after the bounded status window. Exercise Admin Google popup, TOTP enrollment/challenge, provider outage and two independent browsers through the deployed routes. Before interactive qualification, verify the Admin/login HTTPS origins and the exact Firebase callback at `https://login.epmdemo.xyz/__/auth/handler`. On the disposable target, prove socket ownership and peer isolation, dual-stack separation, direct-origin denial, trusted forwarding, scoped egress, stream containment, and projection regeneration after reboot. Verify wrong hosts, paths, methods, and forged headers are denied, held hosts expose only authentication, and Operators cannot reach Admin directly. Select the new projection only after these gates pass. Execute the documented account/factor recovery with the approved test account and deployed Admin sessions, proving rejection of the old session after suspension/restoration and requiring fresh Google/TOTP sign-in. Confirm Google Testing/test-user settings, observe mail cooldown and multi-device behavior, and verify refresh credentials are discarded. After quota acceptance and live proof, seal the protected configuration and record its digest in the owning setup. Include the validation matrix below, changed-file checks and exact pins in the sanitized evidence. No real operator admission. |
+
+H03.11 recorded the project owner's confirmation of 10 daily email-link sends.
+Billing is enabled. The application ceiling is 9 sends per rolling 24 hours.
+Keep the tracked selection at
+`selected_not_verified` until acceptance and sealing in H03.12.
+
+### H04/H05 qualification handoff
+
+H03.12 qualifies the deployed identity-only projection and its held
+workspace boundary. The [H04/H05 handoff](mvp/delivery-plan.md#deployed-operator-handoff-and-session-qualification)
+owns deployed checks that require an eligible assignment, workspace
+session, or verified recovery point. The revision-2 case IDs and
+acceptance requirements remain in force. Record component coverage and
+deployed held-route evidence at H03, with dependent deployed cases marked
+unavailable until their owners qualify them.
 
 ## Validation matrix
 
@@ -444,7 +471,8 @@ browser, artifact and native acceptance remain execution gates, not unmade decis
 | Query/performance | Indexed hash/session/epoch lookups; at most one bounded local access read per request, no provider/Admin round trip on each business read. At most one deduplicated provider revocation refresh per active identity per interval; bounded 50-row session pages, cleanup batches and UI timeouts; no N+1 provider calls. |
 | Browser/local/native | Four isolated contexts, same-site sibling CSRF, expired tab, long-running request disable, cookie flags/history/referrer/log markers, popup blocked, CSP/no-store, accessibility/themes/narrow layout, default local launch and changed gateway/relay native denial proofs. |
 
-No tests run by writing this design. Implementation must rerun applicable Ruff/frontend
+H03.1 focused contract/state/proof tests and Ruff checks are recorded in the
+[contract baseline](../foundation/identity-contracts.md). Remaining implementation must run applicable Ruff/frontend
 checks and focused regressions; actual provider and deployed-browser proof are separate
 from emulator/component passes.
 

@@ -158,7 +158,7 @@ def build_router(
         operation_id="uploadFile",
         response_model=FileUploadResponse,
     )
-    async def upload(
+    def upload(
         file: UploadFile = File(...),
         entity_type: str = Form(...),
         entity_id: UUID = Form(...),
@@ -171,7 +171,7 @@ def build_router(
             with tempfile.NamedTemporaryFile(delete=False) as staged:
                 staged_path = Path(staged.name)
                 size = 0
-                while chunk := await file.read(1024 * 1024):
+                while chunk := file.file.read(1024 * 1024):
                     size += len(chunk)
                     if size > MAX_FILE_BYTES:
                         raise HTTPException(

@@ -1,8 +1,8 @@
 """Authorization precedes routing, business work, files and original-result lookup."""
 
 import asyncio
-from datetime import UTC, datetime, timedelta
 import errno
+from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 
 from fastapi import FastAPI, Request
@@ -12,18 +12,29 @@ from starlette.responses import JSONResponse
 
 from app.modules.hosted_access.api.middleware import HostedTransportMiddleware
 from app.modules.hosted_access.api.router import SESSION_COOKIE, build_session_router
+from app.modules.hosted_access.api.request_body import bounded_body
 from app.modules.hosted_access.application.configuration import HostedDeployment
 from app.modules.hosted_access.application.service import HostedAccessService
 from app.modules.hosted_access.domain.models import HostedAccessError, VerifiedIdentity
-from app.modules.hosted_access.infrastructure.session_store import SQLiteHostedSessionStore
 
 
 @pytest.fixture
 def transport(deployment_values):
     deployment = HostedDeployment.model_validate(deployment_values)
     now = datetime.now(UTC) + timedelta(seconds=1)
-    SQLiteHostedSessionStore.initialize(deployment)
-    store = SQLiteHostedSessionStore(deployment)
+
+    class UnavailableStore:
+        def begin_session(self, _values):
+            raise HostedAccessError(
+                "hosted_access_unavailable", "Hosted sign-in is unavailable.", 503
+            )
+
+        def session(self, _token_hash):
+            raise HostedAccessError(
+                "hosted_access_unavailable", "Hosted sign-in is unavailable.", 503
+            )
+
+    store = UnavailableStore()
     service = HostedAccessService(deployment, store, now=lambda: now)
     proof = VerifiedIdentity(
         deployment.identity_issuer,
@@ -78,45 +89,6 @@ def transport(deployment_values):
     with TestClient(app, base_url=deployment.public_origin, client=("127.0.0.1", 123)) as client:
         client.headers.update({"cf-access-jwt-assertion": "verified-proof"})
         yield client, store, calls, ready
-    store.engine.dispose()
-
-
-def sign_in(transport):
-    client, store, _calls, _ready = transport
-    client.headers["origin"] = str(client.base_url).rstrip("/")
-    pending = client.post("/api/hosted/session")
-    assert pending.status_code == 403
-    assert pending.json()["detail"]["code"] == "hosted_enrollment_pending"
-    store.activate("subject")
-    response = client.post("/api/hosted/session")
-    assert response.status_code == 200
-    cookie = response.headers["set-cookie"]
-    assert "HttpOnly" in cookie and "Secure" in cookie and "SameSite=lax" in cookie
-    assert "Path=/" in cookie and "Domain=" not in cookie
-    assert SESSION_COOKIE not in response.text
-    client.headers["x-epm-csrf"] = response.json()["csrfToken"]
-    return response
-
-
-def test_session_cookie_bootstrap_csrf_refresh_and_logout(transport):
-    client, _store, calls, _ready = transport
-    assert client.get("/api/tasks").status_code == 401
-    assert calls == []
-    response = sign_in(transport)
-    current = client.get("/api/hosted/session")
-    assert current.json()["csrfToken"] == response.json()["csrfToken"]
-    assert current.headers["cache-control"] == "no-store"
-    assert client.get("/api/tasks").status_code == 200
-    assert client.post("/api/tasks").status_code == 200
-    del client.headers["x-epm-csrf"]
-    assert client.post("/api/tasks").status_code == 403
-    assert len(calls) == 2
-    client.headers["x-epm-csrf"] = response.json()["csrfToken"]
-    assert client.delete("/api/hosted/session").status_code == 204
-    assert client.get("/api/tasks").status_code == 401
-    denied = client.post("/api/hosted/session")
-    assert denied.status_code == 403
-    assert denied.json()["detail"]["code"] == "hosted_reauthentication_required"
 
 
 @pytest.mark.parametrize(
@@ -132,9 +104,8 @@ def test_session_cookie_bootstrap_csrf_refresh_and_logout(transport):
         "/assets/unhashed.js",
     ],
 )
-def test_unknown_and_administration_routes_are_denied_even_after_sign_in(transport, path):
+def test_unknown_and_administration_routes_are_denied_without_sign_in(transport, path):
     client, _store, calls, _ready = transport
-    sign_in(transport)
     assert client.get(path).status_code == 403
     assert calls == []
 
@@ -150,28 +121,12 @@ def test_unknown_and_administration_routes_are_denied_even_after_sign_in(transpo
 )
 def test_untrusted_transport_proof_cannot_reach_business_work(transport, headers):
     client, _store, calls, _ready = transport
-    sign_in(transport)
     assert client.get("/api/tasks", headers=headers).status_code in {401, 403}
-    assert calls == []
-
-
-def test_no_local_marker_bypass_body_limit_and_workspace_readiness(transport):
-    client, _store, calls, ready = transport
-    assert client.get("/api/tasks", headers={"X-EPM-Local-Client": "1"}).status_code == 401
-    sign_in(transport)
-    assert (
-        client.post("/api/tasks", headers={"content-length": str(51 * 1024 * 1024)}).status_code
-        == 413
-    )
-    ready[0] = False
-    assert client.get("/api/files/id/content").status_code == 503
-    assert client.get("/api/hosted/session").status_code == 200
     assert calls == []
 
 
 def test_duplicate_security_headers_and_session_cookies_are_rejected(transport):
     client, _store, calls, _ready = transport
-    sign_in(transport)
     assert client.get("/api/tasks", headers=[("host", "a"), ("host", "b")]).status_code == 403
     assert (
         client.get(
@@ -204,10 +159,10 @@ def test_forwarded_headers_do_not_make_an_external_peer_trusted(transport):
     assert calls == []
 
 
-def test_unsafe_requests_require_origin_even_with_valid_cookie_and_csrf(transport):
+def test_unsafe_requests_require_origin_before_session_lookup(transport):
     client, _store, calls, _ready = transport
-    sign_in(transport)
-    del client.headers["origin"]
+    client.headers["cookie"] = f"{SESSION_COOKIE}={'a' * 43}"
+    client.headers["x-epm-csrf"] = "untrusted-csrf"
     response = client.post("/api/tasks")
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == "hosted_origin_rejected"
@@ -231,7 +186,7 @@ def test_cross_site_top_level_navigation_can_reach_public_sign_in(transport):
 
 
 def test_access_logout_return_redirects_without_identity_or_session_admission(transport):
-    client, store, calls, _ready = transport
+    client, _store, calls, _ready = transport
     del client.headers["cf-access-jwt-assertion"]
     response = client.get(
         "/?__cf_access_message=logged_out",
@@ -249,7 +204,6 @@ def test_access_logout_return_redirects_without_identity_or_session_admission(tr
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["vary"] == "Sec-Fetch-Dest, Sec-Fetch-Mode, Sec-Fetch-Site"
     assert "set-cookie" not in response.headers
-    assert store.enrollments() == []
     assert calls == []
     # Following the fixed redirect can reach only the public sign-in route.
     assert (
@@ -284,7 +238,7 @@ def test_access_logout_return_redirects_without_identity_or_session_admission(tr
     ],
 )
 def test_access_logout_return_exception_is_narrow(transport, path, method, headers):
-    client, store, calls, _ready = transport
+    client, _store, calls, _ready = transport
     response = client.request(
         method,
         path,
@@ -299,7 +253,6 @@ def test_access_logout_return_exception_is_narrow(transport, path, method, heade
     )
     assert response.status_code == 403
     assert "location" not in response.headers
-    assert store.enrollments() == []
     assert calls == []
 
 
@@ -334,36 +287,12 @@ def test_cross_site_sign_in_navigation_exception_is_narrow(transport, path, meth
     assert calls == []
 
 
-def test_chunked_body_is_bounded_before_any_business_work(transport, monkeypatch):
-    client, _store, calls, _ready = transport
-    sign_in(transport)
-    monkeypatch.setattr("app.modules.hosted_access.api.request_body.MAX_BODY_BYTES", 128)
-    response = client.post("/api/tasks", content=iter([b"a" * 100, b"b" * 100]))
-    assert response.status_code == 413
-    assert response.json()["detail"]["code"] == "request_payload_too_large"
-    assert calls == []
-
-
 def test_rate_limit_is_bounded_before_business_work(transport, monkeypatch):
     client, _store, calls, _ready = transport
-    sign_in(transport)
     monkeypatch.setattr("app.modules.hosted_access.api.middleware.MAX_REQUESTS_PER_MINUTE", 1)
+    assert client.get("/api/tasks").status_code == 401
     assert client.get("/api/tasks").status_code == 429
     assert calls == []
-
-
-def test_wrapped_handler_full_error_is_typed_even_after_owning_cleanup(transport):
-    client, _store, calls, _ready = transport
-    sign_in(transport)
-    error = RuntimeError("opaque provider failure")
-    error.__cause__ = OSError(errno.ENOSPC, "private storage location")
-    client.app.state.business_failure = error
-    response = client.post("/api/tasks")
-    assert response.status_code == 507
-    assert response.json()["detail"]["code"] == "hosted_storage_quota_exceeded"
-    assert "original operation key" in response.text
-    assert "private storage" not in response.text
-    assert len(calls) == 1
 
 
 def test_late_storage_error_does_not_start_a_second_response():
@@ -381,3 +310,77 @@ def test_late_storage_error_does_not_start_a_second_response():
     with pytest.raises(HostedAccessError):
         asyncio.run(middleware({"type": "http"}, None, send))
     assert len(messages) == 1
+
+
+@pytest.mark.parametrize("method", ["GET", "POST", "DELETE"])
+def test_retired_session_routes_cannot_issue_or_accept_authority(transport, method):
+    client, _store, calls, _ready = transport
+    client.headers.update(
+        {
+            "origin": str(client.base_url).rstrip("/"),
+            "cookie": f"{SESSION_COOKIE}={'a' * 43}",
+            "x-epm-csrf": "untrusted-csrf",
+        }
+    )
+    response = client.request(method, "/api/hosted/session")
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "hosted_access_unavailable"
+    assert "set-cookie" not in response.headers
+    assert response.headers["cache-control"] == "no-store"
+    assert calls == []
+
+
+def test_no_local_marker_bypass_and_declared_body_limit(transport):
+    client, _store, calls, _ready = transport
+    assert client.get("/api/tasks", headers={"X-EPM-Local-Client": "1"}).status_code == 401
+    response = client.post(
+        "/api/tasks",
+        headers={
+            "origin": str(client.base_url).rstrip("/"),
+            "content-length": str(51 * 1024 * 1024),
+        },
+    )
+    assert response.status_code == 413
+    assert response.json()["detail"]["code"] == "request_payload_too_large"
+    assert calls == []
+
+
+def test_chunked_body_is_bounded_before_any_handler_work():
+    chunks = iter(
+        [
+            {"type": "http.request", "body": b"a" * 100, "more_body": True},
+            {"type": "http.request", "body": b"b" * 100, "more_body": False},
+        ]
+    )
+    calls = []
+
+    async def receive():
+        return next(chunks)
+
+    async def dispatch():
+        async with bounded_body(receive, max_bytes=128):
+            calls.append("handler")
+
+    with pytest.raises(HostedAccessError) as caught:
+        asyncio.run(dispatch())
+    assert caught.value.status == 413
+    assert caught.value.code == "request_payload_too_large"
+    assert calls == []
+
+
+def test_wrapped_handler_full_error_is_typed_even_after_owning_cleanup():
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def dispatch():
+        async with bounded_body(receive):
+            error = RuntimeError("opaque provider failure")
+            error.__cause__ = OSError(errno.ENOSPC, "private storage location")
+            raise error
+
+    with pytest.raises(HostedAccessError) as caught:
+        asyncio.run(dispatch())
+    assert caught.value.status == 507
+    assert caught.value.code == "hosted_storage_quota_exceeded"
+    assert "original operation key" in str(caught.value)
+    assert "private storage" not in str(caught.value)

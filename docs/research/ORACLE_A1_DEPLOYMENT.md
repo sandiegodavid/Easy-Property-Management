@@ -96,7 +96,7 @@ The application wheel is pure Python, but dependencies can contain native code. 
 
 ### Two independent seeded exports
 
-On the development computer, use the [synthetic demo generator](../../application/demo/README.md). From `application/`, prepare operator A with a **new empty destination**:
+On the development computer, use the [synthetic demo generator](../development/demo-workspace.md). From `application/`, prepare operator A with a **new empty destination**:
 
 ```bash
 .venv/bin/python demo/seed.py \

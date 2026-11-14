@@ -37,6 +37,7 @@ class EffectIdentity(SemanticRequest):
         "stop_container",
         "apply_limits",
         "apply_ingress_policy",
+        "apply_auth_routes",
         "stage_restore",
         "switch_binding",
         "retire_resources",

@@ -1,6 +1,6 @@
 # Admin identity, invitations and login handoffs
 
-[Database schema catalog](README.md) · [Shared conventions](overview.md)
+[Database schema master](overview.md) · [Shared conventions](overview.md)
 
 Part of the schema master. Proposed hosted tables are design contracts, not claims of implemented schema. Executable definitions belong exclusively under `application/database/`; see [resource ownership](overview.md#required-schema-definition-location).
 
@@ -10,7 +10,7 @@ schema creation itself grants no access and creates no principals or sessions.
 
 The [H03 design](../hosting/design/HOSTED_MVP_H03_DESIGN.md) defines the accepted
 [flow-state additions below](#h03-flow-state). D1–D16 were accepted November 13,
-2026. Executable columns and the H02 baseline remain unchanged until implementation.
+2026. H03.2 implements these additions in the current greenfield Admin baseline; identity behavior remains later H03 work.
 
 In this guide: [`invitations` — H03](#invitations--h03) · [`admin_principals` — H03](#admin_principals--h03) · [`admin_sessions` — H03](#admin_sessions--h03) · [`login_handoffs` — H03 central login](#login_handoffs--h03-central-login)
 
@@ -118,7 +118,7 @@ the earliest cleanup time, not an unconditional deletion deadline; apply the
 
 <a id="proposed-h03-flow-state"></a>
 
-Status: accepted November 13, 2026 under H03 D1–D16; not implemented.
+Status: H03.2 executable schema, retained-data validation and cleanup delivered; authentication behavior remains later H03 work.
 These definitions extend this owning master, not the runtime. Implement the
 changes in `application/database/admin-migrations/` as the current greenfield baseline;
 no deployed-data migration, runtime DDL or separate identity database. Existing
@@ -138,6 +138,7 @@ login. The public attempt ID is correlation only, with no authority by itself.
 | `attempt_id` | `ID` | No | — | PK; public non-secret correlation identity. |
 | `purpose` | `TEXT` | No | — | CHECK operator_login, admin_login, renewal or recent_auth. |
 | `operator_id` | `ID` | Yes | — | FK operators; required for Operator/renewal purposes. |
+| `completed_managed_session_id` | `ID` | Yes | — | Immutable FK to the exact verified managed proof committed with a completed Google attempt. |
 | `parent_managed_session_id` | `ID` | Yes | — | FK managed_identity_sessions; required for renewal/recent-auth of an existing lineage. |
 | `source_attempt_id` | `ID` | Yes | — | Logical source login_attempts identity; no cross-store FK. |
 | `source_browser_hash` | `HASH` | Yes | — | Destination browser challenge binding for Operator flows. |
@@ -292,14 +293,16 @@ additional fields, not a second copy of those definitions.
 | `login_handoffs.attempt_id` | `ID` | No | — | FK login_attempts; exact browser/destination binding. |
 | `login_handoffs.managed_session_id` | `ID` | No | — | FK managed_identity_sessions; exact identity/method and proof deadlines. |
 | `login_handoffs.identity_operation_id` | `ID` | No | — | FK identity_commands; original handoff issuance intent. |
+| `login_handoffs.source_receipt_ref` | `REF` | Yes | — | Matching source receipt retained after redemption; no cross-store FK. |
 
 Extend handoff lifecycle with `redeeming` and a bounded `source_receipt_ref: REF` nullable
 column. `redeeming` reserves the single exchange before the external source call;
 `redeemed` requires the matching source receipt. Retain the existing five-minute
 capability lifetime; an expired reservation may be reconciled read-only, never issue
 a new bearer. A matching retry reports the original safe result, not a second cookie.
-H03.1 must finalize corresponding CHECKs/state invariants and update typed proof
-contracts together before changing the executable baseline.
+H03.1 seals corresponding state invariants and typed proof contracts in the
+[identity contract baseline](../hosting/foundation/identity-contracts.md); H03.2 implements the equivalent CHECKs/FKs in the executable baseline and
+[dependency-aware cleanup](../hosting/foundation/identity-persistence.md).
 
 ## Identity retention and cleanup
 
@@ -337,3 +340,51 @@ Tests must run repeated cleanup passes with a live thirty-day lineage, unknown s
 claim, expired continuation and terminal handoff. Required evidence survives; after
 all holds/dependents retire, eligible rows are eventually reclaimed without cascades.
 
+
+### `identity_mail_reservations` — H03.3
+
+Resource-owned central mail admission, created only by the current Admin baseline;
+no seeds, provider payloads, raw recipients, IPs or links. A committed row counts
+whether delivery succeeds, times out or never starts. Provider calls occur after the
+short `BEGIN IMMEDIATE` admission transaction commits.
+
+| Column | Type | Nullable | Default | Description / column rules |
+| --- | --- | --- | --- | --- |
+| `operation_id` | `ID` | No | — | PK; immutable original operation identity. |
+| `deployment_id` | `ID` | No | — | Immutable owning deployment. |
+| `scope` | `JSON` | No | — | Canonical typed deployment/workspace scope, immutable. |
+| `kind` | `CODE` | No | — | Immutable operation kind. |
+| `idempotency_key` | `KEY` | No | — | Immutable key; UNIQUE(deployment_id, scope, kind, idempotency_key). |
+| `request_hash` | `HASH` | No | — | Immutable canonical send intent, including destination; changed intent conflicts. |
+| `destination_hash` | `HASH` | Yes | — | Current protected HMAC-SHA256 destination digest; null only after bucket redaction. |
+| `network_hash` | `HASH` | Yes | — | Current protected HMAC-SHA256 ingress network digest; null exactly with destination_hash. |
+| `reserved_at` | `TIME` | No | — | Immutable admission time in epoch milliseconds. |
+| `redact_after` | `TIME` | No | — | Immutable reserved_at + 90,000,000 ms (25 hours). |
+
+Indexes cover `(deployment_id, destination_hash, reserved_at)`,
+`(deployment_id, network_hash, reserved_at)`, `(deployment_id, reserved_at)` and a
+partial `(deployment_id, redact_after, operation_id)` for unredacted buckets.
+Admission atomically checks rolling destination/hour=5, network/hour=20,
+deployment/day=configured ceiling (selected default 100), and destination resend
+cooldown=60 seconds. Windows exclude the exact lower boundary. Current/previous
+HMAC aliases are checked together without double counting; HMAC input includes
+owning deployment and destination/network domain separation. Protected key delivery
+must retain the previous key throughout the hourly overlap and rotate no faster
+than the configured daily selection. Network identity is canonicalized by trusted
+ingress; email canonicalization preserves local case, dots and plus addressing.
+
+`reserve_email(email, network, operation)` derives aliases privately. The unchanged
+hash-only `reserve` port requires an injected trusted alias provider during rotation;
+browser-selected aliases cannot establish admission. A matching scoped key/hash retry
+returns `unknown`, including after restart or with a new proposed operation ID;
+reusing an operation ID for changed scope/key/hash conflicts. Network changes on a
+retry do not grant another send. All reservations remain charged; no refund API.
+
+Cleanup redacts both digests in at most 100 expired rows per transaction after 25
+hours, leaving immutable operation tombstones. UPDATE/REPLACE/DELETE guards protect
+original intent; only paired digest redaction is allowed. Since OperationReference
+has no authenticated expiry, tombstones cannot safely be deleted: replay evidence
+grows with accepted operations until a separately agreed replay-expiry contract
+exists. After redaction, the canonical request hash remains the intent authority.
+Restoring a backup preserves only its included reservations; this adapter alone
+cannot make a stale backup safe for renewed mail effects without recovery fencing.

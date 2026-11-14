@@ -36,6 +36,7 @@ class BuildInput:
     lock: Path
     wheelhouse: Path
     output: Path
+    identity: bool = False
 
 
 def _copy_file(source, target):
@@ -81,6 +82,17 @@ def copy_assets(application, package):
         _copy_file(path, package / relative)
     if not any((package / "web_build/assets").glob("*.js")):
         raise ArtifactInvalid()
+
+
+def copy_identity_assets(application, package):
+    for component in ("admin", "central"):
+        relative = Path(f"{component}_build/dist")
+        build = application / "apps/server/app" / relative
+        subprocess.run(["npm", "run", f"build:{component}"], cwd=application, check=True)
+        for path in files(build):
+            target = (relative / path.relative_to(build)).as_posix()
+            validate_path("package", target, "admin")
+            _copy_file(path, package / target)
 
 
 def inventory(package, resources):
@@ -142,7 +154,11 @@ def audit_wheel(wheel, component):
 
 
 def prepare(config: BuildInput, *, application: Path = APPLICATION):
-    if config.output.exists() or config.output.is_symlink():
+    if (
+        config.output.exists()
+        or config.output.is_symlink()
+        or (config.identity and config.component != "admin")
+    ):
         raise ArtifactInvalid()
     if config.component not in SCHEMAS or config.architecture not in {"amd64", "arm64"}:
         raise ArtifactInvalid()
@@ -157,6 +173,8 @@ def prepare(config: BuildInput, *, application: Path = APPLICATION):
         if config.component == "operator":
             subprocess.run(["npm", "run", "build"], cwd=application, check=True)
             copy_assets(application, package)
+        if config.identity:
+            copy_identity_assets(application, package)
         resources = work / "context/resources"
         copy_resources(application, resources, config.component)
         wheelhouse = work / "context/wheelhouse"
@@ -184,7 +202,7 @@ def prepare(config: BuildInput, *, application: Path = APPLICATION):
             schemas=schema_states(resources, config.component),
             ui={
                 "operator": "compiled_operator",
-                "admin": "unavailable",
+                "admin": "compiled_identity" if config.identity else "unavailable",
                 "host_agent": "not_applicable",
             }[config.component],
         )
@@ -215,6 +233,11 @@ def main():
     parser.add_argument("--lock", type=Path, required=True)
     parser.add_argument("--wheelhouse", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--identity",
+        action="store_true",
+        help="Package both shared identity UIs in the Admin candidate.",
+    )
     args = parser.parse_args()
     manifest = prepare(
         BuildInput(
@@ -223,6 +246,7 @@ def main():
             args.lock.resolve(),
             args.wheelhouse.resolve(),
             args.output.absolute(),
+            args.identity,
         )
     )
     print(manifest.model_dump_json(exclude={"files"}))

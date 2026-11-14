@@ -75,3 +75,17 @@ class EndpointPolicy:
                 raise HostAgentDenied()
             endpoints.append((family, address))
         return tuple(endpoints)
+
+
+def identity_provider_policy(
+    component: str, *, firebase_project: str | None = None
+) -> EndpointPolicy:
+    """Dedicated managed identity egress, never part of Operator's allowlist."""
+    if component != "central_identity":
+        raise HostAgentDenied()
+    hosts = ("identitytoolkit.googleapis.com", "www.googleapis.com")
+    if firebase_project is not None:
+        if not re.fullmatch(r"[a-z][a-z0-9-]{4,28}[a-z0-9]", firebase_project):
+            raise HostAgentDenied()
+        hosts = (*hosts, firebase_project + ".firebaseapp.com")
+    return EndpointPolicy(hosts)

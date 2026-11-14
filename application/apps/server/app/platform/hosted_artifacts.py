@@ -13,7 +13,12 @@ from alembic.script import ScriptDirectory
 from pydantic import Field, model_validator
 
 from app.platform.hosted_contracts.values import Contract, RequestHash
-from app.platform.schema_resources import HostedStore, resource_config, scaffold_config
+from app.platform.schema_resources import (
+    HostedStore,
+    IMPLEMENTED_REVISIONS,
+    resource_config,
+    scaffold_config,
+)
 
 Component = Literal["admin", "operator", "host_agent"]
 SCHEMAS = {
@@ -74,7 +79,7 @@ class CandidateManifest(Contract):
     wheel_sha256: RequestHash
     files: Annotated[tuple[FilePin, ...], Field(min_length=1, max_length=5000)]
     schemas: tuple[SchemaPin, ...]
-    ui: Literal["compiled_operator", "unavailable", "not_applicable"]
+    ui: Literal["compiled_operator", "compiled_identity", "unavailable", "not_applicable"]
     acceptance: Literal["infrastructure_candidate"] = "infrastructure_candidate"
     runtime: Literal["unavailable"] = "unavailable"
 
@@ -87,13 +92,22 @@ class CandidateManifest(Contract):
             raise ValueError("Duplicate candidate file.")
         if (
             self.ui
-            != {
-                "admin": "unavailable",
-                "operator": "compiled_operator",
-                "host_agent": "not_applicable",
+            not in {
+                "admin": {"unavailable", "compiled_identity"},
+                "operator": {"compiled_operator"},
+                "host_agent": {"not_applicable"},
             }[self.component]
         ):
             raise ValueError("Candidate UI ownership mismatch.")
+        identity_builds = {
+            path.split("/", 1)[0]
+            for root, path in paths
+            if root == "package" and path.startswith(("admin_build/", "central_build/"))
+        }
+        if (self.ui == "compiled_identity") != bool(identity_builds):
+            raise ArtifactInvalid()
+        if self.ui == "compiled_identity":
+            _require_identity_builds(paths)
         for schema in self.schemas:
             if (schema.state == "implemented") != (schema.revision is not None):
                 raise ValueError("Unavailable schemas cannot invent a revision.")
@@ -128,7 +142,18 @@ def _required_package(paths, component):
         raise ArtifactInvalid()
 
 
+def _require_identity_builds(paths):
+    declared = {path for root, path in paths if root == "package"}
+    for component in ("admin", "central"):
+        build = f"{component}_build/dist"
+        if f"{build}/index.html" not in declared or not any(
+            path.startswith(f"{build}/assets/") and path.endswith(".js") for path in declared
+        ):
+            raise ArtifactInvalid()
+
+
 ASSET_DEPTH = 3
+IDENTITY_ASSET_DEPTH = 4
 RESOURCE_DEPTH = 3
 REVISION_DEPTH = 4
 
@@ -152,6 +177,15 @@ def _package_path(path, relative, component):
             and path.suffix in PUBLIC_SUFFIXES
         )
         if component != "operator" or not (relative == "web_build/index.html" or asset):
+            raise ArtifactInvalid()
+    elif path.parts[0] in {"admin_build", "central_build"}:
+        index = relative == f"{path.parts[0]}/dist/index.html"
+        asset = (
+            len(path.parts) == IDENTITY_ASSET_DEPTH
+            and path.parts[1:3] == ("dist", "assets")
+            and path.suffix in {".js", ".css"}
+        )
+        if component != "admin" or not (index or asset):
             raise ArtifactInvalid()
     elif path.suffix != ".py" or path.name in {"quota_actor.py", "project_quota_qualification.py"}:
         raise ArtifactInvalid()
@@ -268,7 +302,7 @@ def _schema_states(root, component):
             result.append(SchemaPin(store=name, state="implemented", revision=heads[0]))
             continue
         store = HostedStore(name)
-        if name in {"admin", "host-inventory"}:
+        if store in IMPLEMENTED_REVISIONS:
             config = resource_config(store, application_directory=root)
             revision = ScriptDirectory.from_config(config).get_current_head()
             result.append(SchemaPin(store=name, state="implemented", revision=revision))

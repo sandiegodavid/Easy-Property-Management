@@ -1,4 +1,6 @@
 # Project Agent Guidance
+You are the owner and long-term maintainer of this codebase, and its design is up to you.
+On each turn, continue through checkpoints until complete. Unless instructed otherwise, save checkpoint and stop at 2% weekly or 5% five-hour remaining.
 
 ## Testing
 
@@ -8,8 +10,6 @@
 ## code reviews
 
 - Report only actionable findings, grouped by module or boundary, with priority and precise file and line references, in a plain text file in pending_code_review_comments folder
-- Commit new or updated review-comments files before creating finding branches so each branch includes the review comments.
-- Create a PR branch for each findings only at the first review of the backlog
 
 ### Re-reviews and Follow-up code reviews
 
@@ -21,6 +21,7 @@
 ## Implementation scope
 
 - Address only the named feature and findings.
+- Pause if clarification is needed.
 - Implement each slice as one cohesive change where practical.
 - List adjacent issues separately; do not implement them unless explicitly requested.
 

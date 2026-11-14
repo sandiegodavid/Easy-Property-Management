@@ -4,6 +4,7 @@ from typing import Annotated, Literal, Protocol
 
 from pydantic import Field, model_validator
 
+from app.modules.host_agent.application.auth_routes import ApplyAuthRoutes
 from app.modules.host_agent.application.build_inputs import HostPrincipal
 from app.modules.host_agent.application.contracts import Action
 from app.modules.host_agent.application.effect_contracts import ApplyIngressPolicy, EffectIdentity
@@ -48,7 +49,7 @@ class HostEffect(SemanticRequest):
     access_epoch: Revision
     expected_revision: Revision
     inputs_hash: RequestHash | None = None
-    payload: Annotated[Action | IngressPolicy, Field(discriminator="action")]
+    payload: Annotated[Action | IngressPolicy | ApplyAuthRoutes, Field(discriminator="action")]
 
     @model_validator(mode="after")
     def matching_target(self):
@@ -69,6 +70,9 @@ class HostEffect(SemanticRequest):
                 source_identity_proof_ref=self.payload.source_identity_proof_ref,
                 resource_readiness_proof_ref=self.payload.resource_readiness_proof_ref,
             )
+        elif isinstance(self.payload, ApplyAuthRoutes):
+            if self.payload.effect != self.effect or self.payload.access_epoch != self.access_epoch:
+                raise ValueError("Auth route effect must match its owning envelope.")
         elif self.payload.action == "retire_resources":
             if self.payload.binding_ids != (self.effect.binding_id,):
                 raise ValueError("Retirement requires one child effect per registered binding.")

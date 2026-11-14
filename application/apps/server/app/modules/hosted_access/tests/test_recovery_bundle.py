@@ -11,26 +11,28 @@ from app.modules.hosted_access.infrastructure.recovery_bundle import (
     open_bundle,
     seal_bundle,
 )
-from app.modules.hosted_access.tests.test_sessions import approve, context as session_context
-
-context = session_context
 
 
-def test_bundle_round_trip_excludes_usable_authority_and_rejects_tampering(context, tmp_path):
-    service, store, proof, _clock = context
-    grant = approve(context)
-    bundle = RecoveryBundle(deployment=service.deployment, **store.recovery_reference())
+def test_bundle_round_trip_excludes_usable_authority_and_rejects_tampering(
+    deployment_values, tmp_path
+):
+    deployment = HostedDeployment.model_validate(deployment_values)
+    bundle = RecoveryBundle(
+        deployment=deployment,
+        approvedSubjectReference="synthetic-subject",
+        pendingSubjectReferences=[],
+    )
     output = tmp_path / "administrator.epm-recovery"
     passphrase = "separate administrator recovery phrase"
     seal_bundle(bundle, output, passphrase)
     decoded = open_bundle(output, passphrase)
-    assert decoded.approvedSubjectReference == proof.subject
+    assert decoded.approvedSubjectReference == "synthetic-subject"
     assert decoded.restorationPolicy == "fresh_enrollment_required"
-    assert decoded.deployment.workspace_id == service.deployment.workspace_id
+    assert decoded.deployment.workspace_id == deployment.workspace_id
     serialized = decoded.model_dump_json()
     for forbidden in (
-        grant.token,
-        grant.csrf,
+        "synthetic-session-bearer",
+        "synthetic-csrf-bearer",
         "token_hash",
         "csrf_hash",
         "edit_lease",
@@ -47,8 +49,7 @@ def test_bundle_round_trip_excludes_usable_authority_and_rejects_tampering(conte
     damaged.write_bytes(changed)
     with pytest.raises(RecoveryPublicationError):
         open_bundle(damaged, passphrase)
-    # Reading a bundle never creates sessions, modifies generation or re-enrolls.
-    service.authenticate(proof, grant.token)
+    # This serialization test supplies no usable session or legacy store.
 
 
 def test_bundle_model_cannot_smuggle_secrets_or_another_restore_policy(deployment_values):

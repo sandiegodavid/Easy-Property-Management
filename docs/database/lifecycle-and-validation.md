@@ -1,10 +1,14 @@
 # Initialization, retention and schema validation
 
-[Database schema catalog](README.md) · [Shared conventions](overview.md)
+[Database schema master](overview.md) · [Shared conventions](overview.md)
 
 Part of the schema master. Proposed hosted tables are design contracts, not claims of implemented schema. Executable definitions belong exclusively under `application/database/`; see [resource ownership](overview.md#required-schema-definition-location).
 
 In this guide: [Initialization, recovery and retention](#initialization-recovery-and-retention) · [Later-slice schema additions — not Pilot 0 tables](#later-slice-schema-additions--not-pilot-0-tables) · [Schema validation matrix](#schema-validation-matrix)
+
+This guide owns application-level population, recovery and retention order. The
+[schema resource guide](schema-resources.md) owns executable discovery, structural
+initialization APIs, file/transaction failure behavior and per-component packaging.
 
 ## Initialization, recovery and retention
 

@@ -12,6 +12,22 @@ Consolidated October 11, 2026. Existing backlog status is preserved; source/mode
 
 ## Existing source disposition
 
+### Application README navigation — November 14, 2026
+
+Detailed guides were relocated without moving executable tools or changing their
+working directories. Source READMEs remain short navigation; original evidence keeps
+its recorded paths and pins.
+
+| Original guide | Authoritative current location |
+| --- | --- |
+| application/scripts/README.md | [Script reference](development/scripts.md) |
+| application/demo/README.md | [Synthetic demo workspace](development/demo-workspace.md) |
+| application/apps/web/tests-demo/README.md | [Seeded-demo browser tests](development/demo-browser-tests.md) |
+| application/database/README.md and per-store/revision READMEs | [Schema resources](database/schema-resources.md), with store-specific notes consolidated into that guide |
+| application/apps/server/app/platform/hosted_contracts/README.md | [Shared hosted contract rules](platform/hosted-contracts.md) |
+
+### Backlog design disposition
+
 | Original document | Existing delivery state | Current implementation | Active work / research | Historical source |
 | --- | --- | --- | --- | --- |
 | AI-GOV-001_DESIGN.md | ✅ Done — single-effect foundation; extensions in INGEST-002 | [ai-governance.md](modules/ai-governance.md) | [INGEST-002 extensions](active/INGEST-002_DESIGN.md) | [original design](archive/designs/AI-GOV-001_DESIGN.md), [completed acceptance](archive/designs/AI-GOV-001_DESIGN_COMPLETED_2026-10-13.md) |

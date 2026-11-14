@@ -1,6 +1,6 @@
 # Protected host inventory
 
-[Database schema catalog](README.md) · [Shared conventions](overview.md)
+[Database schema master](overview.md) · [Shared conventions](overview.md)
 
 Part of the schema master. Proposed hosted tables are design contracts, not claims of implemented schema. Executable definitions belong exclusively under `application/database/`; see [resource ownership](overview.md#required-schema-definition-location).
 
@@ -8,7 +8,7 @@ In this guide: [Host identity](#host_identity) · [Operator principals](#operato
 
 ## Pilot 0 protected host inventory — H02/H04
 
-H02.2 delivers the [six-table current baseline](../../application/database/host-inventory-migrations/README.md)
+H02.2 delivers the [six-table current baseline](schema-resources.md#host-inventory)
 and separate protected metadata binding. H02.3 adds the
 [private command/reservation boundary](../hosting/qualification/reports/HOSTED_MVP_H02_3_HANDOFF.md).
 Native verification and Docker/gateway effects remain later slices; schema creation
@@ -240,16 +240,16 @@ loads only the matching command in one SQL query, not the target's entire histor
 ## H03 authentication routing extension
 
 Accepted November 13, 2026 under [H03 D7/D8](../hosting/design/HOSTED_MVP_H03_DESIGN.md#resolved-design-decisions);
-not implemented by the H02 baseline. Implement in the owning greenfield inventory
-resources with the H03 host contracts and native qualification. No runtime DDL or
+implemented in the owning greenfield inventory resources during H03.6.
+Native deployment qualification remains open. No runtime DDL or
 compatibility migration. These fields are host-owned routing evidence, not source
 session authorization or a second editable operator registry.
 
-### H03 additions to `ingress_bindings`
+### `ingress_bindings` auth routing fields
 
 | New column | Type | Nullable | Default | Description / column rules |
 | --- | --- | --- | --- | --- |
-| `auth_route_state` | `TEXT` | No | — | CHECK closed or ready; new bindings explicitly initialize closed. |
+| `auth_route_state` | `TEXT` | No | `closed` | CHECK closed or ready; new bindings initialize closed. |
 | `auth_access_epoch` | `REV` | Yes | — | Exact access fence whose auth-only readiness was verified; must equal access_epoch when ready. |
 | `auth_manifest_ref` | `REF` | Yes | — | Protected manifest identifying the exact source auth composition, artifact and fixed route/method set. |
 | `auth_manifest_sha256` | `HASH` | Yes | — | Immutable manifest content pin. |
@@ -268,7 +268,9 @@ never arbitrary paths, hostnames or route strings. Persist original intent befor
 gateway effects and verify the current binding/generation, artifact and loaded
 projection before recording readiness. Matching retries inspect the original effect;
 unknown does not become ready. H03.1 seals the corresponding observation/result
-fields and state checks; H03.6 implements the owning driver.
+fields and state checks in `host_agent/application/auth_routes.py`; executable inventory
+changes and the owning driver are implemented. Protected native endpoint
+composition and deployment qualification remain open.
 
 For held bindings with verified auth readiness, allow only GET `/auth/start`, POST
 `/auth/complete` and GET `/auth/status`; no generic prefix match, business API, file

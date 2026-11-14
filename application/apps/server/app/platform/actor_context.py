@@ -12,6 +12,7 @@ class OperatorActor:
     workspace_id: str
     session_reference: str | None = None
     edit_lease: str | None = None
+    restore_generation: int | None = None
 
     def __post_init__(self):
         for value in (self.reference, self.workspace_id):

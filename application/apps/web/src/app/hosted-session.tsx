@@ -2,7 +2,13 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { api } from "@epm/contracts";
 import type { components } from "@epm/contracts/generated";
 import { Page } from "@epm/ui";
-import { admitHostedSession, hostedMode, pauseHostedSession } from "./hosted-session-state";
+import {
+  admitHostedSession,
+  hostedMode,
+  managedHostedMode,
+  pauseHostedSession,
+} from "./hosted-session-state";
+import { ManagedSecurity } from "./managed-security";
 
 type Session = components["schemas"]["SessionResponse"];
 
@@ -222,5 +228,6 @@ function SessionGate({ children }: { children: ReactNode }) {
 }
 
 export function HostedSessionGate({ children }: { children: ReactNode }) {
+  if (managedHostedMode()) return <ManagedSecurity>{children}</ManagedSecurity>;
   return hostedMode() ? <SessionGate>{children}</SessionGate> : children;
 }

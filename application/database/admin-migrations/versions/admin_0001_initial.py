@@ -20,6 +20,11 @@ TABLES = (
     "admin_principals",
     "admin_sessions",
     "login_handoffs",
+    "login_attempts",
+    "email_continuations",
+    "managed_identity_sessions",
+    "identity_commands",
+    "identity_mail_reservations",
     "operations",
     "operation_events",
     "admin_audit",
@@ -35,7 +40,10 @@ fk = helpers["foreign"]
 def upgrade():
     _registry()
     _assignments()
+    _mail_reservations()
+    _identity_flows()
     _identity()
+    _identity_guards()
     _operations()
     _guards()
 
@@ -288,6 +296,17 @@ def _identity():
         f("expires_at", "TIME"),
         f("last_seen_at", "TIME"),
         f("revoked_at", "TIME", nullable=True),
+        f("managed_session_id", "ID"),
+        f("managed_valid_until", "TIME"),
+        f("revocation_valid_until", "TIME"),
+        fk("managed_session_id", "managed_identity_sessions.managed_session_id"),
+        sa.CheckConstraint(
+            "authenticated_at<=mfa_verified_at AND last_seen_at>=mfa_verified_at "
+            "AND (revoked_at IS NULL OR revoked_at>=mfa_verified_at) "
+            "AND expires_at<=managed_valid_until AND mfa_verified_at<revocation_valid_until "
+            "AND revocation_valid_until<=managed_valid_until",
+            name="ck_managed_deadlines",
+        ),
         fk("principal_id", "admin_principals.principal_id"),
         sa.CheckConstraint(
             (
@@ -320,13 +339,29 @@ def _identity():
         f("redeemed_at", "TIME", nullable=True),
         f("created_at", "TIME"),
         fk("operator_id", "operators.operator_id"),
-        c("state", "initiated issued redeemed expired"),
+        f("attempt_id", "ID"),
+        f("managed_session_id", "ID"),
+        f("identity_operation_id", "ID"),
+        f("source_receipt_ref", "REF", nullable=True),
+        fk("attempt_id", "login_attempts.attempt_id"),
+        fk("managed_session_id", "managed_identity_sessions.managed_session_id"),
+        fk("identity_operation_id", "identity_commands.operation_id"),
+        sa.CheckConstraint(
+            "(issuer IS NULL AND subject IS NULL AND code_hash IS NULL) OR "
+            "(issuer IS NOT NULL AND subject IS NOT NULL AND code_hash IS NOT NULL)",
+            name="ck_identity_together",
+        ),
+        sa.CheckConstraint("state!='initiated' OR code_hash IS NULL", name="ck_unissued"),
+        sa.CheckConstraint(
+            "(redeemed_at IS NULL)=(source_receipt_ref IS NULL)", name="ck_receipt_together"
+        ),
+        c("state", "initiated issued redeeming redeemed expired"),
         sa.CheckConstraint(
             "expires_at>created_at AND expires_at-created_at<=300000", name="ck_handoff_lifetime"
         ),
         sa.CheckConstraint(
             (
-                "state NOT IN ('issued','redeemed') OR (code_hash IS NOT NULL AND "
+                "state NOT IN ('issued','redeeming','redeemed') OR (code_hash IS NOT NULL AND "
                 "issuer IS NOT NULL AND subject IS NOT NULL)"
             ),
             name="ck_issued_identity",
@@ -491,3 +526,401 @@ def _guards():
 
 def downgrade():
     raise RuntimeError("Greenfield hosted stores do not support downgrade.")
+
+
+def _checks(*rules):
+    return [
+        sa.CheckConstraint(rule, name=f"ck_identity_{index}") for index, rule in enumerate(rules)
+    ]
+
+
+def _identity_flows():
+    _managed_sessions()
+    _login_attempts()
+    _continuations()
+    _identity_commands()
+    op.create_index(
+        "managed_identity_sessions_identity",
+        "managed_identity_sessions",
+        ["issuer", "subject", "purpose", "revoked_at"],
+    )
+    op.create_index(
+        "managed_identity_sessions_expiry",
+        "managed_identity_sessions",
+        ["provider_valid_until", "managed_session_id"],
+    )
+
+
+def _managed_sessions():
+    op.create_table(
+        "managed_identity_sessions",
+        f("managed_session_id", "ID", primary=True),
+        f("cookie_hash", "HASH", unique=True),
+        f("purpose", "CODE"),
+        f("operator_id", "ID", nullable=True),
+        f("issuer", "REF"),
+        f("subject", "TEXT"),
+        f("email_key", "EMAIL"),
+        f("method", "CODE"),
+        f("authenticated_at", "TIME"),
+        f("mfa_verified_at", "TIME", nullable=True),
+        *(
+            f(name, "TIME")
+            for name in (
+                "provider_valid_until",
+                "remembered_until",
+                "revocation_checked_at",
+                "revocation_valid_until",
+                "issued_at",
+            )
+        ),
+        f("revoked_at", "TIME", nullable=True),
+        f("revision", "REV"),
+        fk("operator_id", "operators.operator_id"),
+        c("purpose", "operator admin"),
+        c("method", "google email_link google_totp"),
+        *_checks(
+            "(purpose='operator')=(operator_id IS NOT NULL)",
+            "authenticated_at<=issued_at AND issued_at<provider_valid_until "
+            "AND provider_valid_until<=issued_at+1209600000",
+            "issued_at<remembered_until AND remembered_until<=issued_at+2592000000",
+            "issued_at<=revocation_checked_at AND revocation_checked_at<provider_valid_until "
+            "AND revocation_checked_at<revocation_valid_until "
+            "AND revocation_valid_until<=revocation_checked_at+300000 "
+            "AND revocation_valid_until<=provider_valid_until",
+            "(purpose='admin' AND method='google_totp' AND mfa_verified_at IS NOT NULL "
+            "AND authenticated_at<=mfa_verified_at AND mfa_verified_at<=issued_at) OR "
+            "(purpose='operator' AND method!='google_totp' AND mfa_verified_at IS NULL)",
+            "revoked_at IS NULL OR revoked_at>=issued_at",
+        ),
+    )
+    op.create_index(
+        "managed_identity_sessions_operator",
+        "managed_identity_sessions",
+        ["operator_id", "revoked_at", "provider_valid_until"],
+    )
+
+
+def _login_attempts():
+    op.create_table(
+        "login_attempts",
+        f("attempt_id", "ID", primary=True),
+        f("purpose", "CODE"),
+        f("operator_id", "ID", nullable=True),
+        f("parent_managed_session_id", "ID", nullable=True),
+        f("completed_managed_session_id", "ID", nullable=True),
+        f("source_attempt_id", "ID", nullable=True),
+        f("source_browser_hash", "HASH", nullable=True),
+        f("central_browser_hash", "HASH"),
+        f("method", "CODE"),
+        f("email_key", "EMAIL", nullable=True),
+        f("target_origin", "ORIGIN"),
+        f("return_path", "TEXT"),
+        f("confirmed_request_hash", "HASH", nullable=True),
+        f("delivery_attempts", "COUNT", default=0),
+        f("last_delivery_at", "TIME", nullable=True),
+        f("last_delivery_code", "CODE", nullable=True),
+        f("state", "CODE"),
+        f("created_at", "TIME"),
+        f("expires_at", "TIME"),
+        f("revision", "REV"),
+        fk("operator_id", "operators.operator_id"),
+        fk("parent_managed_session_id", "managed_identity_sessions.managed_session_id"),
+        fk("completed_managed_session_id", "managed_identity_sessions.managed_session_id"),
+        c("purpose", "operator_login admin_login renewal recent_auth"),
+        c("method", "google email_link google_totp"),
+        c("state", "pending verified completed failed superseded expired"),
+        *_checks(
+            "created_at<expires_at AND expires_at<=created_at+900000",
+            "(source_attempt_id IS NULL)=(source_browser_hash IS NULL)",
+            "purpose NOT IN ('operator_login','renewal') OR operator_id IS NOT NULL",
+            "(operator_id IS NULL AND source_attempt_id IS NULL AND method='google_totp') OR "
+            "(operator_id IS NOT NULL AND source_attempt_id IS NOT NULL "
+            "AND method!='google_totp' AND purpose!='admin_login')",
+            "purpose NOT IN ('renewal','recent_auth') OR parent_managed_session_id IS NOT NULL",
+            "completed_managed_session_id IS NULL OR (state='completed' AND method='google')",
+            "(purpose='recent_auth')=(confirmed_request_hash IS NOT NULL)",
+            "method!='email_link' OR email_key IS NOT NULL",
+            "(delivery_attempts=0 AND last_delivery_at IS NULL AND last_delivery_code IS NULL) OR "
+            "(delivery_attempts>0 AND method='email_link' AND last_delivery_at IS NOT NULL "
+            "AND created_at<=last_delivery_at AND last_delivery_at<expires_at)",
+            "last_delivery_code IS NULL OR last_delivery_code IN ('sent','unknown','rejected')",
+            "substr(return_path,1,1)='/' AND instr(return_path,'//')=0 "
+            "AND instr(return_path,'?')=0 AND instr(return_path,'#')=0",
+        ),
+    )
+    op.create_index("login_attempts_state", "login_attempts", ["state", "expires_at", "attempt_id"])
+    op.create_index(
+        "login_attempts_operator", "login_attempts", ["operator_id", "created_at", "attempt_id"]
+    )
+
+
+def _continuations():
+    op.create_table(
+        "email_continuations",
+        f("continuation_id", "ID", primary=True),
+        f("original_attempt_id", "ID", unique=True),
+        f("code_hash", "HASH", unique=True),
+        f("central_browser_hash", "HASH"),
+        f("operator_id", "ID"),
+        f("target_origin", "ORIGIN"),
+        f("access_epoch", "REV"),
+        f("managed_session_id", "ID", nullable=True),
+        f("replacement_attempt_id", "ID", nullable=True, unique=True),
+        f("source_attempt_id", "ID", nullable=True),
+        f("source_binding_hash", "HASH", nullable=True),
+        f("handoff_id", "ID", nullable=True, unique=True),
+        f("state", "CODE"),
+        f("created_at", "TIME"),
+        f("expires_at", "TIME"),
+        f("revision", "REV"),
+        fk("original_attempt_id", "login_attempts.attempt_id"),
+        fk("replacement_attempt_id", "login_attempts.attempt_id"),
+        fk("managed_session_id", "managed_identity_sessions.managed_session_id"),
+        fk("operator_id", "operators.operator_id"),
+        fk("handoff_id", "login_handoffs.handoff_id"),
+        c("state", "verifying unknown verified paired completed rejected expired"),
+        *_checks(
+            "created_at<expires_at AND expires_at<=created_at+300000",
+            "(replacement_attempt_id IS NULL)=(source_attempt_id IS NULL) AND "
+            "(replacement_attempt_id IS NULL)=(source_binding_hash IS NULL)",
+            "state NOT IN ('verified','paired','completed') OR managed_session_id IS NOT NULL",
+            "state NOT IN ('paired','completed') OR replacement_attempt_id IS NOT NULL",
+            "replacement_attempt_id IS NULL OR (replacement_attempt_id!=original_attempt_id "
+            "AND managed_session_id IS NOT NULL)",
+            "state NOT IN ('verifying','verified') OR "
+            "(replacement_attempt_id IS NULL AND handoff_id IS NULL)",
+            "state!='completed' OR handoff_id IS NOT NULL",
+            "handoff_id IS NULL OR replacement_attempt_id IS NOT NULL",
+        ),
+    )
+    op.create_index(
+        "email_continuations_state",
+        "email_continuations",
+        ["state", "expires_at", "continuation_id"],
+    )
+    op.create_index(
+        "email_continuations_operator",
+        "email_continuations",
+        ["operator_id", "created_at", "continuation_id"],
+    )
+
+
+def _identity_commands():
+    op.create_table(
+        "identity_commands",
+        f("operation_id", "ID", primary=True),
+        f("kind", "CODE"),
+        f("idempotency_key", "KEY"),
+        f("request_hash", "HASH"),
+        f("operator_id", "ID", nullable=True),
+        f("managed_session_id", "ID"),
+        f("attempt_id", "ID", nullable=True),
+        f("access_epoch", "REV", nullable=True),
+        f("state", "CODE"),
+        f("result_json", "JSON", nullable=True),
+        f("source_receipt_ref", "REF", nullable=True),
+        f("created_at", "TIME"),
+        f("updated_at", "TIME"),
+        f("revision", "REV"),
+        fk("operator_id", "operators.operator_id"),
+        fk("managed_session_id", "managed_identity_sessions.managed_session_id"),
+        fk("attempt_id", "login_attempts.attempt_id"),
+        c(
+            "kind",
+            "claim pair_email_continuation issue_handoff redeem_handoff renew_session "
+            "revoke_session revoke_all recent_auth",
+        ),
+        c("state", "pending unknown succeeded rejected"),
+        sa.UniqueConstraint("kind", "idempotency_key"),
+        *_checks(
+            "(operator_id IS NULL)=(access_epoch IS NULL)",
+            "kind NOT IN ('claim','pair_email_continuation','issue_handoff','redeem_handoff',"
+            "'renew_session') OR (attempt_id IS NOT NULL AND operator_id IS NOT NULL)",
+            "updated_at>=created_at",
+            "(state='succeeded')=(result_json IS NOT NULL)",
+        ),
+    )
+    op.create_index(
+        "identity_commands_state", "identity_commands", ["state", "updated_at", "operation_id"]
+    )
+    op.create_index(
+        "identity_commands_operator",
+        "identity_commands",
+        ["operator_id", "created_at", "operation_id"],
+    )
+
+
+def _guard(table, label, condition):
+    op.execute(
+        f"CREATE TRIGGER {table}_{label} BEFORE UPDATE ON {table} WHEN {condition} "
+        "BEGIN SELECT RAISE(ABORT, 'immutable identity evidence'); END"
+    )
+
+
+def _once(table, columns):
+    for column in columns.split():
+        _guard(
+            table,
+            column + "_once",
+            f"OLD.{column} IS NOT NULL AND NEW.{column} IS NOT OLD.{column}",
+        )
+
+
+def _identity_guards():
+    intents = {
+        "login_attempts": "attempt_id purpose operator_id parent_managed_session_id "
+        "source_attempt_id source_browser_hash central_browser_hash method target_origin "
+        "return_path confirmed_request_hash created_at expires_at",
+        "email_continuations": "continuation_id original_attempt_id code_hash "
+        "central_browser_hash operator_id target_origin access_epoch created_at expires_at",
+        "managed_identity_sessions": "managed_session_id cookie_hash purpose operator_id issuer "
+        "subject email_key method authenticated_at mfa_verified_at issued_at "
+        "provider_valid_until remembered_until",
+        "identity_commands": "operation_id kind idempotency_key request_hash operator_id "
+        "managed_session_id attempt_id access_epoch created_at",
+        "login_handoffs": "handoff_id operator_id browser_state_hash nonce_hash target_origin "
+        "assignment_revision access_epoch expires_at created_at attempt_id managed_session_id "
+        "identity_operation_id",
+        "admin_sessions": "session_hash principal_id csrf_hash generation authenticated_at "
+        "mfa_verified_at expires_at managed_session_id managed_valid_until",
+    }
+    for table, columns in intents.items():
+        helpers["immutable"](op, table, columns, retain=False)
+    terminals = {
+        "login_attempts": "'completed','failed','superseded','expired'",
+        "email_continuations": "'completed','rejected','expired'",
+        "identity_commands": "'succeeded','rejected'",
+        "login_handoffs": "'redeemed','expired'",
+    }
+    for table, states in terminals.items():
+        _guard(table, "terminal", f"OLD.state IN ({states})")
+    _once(
+        "email_continuations",
+        "managed_session_id replacement_attempt_id source_attempt_id "
+        "source_binding_hash handoff_id",
+    )
+    _once("login_handoffs", "issuer subject code_hash redeemed_at source_receipt_ref")
+    _once("identity_commands", "source_receipt_ref")
+    _once("login_attempts", "completed_managed_session_id")
+    for table in ("admin_sessions", "managed_identity_sessions"):
+        _once(table, "revoked_at")
+    _guard("login_attempts", "progress", "OLD.state='verified' AND NEW.state='pending'")
+    _guard(
+        "login_attempts",
+        "delivery",
+        "NEW.delivery_attempts<OLD.delivery_attempts OR "
+        "(OLD.last_delivery_at IS NOT NULL AND "
+        "(NEW.last_delivery_at IS NULL OR NEW.last_delivery_at<OLD.last_delivery_at))",
+    )
+    _guard(
+        "email_continuations",
+        "progress",
+        "(OLD.managed_session_id IS NOT NULL AND NEW.state='verifying') OR "
+        "(OLD.replacement_attempt_id IS NOT NULL AND NEW.state IN ('verifying','verified'))",
+    )
+    _guard(
+        "login_handoffs",
+        "progress",
+        "(OLD.state='issued' AND NEW.state='initiated') OR "
+        "(OLD.state='redeeming' AND NEW.state IN ('initiated','issued'))",
+    )
+    _guard(
+        "managed_identity_sessions",
+        "observation",
+        "NEW.revocation_checked_at<OLD.revocation_checked_at OR "
+        "NEW.revocation_valid_until<OLD.revocation_valid_until",
+    )
+    _identity_reverse_indexes()
+    _result_guards()
+
+
+def _identity_reverse_indexes():
+    references = {
+        "login_attempts": "parent_managed_session_id completed_managed_session_id",
+        "identity_commands": "attempt_id managed_session_id",
+        "login_handoffs": "attempt_id managed_session_id identity_operation_id",
+        "email_continuations": "managed_session_id",
+        "admin_sessions": "managed_session_id",
+    }
+    for table, columns in references.items():
+        for column in columns.split():
+            op.create_index(f"{table}_{column}", table, [column])
+
+
+def _result_guards():
+    # Closed result vocabulary: schema checks cannot verify a remote source receipt.
+    valid = (
+        "json_valid(NEW.result_json) AND json_type(NEW.result_json)='object' "
+        "AND json_extract(NEW.result_json,'$.version') IS 1 "
+        "AND json_type(NEW.result_json,'$.version')='integer' "
+        "AND json_extract(NEW.result_json,'$.kind') IS NEW.kind "
+        "AND json_type(NEW.result_json,'$.result_id')='text' "
+        "AND length(json_extract(NEW.result_json,'$.result_id'))=36 "
+        "AND substr(json_extract(NEW.result_json,'$.result_id'),9,1)='-' "
+        "AND substr(json_extract(NEW.result_json,'$.result_id'),14,1)='-' "
+        "AND substr(json_extract(NEW.result_json,'$.result_id'),19,1)='-' "
+        "AND substr(json_extract(NEW.result_json,'$.result_id'),24,1)='-' "
+        "AND length(replace(json_extract(NEW.result_json,'$.result_id'),'-',''))=32 "
+        "AND replace(json_extract(NEW.result_json,'$.result_id'),'-','') "
+        "NOT GLOB '*[^0-9a-f]*' "
+        "AND json_type(NEW.result_json,'$.source_receipt_ref') IS NOT NULL "
+        "AND json_extract(NEW.result_json,'$.source_receipt_ref') IS NEW.source_receipt_ref "
+        "AND (SELECT count(*) FROM json_each(NEW.result_json))=4 "
+        "AND NOT EXISTS (SELECT 1 FROM json_each(NEW.result_json) "
+        "WHERE key NOT IN ('version','kind','result_id','source_receipt_ref'))"
+    )
+    for action in ("INSERT", "UPDATE"):
+        op.execute(
+            f"CREATE TRIGGER identity_commands_result_{action.lower()} BEFORE {action} "
+            "ON identity_commands WHEN NEW.result_json IS NOT NULL AND "
+            f"COALESCE(({valid}),0)=0 BEGIN SELECT RAISE(ABORT, 'invalid identity result'); END"
+        )
+
+
+def _mail_reservations():
+    table = "identity_mail_reservations"
+    op.create_table(
+        table,
+        f("operation_id", "ID", primary=True),
+        f("deployment_id", "ID"),
+        f("scope", "JSON"),
+        f("kind", "CODE"),
+        f("idempotency_key", "KEY"),
+        f("request_hash", "HASH"),
+        f("destination_hash", "HASH", nullable=True),
+        f("network_hash", "HASH", nullable=True),
+        f("reserved_at", "TIME"),
+        f("redact_after", "TIME"),
+        sa.UniqueConstraint("deployment_id", "scope", "kind", "idempotency_key"),
+        sa.CheckConstraint("redact_after=reserved_at+90000000", name="ck_mail_retention"),
+        sa.CheckConstraint(
+            "(destination_hash IS NULL)=(network_hash IS NULL)", name="ck_mail_redaction"
+        ),
+    )
+    for suffix, columns in {
+        "destination": ["deployment_id", "destination_hash", "reserved_at"],
+        "network": ["deployment_id", "network_hash", "reserved_at"],
+        "day": ["deployment_id", "reserved_at"],
+        "cleanup": ["deployment_id", "redact_after", "operation_id"],
+    }.items():
+        op.create_index(
+            table + "_" + suffix,
+            table,
+            columns,
+            sqlite_where=sa.text("destination_hash IS NOT NULL") if suffix == "cleanup" else None,
+        )
+    helpers["immutable"](
+        op,
+        table,
+        "operation_id deployment_id scope kind idempotency_key request_hash "
+        "reserved_at redact_after",
+    )
+    _guard(
+        table,
+        "digest_immutable",
+        "(NEW.destination_hash IS NOT OLD.destination_hash OR "
+        "NEW.network_hash IS NOT OLD.network_hash) AND NOT "
+        "(OLD.destination_hash IS NOT NULL AND NEW.destination_hash IS NULL "
+        "AND NEW.network_hash IS NULL)",
+    )

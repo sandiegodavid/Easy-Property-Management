@@ -332,3 +332,268 @@ def test_lost_stop_reply_is_verified_without_repeating_a_stopped_effect(runtime)
     contain(runtime.command, runtime.allocation)
     contain(runtime.command, runtime.allocation)
     assert runtime.events == ["stop"]
+
+
+def auth_command(gateway):
+    from app.modules.host_agent.application.auth_routes import ApplyAuthRoutes, AuthRouteManifest
+    from app.modules.host_agent.application.dispatch import HostEffect
+    from app.modules.host_agent.application.contracts import StartContainer
+    from app.modules.host_agent.infrastructure.auth_projection import VerifiedAuthEndpoint
+    from app.modules.host_agent.tests.test_agent import BINDING, ID, prepare
+    from app.platform.hosted_contracts.semantic import semantic_hash
+
+    setup = gateway.setup
+    ready(setup)
+    setup.agent.execute(follow(setup, StartContainer(binding_id=BINDING)))
+    binding = rows(setup, "resource_bindings")[0]
+    assert binding["state"] == "running"
+    manifest = AuthRouteManifest(component_id=ID, artifact_sha256="a" * 64, private_endpoint_id=ID)
+    effect = prepare().effect.model_copy(
+        update={"kind": "apply_auth_routes", "slot": "auth_routes"}
+    )
+    command = setup.admission.add(
+        HostEffect(
+            effect=effect,
+            access_epoch=1,
+            expected_revision=binding["revision"],
+            payload=ApplyAuthRoutes(
+                effect=effect,
+                access_epoch=1,
+                expected_ingress_revision=1,
+                manifest_ref="auth-manifest",
+                manifest_sha256=semantic_hash(manifest),
+            ),
+        )
+    )
+    gateway.value.auth_endpoints = SimpleNamespace(
+        resolve_held=lambda evidence: VerifiedAuthEndpoint(
+            manifest, "10.3.0.2", 8443, "source.local"
+        ),
+        resolve_shared=lambda: (None, None),
+    )
+    return command
+
+
+def test_auth_projection_readiness_reboot_and_newer_deny(gateway):
+    command = auth_command(gateway)
+    agent = gateway.setup.agent
+    assert agent.execute(command).state == "applied"
+    (evidence,) = gateway.setup.inventory.auth_ready()
+    assert evidence.auth_access_epoch == 1
+    assert evidence.auth_operation_id == command.effect.child_id()
+    active = deepcopy(gateway.active)
+    routes = active["apps"]["http"]["servers"]["gateway"]["routes"]
+    assert [route["match"][0]["method"] for route in routes[:3]] == [["GET"], ["POST"], ["GET"]]
+    assert "/auth/start" in routes[0]["match"][0]["expression"]
+    assert not any("/api" in str(route) for route in routes)
+    gateway.active.clear()
+    gateway.value.reload_closed()
+    assert gateway.active == active
+    block = follow(
+        gateway.setup,
+        IngressPolicy(
+            desired_state="blocked",
+            expected_ingress_revision=evidence.ingress_revision,
+        ),
+        epoch=2,
+    )
+    assert agent.execute(block).state == "applied"
+    assert gateway.setup.inventory.auth_ready() == ()
+    assert "reverse_proxy" not in str(gateway.active)
+    assert agent.execute(command).state == "applied"  # historical receipt only
+    assert "reverse_proxy" not in str(gateway.active)
+
+
+def test_unknown_apply_auth_cannot_publish_ready(gateway):
+    command = auth_command(gateway)
+    gateway.failures.add("inspect")
+    assert gateway.setup.agent.execute(command).state == "unknown"
+    assert gateway.setup.inventory.auth_ready() == ()
+    assert "reverse_proxy" not in str(gateway.active)
+    assert "contain" in gateway.calls
+
+
+def test_shared_auth_routes_require_owning_login_origin_and_exact_assets():
+    from app.modules.host_agent.application.auth_routes import SharedIdentityManifest
+    from app.modules.host_agent.application.dispatch import HostAgentDenied
+    from app.modules.host_agent.infrastructure.auth_projection import (
+        VerifiedAuthEndpoint,
+        auth_config,
+    )
+    from app.modules.host_agent.tests.test_agent import ID
+
+    manifest = SharedIdentityManifest(
+        component_id=ID,
+        artifact_sha256="a" * 64,
+        private_endpoint_id=ID,
+        central_origin="https://login.example.invalid",
+        admin_origin="https://admin.example.invalid",
+        owning_login_origin="https://login.example.invalid",
+    )
+    endpoint = VerifiedAuthEndpoint(
+        manifest,
+        "fd00::a",
+        8443,
+        "identity.local",
+        admin_assets=("/assets/admin-test.js",),
+        central_assets=("/assets/login-test.js",),
+    )
+    projection = IngressProjection(records=())
+    settings = GatewaySettings(Path("/run/epm-caddy/admin.sock"), 1001)
+    with pytest.raises(HostAgentDenied):
+        auth_config(
+            projection, settings, shared=endpoint, login_origin="https://other.example.invalid"
+        )
+    config = auth_config(
+        projection, settings, shared=endpoint, login_origin=manifest.central_origin
+    )
+    routes = config["apps"]["http"]["servers"]["gateway"]["routes"]
+    proxies = routes[:-1]
+    assert all(r["handle"][0]["upstreams"] == [{"dial": "[fd00::a]:8443"}] for r in proxies)
+    assert any(
+        r["match"][0]["host"] == ["login.example.invalid"]
+        and "/__/auth/handler" in r["match"][0]["expression"]
+        for r in proxies
+    )
+    assert not any(
+        r["match"][0]["host"] == ["admin.example.invalid"]
+        and "/__/auth/handler" in r["match"][0]["expression"]
+        for r in proxies
+    )
+    assert len(proxies) == len(manifest.central_routes) + len(manifest.admin_routes) + 3
+
+
+def test_shared_endpoint_owner_requires_pinned_manifest_before_native_inspection():
+    from unittest.mock import Mock
+
+    from app.modules.host_agent.application.auth_routes import SharedIdentityManifest
+    from app.modules.host_agent.application.dispatch import HostAgentDenied
+    from app.modules.host_agent.infrastructure.auth_endpoints import (
+        AuthEndpoints,
+        SharedAuthSelection,
+    )
+    from app.modules.host_agent.infrastructure.auth_projection import VerifiedAuthEndpoint
+    from app.modules.host_agent.tests.test_agent import ID
+    from app.platform.hosted_contracts.semantic import semantic_hash
+
+    manifest = SharedIdentityManifest(
+        component_id=ID,
+        artifact_sha256="a" * 64,
+        private_endpoint_id=ID,
+        central_origin="https://login.example.invalid",
+        admin_origin="https://admin.example.invalid",
+        owning_login_origin="https://login.example.invalid",
+    )
+    manifests = Mock()
+    manifests.shared.return_value = manifest
+    manifests.login_origin.return_value = manifest.central_origin
+    native = Mock()
+    with pytest.raises(HostAgentDenied):
+        AuthEndpoints(
+            manifests, native, shared=SharedAuthSelection("shared", "0" * 64)
+        ).resolve_shared()
+    native.shared.assert_not_called()
+    endpoint = VerifiedAuthEndpoint(manifest, "10.3.0.2", 8443, "identity.local")
+    native.shared.return_value = endpoint
+    resolved = AuthEndpoints(
+        manifests, native, shared=SharedAuthSelection("shared", semantic_hash(manifest))
+    )
+    assert resolved.resolve_shared() == (endpoint, manifest.central_origin)
+    native.shared.assert_called_once_with(manifest)
+
+
+def test_runtime_projects_verified_shared_hosts_to_gateway_and_tunnel(monkeypatch, tmp_path):
+    import json
+    import re
+    from types import SimpleNamespace
+
+    from app.modules.host_agent.application.auth_routes import SharedIdentityManifest
+    from app.modules.host_agent.application.ingress import IngressProjection
+    from app.modules.host_agent.infrastructure.auth_projection import VerifiedAuthEndpoint
+    from app.modules.host_agent.infrastructure.host_services import TunnelSettings
+    from app.modules.host_agent.infrastructure.service_runtime import ServiceRuntime
+    from app.modules.host_agent.tests.test_agent import ID
+
+    manifest = SharedIdentityManifest(
+        component_id=ID,
+        artifact_sha256="a" * 64,
+        private_endpoint_id=ID,
+        central_origin="https://login.example.invalid",
+        admin_origin="https://admin.example.invalid",
+        owning_login_origin="https://login.example.invalid",
+    )
+    stops = tmp_path.resolve() / "stops"
+    stops.mkdir(mode=0o700)
+    runtime = ServiceRuntime(
+        SimpleNamespace(
+            layout=SimpleNamespace(stops=str(stops)),
+            network=None,
+            tunnel=TunnelSettings(tunnel_id=ID),
+        )
+    )
+    endpoint = VerifiedAuthEndpoint(manifest, "10.3.0.2", 8000, "identity.local")
+    monkeypatch.setattr(
+        runtime,
+        "registered_sources",
+        lambda _: SimpleNamespace(resolve_shared=lambda: (endpoint, manifest.central_origin)),
+    )
+    gateway, tunnel = runtime.ingress_projection(
+        SimpleNamespace(auth_ready=lambda: ()),
+        IngressProjection(records=()),
+        GatewaySettings(Path("/run/epm-caddy/admin.sock"), 1001),
+    )
+    routes = gateway["apps"]["http"]["servers"]["gateway"]["routes"][:-1]
+    central = [
+        row["match"][0] for row in routes if row["match"][0]["host"] == ["login.example.invalid"]
+    ]
+    for method, path in manifest.central_routes:
+        pattern = json.dumps("^" + re.escape(path) + r"(?:[?].*)?$")
+        assert any(row["method"] == [method] and pattern in row["expression"] for row in central)
+    assert [item.get("hostname") for item in tunnel["ingress"]] == [
+        "login.example.invalid",
+        "admin.example.invalid",
+        None,
+    ]
+
+
+def test_registered_source_rejects_stale_epoch_before_live_host_inspection():
+    from unittest.mock import Mock
+
+    from app.modules.host_agent.application.auth_routes import AuthRouteManifest
+    from app.modules.host_agent.application.dispatch import HostAgentDenied
+    from app.modules.host_agent.infrastructure.auth_registration import (
+        AuthRegistration,
+        RegisteredSources,
+        SourceRegistration,
+    )
+    from app.modules.host_agent.tests.test_agent import ID, BINDING
+
+    manifest = AuthRouteManifest(component_id=ID, artifact_sha256="a" * 64, private_endpoint_id=ID)
+    registration = SourceRegistration(
+        manifest_ref="pinned",
+        manifest=manifest,
+        binding_id=BINDING,
+        resource_generation=1,
+        socket_name=ID,
+        tls_name="source.local",
+    )
+    inventory = Mock()
+    inventory.identity.deployment_id = ID
+    inventory.auth_target.return_value = {
+        "binding_id": BINDING,
+        "resource_generation": 1,
+        "access_epoch": 2,
+        "workspace_id": ID,
+    }
+    engine = Mock()
+    sources = RegisteredSources(
+        inventory,
+        engine,
+        Mock(),
+        Mock(),
+        AuthRegistration(sources=(registration,)),
+        Path("/run/epm-source-identity"),
+    )
+    with pytest.raises(HostAgentDenied):
+        sources.resolve_identity_source(ID, SimpleNamespace(operator_id=ID, workspace_id=ID), 1)
+    engine.inspect.assert_not_called()

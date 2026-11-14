@@ -531,7 +531,7 @@ def build_router(service: InspectionService, runtime: WorkspaceRuntime) -> APIRo
         response_model=EvidenceCommandResponse,
         operation_id="attachConditionEvidence",
     )
-    async def attach_evidence(
+    def attach_evidence(
         observation_id: UUID,
         file: UploadFile = File(...),
         purpose: Literal["condition_photo", "supporting_document"] = Form(...),
@@ -544,7 +544,7 @@ def build_router(service: InspectionService, runtime: WorkspaceRuntime) -> APIRo
             with tempfile.NamedTemporaryFile(delete=False) as staged:
                 staged_path = Path(staged.name)
                 size = 0
-                while chunk := await file.read(1024 * 1024):
+                while chunk := file.file.read(1024 * 1024):
                     size += len(chunk)
                     if size > MAX_FILE_BYTES:
                         raise api_problem(

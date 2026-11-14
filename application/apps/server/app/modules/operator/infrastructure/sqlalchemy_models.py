@@ -66,6 +66,7 @@ class OperatorRecoveryModel(LocalBase):
         ),
         CheckConstraint("status != 'reconciled' OR receipt_json IS NOT NULL"),
         CheckConstraint("receipt_json IS NULL OR json_valid(receipt_json)"),
+        Index("operator_recovery_attempt", "attempt_key"),
         Index("operator_recovery_status_saved", "status", "saved_at", "id"),
         Index("operator_recovery_status_expiry", "status", "expires_at", "id"),
     )

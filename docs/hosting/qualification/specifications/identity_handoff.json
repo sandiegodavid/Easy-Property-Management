@@ -3,7 +3,7 @@
   "proof": "identity_handoff",
   "owner": "H03",
   "contributors": [],
-  "revision": 1,
+  "revision": 2,
   "levels": [
     "component",
     "deployed_browser"
@@ -27,6 +27,9 @@
     "disable_rebind_logout",
     "no_secret_url_log",
     "multi_device_draft_fences",
-    "local_mode_independent"
+    "local_mode_independent",
+    "renewal_cap_and_lineage",
+    "identity_dependency_cleanup",
+    "provider_outage_deadlines"
   ]
 }

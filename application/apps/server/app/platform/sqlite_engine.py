@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
+from contextvars import ContextVar
 from pathlib import Path
 import unicodedata
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import URL, Engine
-from app.platform.attempt_fences import raise_closed_attempt
+from app.platform.attempt_fences import install_prepared_edit_guards, raise_closed_attempt
 
 
 def sqlite_url(database: Path) -> URL:
@@ -53,10 +54,38 @@ def _unicode_casefold(value: object) -> str | None:
     return unicodedata.normalize("NFKC", str(value)).casefold()
 
 
+_workspace_mutation = ContextVar("workspace_mutation", default=None)
+_prepared_edit = ContextVar("prepared_edit", default="")
+
+
+@contextmanager
+def workspace_mutation_scope(database: Path, admit, *, namespaces, prepared_form):
+    """Install a request-specific guard for the owning workspace database."""
+    token = _workspace_mutation.set((sqlite_url(database), admit, namespaces, prepared_form))
+    try:
+        yield
+    finally:
+        _workspace_mutation.reset(token)
+
+
 @contextmanager
 def immediate_transaction(engine: Engine):
     """Acquire SQLite's write reservation without penalizing ordinary reads."""
-    with engine.connect() as connection:
+    scope = _workspace_mutation.get()
+    managed = scope is not None and engine.url == scope[0]
+    guard = scope[1]() if managed else nullcontext()
+    with guard as validate_commit, engine.connect() as connection:
+        if managed and not connection.info.get("prepared_edit_guards"):
+            install_prepared_edit_guards(
+                connection.connection.driver_connection, scope[2], _prepared_edit.get
+            )
+            connection.info["prepared_edit_guards"] = True
         connection.info["sqlite_immediate"] = True
-        with connection.begin():
-            yield connection
+        token = _prepared_edit.set(scope[3] if managed else "")
+        try:
+            with connection.begin():
+                yield connection
+                if validate_commit is not None:
+                    validate_commit()
+        finally:
+            _prepared_edit.reset(token)

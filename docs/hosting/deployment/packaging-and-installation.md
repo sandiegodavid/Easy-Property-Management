@@ -67,8 +67,9 @@ a new candidate. Runtime S3 extras are not included in this default dependency s
 
 Preparation copies allowlisted Python runtime files, selected schemas and public
 assets into fresh contexts. Tests, quota qualification harnesses, workspaces, arbitrary
-data, source maps and environment files do not enter them. Only Operator preparation
-runs `npm run build` and includes its compiled SPA; Admin UI remains unavailable.
+data, source maps and environment files do not enter them. Operator preparation runs `npm run build` and includes its compiled SPA. The
+default Admin build is health-only. Use the separate [H03 identity build](identity-candidates.md)
+to package the Admin and central sign-in UIs.
 
 ```sh
 for component in admin operator host_agent; do

@@ -105,7 +105,7 @@ Finish or save open forms, check uncertain outcomes, then press **Ctrl+C in the 
 
 ## 5. Practice with synthetic data
 
-Use the separate [demo instructions](../application/demo/README.md). From `application/`, with this environment active, `python demo/serve.py` opens the already generated demo on port 8001. If it has not been generated, follow the demo's seed instructions into a new empty external folder. Never aim the generator at live records. Demo dates age normally; no real payments/messages are sent.
+Use the separate [demo instructions](../docs/development/demo-workspace.md). From `application/`, with this environment active, `python demo/serve.py` opens the already generated demo on port 8001. If it has not been generated, follow the demo's seed instructions into a new empty external folder. Never aim the generator at live records. Demo dates age normally; no real payments/messages are sent.
 
 ## Update an installed checkout
 

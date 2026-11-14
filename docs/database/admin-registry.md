@@ -1,6 +1,6 @@
 # Admin registry, policies and release assignments
 
-[Database schema catalog](README.md) · [Shared conventions](overview.md)
+[Database schema master](overview.md) · [Shared conventions](overview.md)
 
 Part of the schema master. Proposed hosted tables are design contracts, not claims of implemented schema. Executable definitions belong exclusively under `application/database/`; see [resource ownership](overview.md#required-schema-definition-location).
 
@@ -8,7 +8,7 @@ In this guide: [Pilot 0 Admin database](#pilot-0-admin-database) · [`control_me
 
 ## Pilot 0 Admin database
 
-The [H02.2 current baseline](../../application/database/admin-migrations/README.md)
+The [H02.2 current baseline](schema-resources.md#main-admin)
 contains all 13 main-Admin tables and local FKs, with exact structural validation
 and separate protected deployment binding. Schema creation populates no authority.
 

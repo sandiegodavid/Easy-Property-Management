@@ -249,6 +249,12 @@ class Inventory:
                 raise HostAgentDenied()
         elif command.access_epoch != current["access_epoch"]:
             raise HostAgentDenied()
+        if command.effect.kind == "apply_auth_routes" and (
+            current["desired_state"] != "held"
+            or command.payload.expected_ingress_revision != current["revision"]
+            or binding["state"] != "running"
+        ):
+            raise HostAgentDenied()
         if (
             command.effect.kind in {"start_container", "initialize_container", "repair_runtime"}
             and current["desired_state"] == "blocked"
@@ -402,14 +408,27 @@ class Inventory:
                     revision=1,
                 )
             )
-        elif command.effect.kind == "apply_ingress_policy":
+        elif command.effect.kind in {"apply_ingress_policy", "apply_auth_routes"}:
+            options = (
+                {
+                    "desired_state": command.payload.desired_state,
+                    "operation_id": command.effect.child_id(),
+                }
+                if command.effect.kind == "apply_ingress_policy"
+                else {}
+            )
             connection.execute(
                 table.update()
                 .where(table.c.operator_id == command.effect.parent.scope.operator_id)
                 .values(
                     access_epoch=command.access_epoch,
-                    desired_state=command.payload.desired_state,
-                    operation_id=command.effect.child_id(),
+                    **options,
+                    auth_route_state="closed",
+                    auth_access_epoch=None,
+                    auth_manifest_ref=None,
+                    auth_manifest_sha256=None,
+                    auth_operation_id=None,
+                    auth_verified_at=None,
                     updated_at=now,
                     revision=table.c.revision + 1,
                 )
@@ -443,7 +462,7 @@ class Inventory:
         )
         ingress = self.table(connection, "ingress_bindings")
         projection_revision = None
-        if command.effect.kind == "apply_ingress_policy":
+        if command.effect.kind in {"apply_ingress_policy", "apply_auth_routes"}:
             ingress = self.table(connection, "ingress_bindings")
             revision = connection.execute(
                 select(ingress.c.revision).where(ingress.c.operator_id == scope.operator_id)
@@ -504,6 +523,66 @@ class Inventory:
                     IngressRecord(**{key: row[key] for key in IngressRecord.model_fields})
                 )
             return IngressProjection(records=tuple(records))
+
+    def auth_target(self, *, binding_id=None, operator_id=None):
+        """Resolve a currently registered source without trusting runtime labels."""
+        if (binding_id is None) == (operator_id is None):
+            raise HostAgentDenied()
+        with self.transaction(write=False) as connection:
+            ingress = self.table(connection, "ingress_bindings")
+            bindings = self.table(connection, "resource_bindings")
+            principals = self.table(connection, "operator_principals")
+            selector = (
+                ingress.c.binding_id == binding_id
+                if binding_id
+                else ingress.c.operator_id == operator_id
+            )
+            row = (
+                connection.execute(
+                    select(
+                        ingress,
+                        bindings.c.state,
+                        bindings.c.container_ref,
+                        bindings.c.image_digest,
+                        principals.c.host_uid,
+                        principals.c.host_gid,
+                    )
+                    .join(bindings, ingress.c.binding_id == bindings.c.binding_id)
+                    .join(principals, ingress.c.operator_id == principals.c.operator_id)
+                    .where(selector)
+                )
+                .mappings()
+                .one_or_none()
+            )
+            if row is None:
+                raise HostAgentDenied()
+            return dict(row)
+
+    def auth_ready(self):
+        """Read protected evidence. Resolve native endpoints outside this snapshot."""
+        from app.modules.host_agent.application.auth_routes import AuthRouteObservation
+
+        with self.transaction(write=False) as connection:
+            table = self.table(connection, "ingress_bindings")
+            rows = (
+                connection.execute(
+                    select(table)
+                    .where(table.c.auth_route_state == "ready")
+                    .order_by(table.c.public_origin)
+                    .limit(MAX_ORIGINS + 1)
+                )
+                .mappings()
+                .all()
+            )
+            if len(rows) > MAX_ORIGINS:
+                raise HostAgentUnavailable()
+            return tuple(
+                AuthRouteObservation(
+                    ingress_revision=row["revision"],
+                    **{key: row[key] for key in AuthRouteObservation.model_fields if key in row},
+                )
+                for row in rows
+            )
 
     def network_projection(self):
         """All retained allocations reserve their slot; no address reuse after retirement."""
@@ -699,6 +778,33 @@ class Inventory:
                     revision=row["revision"] + 1,
                 )
             )
+        elif command.effect.kind == "apply_auth_routes":
+            table = self.table(connection, "ingress_bindings")
+            expected = command.payload.expected_ingress_revision + 1
+            if observation.ingress_state != "held" or observation.ingress_revision != expected + 1:
+                raise HostAgentDenied()
+            changed = connection.execute(
+                table.update()
+                .where(
+                    table.c.binding_id == command.effect.binding_id,
+                    table.c.resource_generation == command.effect.resource_generation,
+                    table.c.access_epoch == command.access_epoch,
+                    table.c.revision == expected,
+                    table.c.desired_state == "held",
+                )
+                .values(
+                    auth_route_state="ready",
+                    auth_access_epoch=command.access_epoch,
+                    auth_manifest_ref=command.payload.manifest_ref,
+                    auth_manifest_sha256=command.payload.manifest_sha256,
+                    auth_operation_id=command.effect.child_id(),
+                    auth_verified_at=now,
+                    updated_at=now,
+                    revision=expected + 1,
+                )
+            )
+            if changed.rowcount != 1:
+                raise HostAgentDenied()
         elif command.effect.kind == "apply_limits":
             row = self.original(connection, command)
             plan = StoredEffect.model_validate_json(row["request_json"]).inputs.plan

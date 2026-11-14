@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from importlib import import_module
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -19,6 +19,11 @@ from app.bootstrap.communication_context import SQLiteCommunicationContextOperat
 from app.bootstrap.hosted_access import compose_hosted_access
 from app.modules.hosted_access.api.router import build_session_router
 from app.modules.hosted_access.api.draft_leases import build_draft_lease_router
+from app.modules.hosted_access.infrastructure.operator_identity_runtime import (
+    OperatorIdentityInputs,
+    compose_operator_identity,
+    managed_entry_metadata,
+)
 from app.modules.hosted_access.infrastructure.configuration import (
     HostedConfigurationError,
     load_hosted_deployment,
@@ -27,6 +32,7 @@ from app.modules.hosted_access.infrastructure.configuration import (
 from app.bootstrap.file_link_policies import build_file_link_policy_registry
 from app.bootstrap.operator_support import compose_operator
 from app.bootstrap.operator_recovery import RecoverySourcePorts
+from app.bootstrap.operator_recovery_composition import compose_attempt_namespaces
 from app.modules.operator.api.router import build_router as build_operator_router
 from app.bootstrap.owner_concern_context import SQLiteOwnerConcernContext
 from app.modules.ai_governance.api.router import build_router as build_ai_governance_router
@@ -214,6 +220,7 @@ def create_app(  # noqa: C901, PLR0915
     transport_policy: BrowserTransportPolicy | None = None,
     web_build_path: Path | None = None,
     hosted_deployment_path: Path | None = None,
+    operator_identity_inputs: OperatorIdentityInputs | None = None,
 ) -> FastAPI:
     """Create the local API without implicitly initializing a workspace."""
     service = WorkspaceService.from_local_config(config_path)
@@ -224,7 +231,10 @@ def create_app(  # noqa: C901, PLR0915
         validate_workspace_binding(hosted, service)
     audit_repository = SQLiteAuditRepository(service.paths.database)
     recorder = AuditRecorder(audit_repository)
-    runtime = WorkspaceRuntime(service)
+    runtime = WorkspaceRuntime(
+        service,
+        writer_lock=operator_identity_inputs.writer_lock if operator_identity_inputs else None,
+    )
     local_store = FilesystemContentStore(service.paths.files)
     additional_stores = {}
     primary_store = local_store
@@ -506,17 +516,20 @@ def create_app(  # noqa: C901, PLR0915
         runtime.start()
         scheduler: asyncio.Task[None] | None = None
         try:
-            if hosted is not None and not runtime.ready:
+            if (hosted is not None or operator_identity_inputs is not None) and not runtime.ready:
                 raise HostedConfigurationError(
                     "Hosted workspace could not acquire its validated single-writer runtime."
                 )
-            if runtime.ready and hosted is None:
+            if runtime.ready and hosted is None and operator_identity_inputs is None:
                 ai_generation.recover_interrupted()
-            if runtime.writer_lock_acquired and hosted is None:
+            if runtime.writer_lock_acquired and hosted is None and operator_identity_inputs is None:
                 scheduler = asyncio.create_task(_automatic_backup_scheduler(backups, runtime))
             elif runtime.error:
                 logger.warning("Workspace is not ready: %s", runtime.error)
-            yield
+            async with AsyncExitStack() as stack:
+                if operator_identity_inputs is not None:
+                    await stack.enter_async_context(serve_operator_identity())
+                yield
         finally:
             try:
                 if scheduler is not None:
@@ -556,8 +569,9 @@ def create_app(  # noqa: C901, PLR0915
         if hosted is not None
         else None
     )
+    entry_metadata = managed_entry_metadata(operator_identity_inputs) or entry_metadata
     app.add_middleware(PackagedWebMiddleware, root=web_root, entry_metadata=entry_metadata)
-    if hosted is None:
+    if hosted is None and operator_identity_inputs is None:
         app.add_middleware(
             BrowserTransportMiddleware, policy=transport_policy or BrowserTransportPolicy()
         )
@@ -821,9 +835,19 @@ def create_app(  # noqa: C901, PLR0915
     )
     if hosted is not None:
         hosted_store = compose_hosted_access(app, hosted, runtime)
-    else:
+    elif operator_identity_inputs is None:
         app.include_router(build_session_router())
         app.include_router(build_draft_lease_router())
+    if operator_identity_inputs is not None:
+        if hosted is not None or transport_policy is not None:
+            raise HostedConfigurationError("Managed and legacy hosted identity cannot be combined.")
+        serve_operator_identity = compose_operator_identity(
+            app,
+            runtime,
+            operator_identity_inputs,
+            database=service.paths.database,
+            namespaces=compose_attempt_namespaces() if operator_identity_inputs.business else None,
+        )
     return app
 
 

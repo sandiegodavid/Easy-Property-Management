@@ -1,6 +1,6 @@
-# admin current baseline
+# Admin schema resources — revisions
 
-`admin_0001_initial.py` is the sole greenfield baseline. No compatibility revisions or
-stamping-only initializer. Keep revision identifiers within 32 characters.
-The owning runner validates actual schema, constraints, indexes and triggers against
-an in-memory database generated from these same resources, not version text alone.
+Owning revision files for this store.
+
+- [Current baseline, availability and resource rules](../../../../docs/database/schema-resources.md#main-admin)
+- [Owning table dictionary](../../../../docs/database/admin-registry.md)

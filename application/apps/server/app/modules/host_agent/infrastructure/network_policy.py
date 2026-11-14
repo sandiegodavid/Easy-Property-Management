@@ -3,8 +3,44 @@
 from dataclasses import dataclass
 from hashlib import sha256
 import ipaddress
+from uuid import UUID
+
+from pydantic import Field
+from typing import Annotated
+
+from app.platform.hosted_contracts.values import CanonicalId, Contract
 
 from app.modules.host_agent.application.dispatch import HostAgentDenied
+
+
+class SharedIdentityNetwork(Contract):
+    endpoint_id: CanonicalId
+    ipv4: str
+    ipv6: str
+    proxy_uid: Annotated[int, Field(strict=True, gt=0)]
+    proxy_port: Annotated[int, Field(strict=True, ge=1024, le=65535)]
+
+    def bridge(self):
+        four, six = ipaddress.IPv4Network(self.ipv4), ipaddress.IPv6Network(self.ipv6)
+        if (
+            four.prefixlen != 30
+            or six.prefixlen != 64
+            or not four.subnet_of(ipaddress.IPv4Network("10.0.0.0/8"))
+            or not six.subnet_of(ipaddress.IPv6Network("fd00::/8"))
+        ):
+            raise HostAgentDenied()
+        name = "epm-n-" + str(UUID(self.endpoint_id)) + "-1"
+        return Bridge(
+            name,
+            "epm-" + sha256(name.encode()).hexdigest()[:11],
+            str(four),
+            str(six),
+            str(four[1]),
+            str(six[1]),
+            str(four[2]),
+            str(six[2]),
+            self.proxy_port,
+        )
 
 
 @dataclass(frozen=True)
@@ -19,6 +55,7 @@ class NetworkSettings:
     proxy_uid: int
     gateway_port: int = 8080
     proxy_port: int = 1080
+    shared_identity: SharedIdentityNetwork | None = None
 
     def __post_init__(self):
         v4, v6 = self.pools
@@ -32,7 +69,7 @@ class NetworkSettings:
             or type(self.first_project) is not int
             or self.first_project <= 0
             or any(type(uid) is not int or uid <= 0 for uid in self.uids)
-            or len(set(self.uids)) != 3
+            or len(set(self.uids)) != len(self.uids)
             or any(
                 type(port) is not int or not 1024 <= port <= 65535
                 for port in (self.gateway_port, self.proxy_port)
@@ -41,13 +78,27 @@ class NetworkSettings:
         ):
             raise HostAgentDenied()
 
+        if self.shared_identity is not None:
+            shared = self.shared_identity
+            shared.bridge()
+            if (
+                shared.proxy_uid in (self.gateway_uid, self.tunnel_uid, self.proxy_uid)
+                or shared.proxy_port in (self.gateway_port, self.proxy_port, 8000)
+                or any(
+                    ipaddress.ip_network(network).overlaps(pool)
+                    for network, pool in zip((shared.ipv4, shared.ipv6), (v4, v6), strict=True)
+                )
+            ):
+                raise HostAgentDenied()
+
     @property
     def pools(self):
         return ipaddress.ip_network(self.ipv4_pool), ipaddress.ip_network(self.ipv6_pool)
 
     @property
     def uids(self):
-        return self.gateway_uid, self.tunnel_uid, self.proxy_uid
+        base = (self.gateway_uid, self.tunnel_uid, self.proxy_uid)
+        return (*base, self.shared_identity.proxy_uid) if self.shared_identity is not None else base
 
 
 def bridge(row, settings):

@@ -21,10 +21,15 @@ class OperatorNetworks:
 
     def qualification_hash(self, runtime_hash):
         # A network-none H02.5 native proof cannot qualify a new connected policy.
+        settings = asdict(self.settings)
+        if self.settings.shared_identity is None:
+            settings.pop("shared_identity")
+        else:
+            settings["shared_identity"] = self.settings.shared_identity.model_dump(mode="json")
         document = {
             "version": "operator-network-v1",
             "runtime": runtime_hash,
-            "settings": asdict(self.settings),
+            "settings": settings,
         }
         return sha256(
             json.dumps(document, sort_keys=True, separators=(",", ":")).encode()

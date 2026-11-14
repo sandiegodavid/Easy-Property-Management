@@ -1,4 +1,5 @@
 import { api } from "@epm/contracts";
+import { admitHostedSession, pauseHostedSession } from "../src/app/hosted-session-state";
 import { RecoveryController, recoveryApi, type Recovery } from "../src/shared/recovery";
 import { mutation, canonicalRequest, normalizeApiError } from "../src/shared/mutations";
 import { WorkspaceScope } from "../src/app/workspace-scope";
@@ -47,6 +48,8 @@ async function dispatch(record: Recovery) {
 }
 const fixture = {
   setup,
+  admitHostedSession,
+  pauseHostedSession,
   dispatch,
   api,
   mutation,

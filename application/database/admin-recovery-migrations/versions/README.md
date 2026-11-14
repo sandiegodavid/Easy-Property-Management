@@ -1,6 +1,6 @@
-# admin-recovery revisions
+# Admin recovery resources — revisions
 
-No executable revisions are delivered by H01.2. Do not add an empty baseline or stamp
-an initialized version. H05 delivers the complete owning baseline and validation.
-Future revision identifiers use the `admin_recovery_` namespace (maximum 32 characters).
-See the [shared initialization contract](../../README.md#initialization-contract).
+Owning revision files for this store.
+
+- [Current baseline, availability and resource rules](../../../../docs/database/schema-resources.md#admin-recovery)
+- [Owning table dictionary](../../../../docs/database/admin-recovery.md)

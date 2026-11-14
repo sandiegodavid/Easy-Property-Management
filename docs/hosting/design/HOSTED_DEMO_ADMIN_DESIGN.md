@@ -325,6 +325,6 @@ Before implementation acceptance, supply the approved administrator identity, ch
 
 ## Implementation references
 
-- [Hosted deployment schema](../../../application/apps/server/app/modules/hosted_access/application/configuration.py), [session schema](../../../application/apps/server/app/modules/hosted_access/infrastructure/schema.py), [existing private admin commands](../../../application/apps/server/app/modules/hosted_access/infrastructure/admin.py).
+- [Hosted deployment schema](../../../application/apps/server/app/modules/hosted_access/application/configuration.py), [current source baseline (H03.2 replacement)](../../../application/database/hosted-access-migrations/versions/access_0001_initial.py), [existing private admin commands](../../../application/apps/server/app/modules/hosted_access/infrastructure/admin.py).
 - [Hosted systemd template](../../../application/deploy/hosted-demo/epm-hosted@.service), [VM release wizard](../../../application/scripts/epm-release-vm.sh), [Mac release wizard](../../../application/scripts/epm-release-mac.sh), [reset helper](../../../application/scripts/release_demo.py), [cleanup inventory](../../../application/scripts/release_cleanup.py).
 - [Existing hosted design](HOSTED_DEMO_DESIGN.md), [configuration contract](../deployment/HOSTED_DEMO_CONFIGURATION.md), [ongoing runbook](../operations/GOOGLE_CLOUD_ONGOING_RUNBOOK.md), [operations/recovery](../operations/HOSTED_DEMO_OPERATIONS.md), [qualification](../qualification/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md).

@@ -42,30 +42,47 @@ class ConsumeInvitation(SemanticRequest):
     action: Literal["consume_invitation"] = "consume_invitation"
     invitation_id: CanonicalId
     assignment_id: CanonicalId
+    managed_session_id: CanonicalId
+    attempt_id: CanonicalId
 
 
 class IssueHandoff(SemanticRequest):
     action: Literal["issue_handoff"] = "issue_handoff"
     assignment_id: CanonicalId
     registered_origin_id: CanonicalId
+    attempt_id: CanonicalId
+    managed_session_id: CanonicalId
+    source_attempt_id: CanonicalId
+    verified_binding_hash: RequestHash
 
 
 class RedeemHandoff(SemanticRequest):
     action: Literal["redeem_handoff"] = "redeem_handoff"
     handoff_id: CanonicalId
     registered_origin_id: CanonicalId
+    source_attempt_id: CanonicalId
+    source_browser_hash: RequestHash
 
 
-class IssueSession(SemanticRequest):
-    action: Literal["issue_session"] = "issue_session"
+class PairEmailContinuation(SemanticRequest):
+    action: Literal["pair_email_continuation"] = "pair_email_continuation"
+    continuation_id: CanonicalId
     assignment_id: CanonicalId
-    verified_handoff_id: CanonicalId
+    source_attempt_id: CanonicalId
+    verified_source_assertion_hash: RequestHash
+    central_browser_hash: RequestHash
 
 
 class RevokeSession(SemanticRequest):
     action: Literal["revoke_session"] = "revoke_session"
     session_reference: Reference | None
     all_devices: bool
+
+    @model_validator(mode="after")
+    def exact_device_selection(self):
+        if self.all_devices != (self.session_reference is None):
+            raise ValueError("Select one session or all devices, never an ambiguous target.")
+        return self
 
 
 class RecentAuthenticate(SemanticRequest):
@@ -79,7 +96,7 @@ Action = Annotated[
     | ConsumeInvitation
     | IssueHandoff
     | RedeemHandoff
-    | IssueSession
+    | PairEmailContinuation
     | RevokeSession
     | RecentAuthenticate,
     Field(discriminator="action"),
@@ -87,6 +104,8 @@ Action = Annotated[
 
 
 class LoginCommand(CommandEnvelope[Action]):
+    version: Literal[1] = 1
+
     @model_validator(mode="after")
     def matching_action(self):
         if self.intent.kind != self.intent.payload.action:
@@ -95,6 +114,7 @@ class LoginCommand(CommandEnvelope[Action]):
 
 
 class LoginResult(SemanticRequest):
+    version: Literal[1] = 1
     identity_receipt_ref: Reference
     expires_at: EpochMillis
 
@@ -139,3 +159,8 @@ def require_invocation(actor: IdentityAuthority, command: LoginCommand) -> None:
         and payload.registered_origin_id != actor.registered_origin_id
     ):
         raise ValueError("Handoff must retain the registered browser origin.")
+    if (
+        hasattr(payload, "source_browser_hash")
+        and payload.source_browser_hash != actor.browser_binding_hash
+    ):
+        raise ValueError("Handoff must retain its observed destination browser challenge.")

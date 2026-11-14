@@ -138,6 +138,8 @@ def actor_for(name, command):
         service = (
             "operator_recovery"
             if action in {"stage_restore", "switch_binding", "verify_restore_binding"}
+            else "source"
+            if action in {"issue_session", "refresh_session"}
             else "admin"
         )
         return ServiceAuthority(

@@ -235,3 +235,150 @@ test("source changed since save blocks dispatch; errors distinguish validation a
   expect(result.provider.code).toBe("file_provider_unavailable");
   expect(result.stable).toBe(true);
 });
+
+test("managed session rotation requires an explicit claim and ignores delayed authority", async ({
+  page,
+}) => {
+  let claims = 0;
+  let staged = () => {};
+  const entered = new Promise<void>((resolve) => {
+    staged = resolve;
+  });
+  let release = () => {};
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/hosted/drafts/*/lease", async (route) => {
+    if (++claims === 1) {
+      staged();
+      await pending;
+    }
+    await route.fulfill({
+      json: {
+        expiresAt: new Date(Date.now() + 300_000).toISOString(),
+        renewedAt: new Date().toISOString(),
+      },
+    });
+  });
+  const result = page.evaluate(async () => {
+    const fixture = window.recoveryFixture;
+    const { controller, scope, id, identity, initial } = await fixture.setup();
+    await controller.flush();
+    const saved = controller.getSnapshot().record!;
+    const deployment = document.createElement("meta");
+    deployment.name = "epm-deployment";
+    deployment.content = "hosted_managed";
+    document.head.append(deployment);
+    fixture.admitHostedSession("first-session");
+    const editor = new fixture.RecoveryController(scope, id, identity, initial, saved);
+    editor.activate();
+    await editor.claimEditing();
+    const afterRotation = editor.getSnapshot().editAuthority;
+    editor.edit({ ...initial, changes: { title: "Retained across rotation" } }, 10_000);
+    await editor.flush().catch(() => undefined);
+    const revisionWhilePaused = editor.getSnapshot().record?.revision;
+    await editor.claimEditing();
+    await editor.flush();
+    const edited = editor.getSnapshot();
+    editor.dispose();
+    return { afterRotation, revisionWhilePaused, initialRevision: saved.revision, edited };
+  });
+  await entered;
+  await page.evaluate(() => {
+    window.recoveryFixture.pauseHostedSession();
+    window.recoveryFixture.admitHostedSession("replacement-session");
+  });
+  release();
+  const state = await result;
+  expect(claims).toBe(2);
+  expect(state.afterRotation).toBe("required");
+  expect(state.revisionWhilePaused).toBe(state.initialRevision);
+  expect(state.edited.editAuthority).toBe("held");
+  expect(state.edited.record?.payload.changes).toEqual({ title: "Retained across rotation" });
+});
+
+test("reclaiming editing during a delayed save never resumes the earlier submit", async ({
+  page,
+}) => {
+  let markStaged = () => {};
+  const staged = new Promise<void>((resolve) => {
+    markStaged = resolve;
+  });
+  let release = () => {};
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let saves = 0;
+  await page.route("**/api/operator/recovery/*", async (route) => {
+    if (route.request().method() !== "PUT" || ++saves !== 2) return route.continue();
+    const saved = await route.fetch();
+    markStaged();
+    await pending;
+    await route.fulfill({ response: saved });
+  });
+  await page.route("**/api/hosted/drafts/*/lease", (route) =>
+    route.fulfill({
+      json: {
+        expiresAt: new Date(Date.now() + 300_000).toISOString(),
+        renewedAt: new Date().toISOString(),
+      },
+    }),
+  );
+  const result = page.evaluate(async () => {
+    const fixture = window.recoveryFixture;
+    const { controller, scope, id, identity, initial } = await fixture.setup();
+    await controller.flush();
+    const deployment = document.createElement("meta");
+    deployment.name = "epm-deployment";
+    deployment.content = "hosted_managed";
+    document.head.append(deployment);
+    fixture.admitHostedSession("first-session");
+    const editor = new fixture.RecoveryController(
+      scope,
+      id,
+      identity,
+      initial,
+      controller.getSnapshot().record,
+    );
+    editor.activate();
+    await editor.claimEditing();
+    editor.edit({ ...initial, changes: { title: "Review before resubmitting" } }, 10_000);
+    let dispatches = 0;
+    const submit = editor
+      .submit(() => {
+        dispatches++;
+        return Promise.resolve();
+      })
+      .catch(() => undefined);
+    await new Promise<void>((resolve, reject) => {
+      window.addEventListener(
+        "epm-test-reclaim",
+        () => {
+          fixture.pauseHostedSession();
+          fixture.admitHostedSession("replacement-session");
+          void editor.claimEditing().then(resolve, reject);
+        },
+        { once: true },
+      );
+    });
+    document.body.dataset.reclaimed = "true";
+    await submit;
+    const state = editor.getSnapshot();
+    editor.dispose();
+    return { dispatches, state };
+  });
+
+  try {
+    await staged;
+    await page.evaluate(() => window.dispatchEvent(new Event("epm-test-reclaim")));
+    await page.waitForFunction(() => document.body.dataset.reclaimed === "true");
+  } finally {
+    release();
+  }
+
+  const { dispatches, state } = await result;
+  expect(dispatches).toBe(0);
+  expect(state.record?.status).toBe("active");
+  expect(state.record?.attemptKey).toBeNull();
+  expect(state.record?.payload.changes).toEqual({ title: "Review before resubmitting" });
+});

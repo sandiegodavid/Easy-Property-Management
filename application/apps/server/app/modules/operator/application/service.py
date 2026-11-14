@@ -272,6 +272,16 @@ class OperatorService:
 
         return self._write_recovery(record_id, write)
 
+    def recovery_edit_revision(self, record_id):
+        self.ready()
+        identifier(record_id)
+
+        def read(tx):
+            value = tx.recovery(record_id)
+            return value["revision"] if value else 0
+
+        return self.unit_of_work.read(read)
+
     def recovery(self, record_id):
         self.ready()
         identifier(record_id)

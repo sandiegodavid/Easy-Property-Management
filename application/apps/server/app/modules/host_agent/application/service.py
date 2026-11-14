@@ -145,6 +145,13 @@ class HostAgent:
                 or observation.resource_state is not None
             ):
                 raise HostAgentDenied()
+        elif command.effect.kind == "apply_auth_routes":
+            if (
+                observation.ingress_state != "held"
+                or observation.ingress_revision != allocation.ingress_projection_revision
+                or observation.resource_state is not None
+            ):
+                raise HostAgentDenied()
         elif command.effect.kind in expected:
             if (
                 observation.resource_state != expected[command.effect.kind]

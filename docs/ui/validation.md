@@ -22,7 +22,7 @@ There is no configured Playwright line/branch or CSS coverage measurement, so no
 | [Seeded demo](../../application/playwright.demo.config.ts) | 56 | 8 | Separately started synthetic demo server at port 8001; existing known records, read-only navigation/presentation by default. Not included in `test:web`. |
 | **Total** | **443** | **50** | All configurations currently use Chromium. |
 
-The component and recovery configurations select disjoint spec files; their totals do not double-count `recovery.spec.ts`. Some component cases execute controller/date logic rather than a complete browser workflow. The seeded-demo suites are documented separately in their [README](../../application/apps/web/tests-demo/README.md).
+The component and recovery configurations select disjoint spec files; their totals do not double-count `recovery.spec.ts`. Some component cases execute controller/date logic rather than a complete browser workflow. The seeded-demo suites are documented separately in their [README](../development/demo-browser-tests.md).
 
 ### Packaged application workflow coverage
 

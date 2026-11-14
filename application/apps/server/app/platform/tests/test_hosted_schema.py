@@ -321,13 +321,18 @@ def test_table_column_closure_matches_owning_dictionary(private, store):
     expected = {}
     table = None
     for name in names:
-        for line in (APPLICATION.parent / "docs/database" / f"{name}.md").read_text().splitlines():
+        document = (APPLICATION.parent / "docs/database" / f"{name}.md").read_text()
+        for line in document.splitlines():
             heading = re.match(r"### `([^`]+)`", line)
-            if heading:
-                table = heading[1]
-                expected[table] = set()
+            if line.startswith("#"):
+                table = heading[1] if heading else None
+                if table:
+                    expected.setdefault(table, set())
             column = re.match(r"\| `([^`]+)` \|", line)
-            if column and table:
+            if column and "." in column[1]:
+                owner, field = column[1].split(".", maxsplit=1)
+                expected[owner].add(field)
+            elif column and table:
                 expected[table].add(column[1])
     with connect(initialized(private, store)) as connection:
         actual = {
@@ -826,7 +831,8 @@ def test_validation_query_budget_and_snapshot_backup(private, store):
         statements = []
         event.listen(connection, "before_cursor_execute", lambda *args: statements.append(args[2]))
         validate_schema(connection, store, application_directory=APPLICATION)
-        max_statements = 6
+        # Retained H03 rows add six fixed streams and one cross-record query.
+        max_statements = 13 if store == ADMIN else 6
         assert len(statements) <= max_statements
         assert not any("INSERT" in sql or "UPDATE" in sql or "CREATE" in sql for sql in statements)
     copy = private / "snapshot.sqlite"
@@ -863,8 +869,8 @@ def test_foreign_key_tampering_is_not_accepted_as_matching(private, store):
     with sqlite3.connect(path) as connection:
         if store == ADMIN:
             connection.execute(
-                "INSERT INTO admin_sessions VALUES (?,?,?,?,?,?,?,?,?)",
-                ("a" * 64, FIRST, "b" * 64, 1, 1, 1, 100, 1, None),
+                "INSERT INTO admin_sessions VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                ("a" * 64, FIRST, "b" * 64, 1, 1, 1, 100, 1, None, FIRST, 100, 100),
             )
         else:
             connection.execute(

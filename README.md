@@ -22,7 +22,7 @@ All four portals support local development. In production, Admin/Tenant/Owner ar
 | Install an existing wheel on a new VM (not the fresh hosted rollout) | [VM deployment guide](manual/deployment.md) |
 | Develop or build from this checkout | Continue below, then use the [developer documentation](docs/README.md) |
 | Implement the hosted MVP | [Hosted slices and Pilot 0](docs/hosting/design/mvp/delivery-plan.md#implementation-slices), [acceptance register](docs/hosting/qualification/HOSTED_MVP_ACCEPTANCE.md) |
-| Explore synthetic data | [Demo workspace](application/demo/README.md) |
+| Explore synthetic data | [Demo workspace](docs/development/demo-workspace.md) |
 
 The application uses React, Vite and TypeScript in the browser, with Python, FastAPI, SQLAlchemy, Alembic and SQLite on the server. [Architecture](docs/ARCHITECTURE.md) describes module boundaries, the local workspace, AI governance and the shared business core. The [hosted MVP design](docs/hosting/design/HOSTED_MVP_DESIGN.md) specifies the immediate hosted direction with dedicated containers and private SQLite; PostgreSQL is not a hosting prerequisite.
 
@@ -90,7 +90,7 @@ python -m app workspace-status
 
 Initialization creates `workspace.json` and the `database/`, `files/`, `exports/` and `backups/` directories using the current Alembic baseline. It rejects paths inside the checkout and does not overwrite a nonempty folder without a valid manifest. This greenfield build accepts only the latest workspace and archive formats. For existing records, follow the [restore procedure](manual/data-and-recovery.md#restore-a-backup) instead of initializing over them.
 
-Never commit live configuration, databases, attachments, backups, exports or credentials. The [synthetic demo](application/demo/README.md) uses separate configuration and generates its data outside the repository.
+Never commit live configuration, databases, attachments, backups, exports or credentials. The [synthetic demo](docs/development/demo-workspace.md) uses separate configuration and generates its data outside the repository.
 
 ### Run with Vite during development
 
@@ -190,7 +190,7 @@ export EPM_PYTHON="$PWD/.venv/bin/python"
 npm run test:demo
 ```
 
-See [demo Playwright tests](application/apps/web/tests-demo/README.md) for prerequisites, the full suite list, and conventions.
+See [demo Playwright tests](docs/development/demo-browser-tests.md) for prerequisites, the full suite list, and conventions.
 
 ## Local HTTP transport
 

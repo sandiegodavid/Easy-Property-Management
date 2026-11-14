@@ -4201,3 +4201,16 @@ details.issue-detail-section > summary {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+.managed-security-dialog:modal {
+  max-inline-size: min(36rem, calc(100% - 2rem));
+  background: var(--surface);
+  color: var(--text);
+  overscroll-behavior: contain;
+}
+
+.managed-security-dialog::backdrop {
+  background: rgb(0 0 0 / 55%);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}

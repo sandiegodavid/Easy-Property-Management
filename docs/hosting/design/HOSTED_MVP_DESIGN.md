@@ -30,7 +30,7 @@ For a first read: **scope → architecture and access → delivery plan**. For i
 
 ## Related references
 
-- [Database schema catalog](../../database/README.md): owning stores and complete table/column definitions.
+- [Database schema catalog](../../database/overview.md): owning stores and complete table/column definitions.
 - [H01 detailed design and implementation plan](HOSTED_MVP_H01_DESIGN.md).
 - [Infrastructure design](HOSTED_MVP_H02_DESIGN.md) and [topic-based foundation guides](../foundation/README.md): delivered scoped container/storage/gateway behavior, operating procedures, exact evidence and remaining release gates.
 - [Acceptance register](../qualification/HOSTED_MVP_ACCEPTANCE.md): actual proof status, separate from design requirements.

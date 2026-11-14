@@ -164,7 +164,7 @@ def build_router(service: IntakeService, runtime: WorkspaceRuntime) -> APIRouter
         operation_id="importIntakeSource",
         response_model=SourceMutationResponse,
     )
-    async def import_source(
+    def import_source(
         metadata: str = Form(...),
         attachmentRoles: str | None = Form(default=None),
         files: list[UploadFile] = File(default=[]),
@@ -201,7 +201,7 @@ def build_router(service: IntakeService, runtime: WorkspaceRuntime) -> APIRouter
                 destination = Path(temporary) / str(position)
                 size = 0
                 with destination.open("wb") as output:
-                    while chunk := await upload.read(1024 * 1024):
+                    while chunk := upload.file.read(1024 * 1024):
                         size += len(chunk)
                         total += len(chunk)
                         if size > MAX_ATTACHMENT_BYTES or total > MAX_ATTACHMENT_AGGREGATE_BYTES:

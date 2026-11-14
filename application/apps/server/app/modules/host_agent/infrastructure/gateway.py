@@ -159,7 +159,7 @@ class CaddyAdmin:
 
 
 class Gateway:
-    def __init__(self, inventory, admin, settings, contain):
+    def __init__(self, inventory, admin, settings, contain, *, auth_endpoints=None):
         self.inventory, self.admin, self.settings, self.contain = (
             inventory,
             admin,
@@ -167,9 +167,80 @@ class Gateway:
             contain,
         )
 
-    def _snapshot(self):
+        self.auth_endpoints = auth_endpoints
+
+    def _snapshot(self, proposed=None):
         snapshot = self.inventory.ingress_projection()
-        return snapshot, closed_config(snapshot, self.settings)
+        if self.auth_endpoints is None:
+            if proposed is not None:
+                raise HostAgentUnavailable()
+            return snapshot, closed_config(snapshot, self.settings)
+
+        from app.modules.host_agent.infrastructure.auth_projection import auth_config
+
+        ready = self.inventory.auth_ready()
+        if proposed is not None:
+            ready = tuple(row for row in ready if row.binding_id != proposed.binding_id)
+            ready += (proposed,)
+        held = tuple(
+            (row, self.auth_endpoints.resolve_held(row))
+            for row in sorted(ready, key=lambda item: item.binding_id)
+            if row.desired_state == "held"
+        )
+        shared, login_origin = self.auth_endpoints.resolve_shared()
+        return snapshot, auth_config(
+            snapshot, self.settings, held=held, shared=shared, login_origin=login_origin
+        )
+
+    def auth_effect(self, command, allocation, *, inspect_only=False):
+        from app.modules.host_agent.application.auth_routes import AuthRouteObservation
+
+        payload = command.payload
+        revision = allocation.ingress_projection_revision
+        if (
+            revision != payload.expected_ingress_revision + 2
+            or allocation.binding_id != command.effect.binding_id
+            or allocation.resource_generation != command.effect.resource_generation
+            or allocation.access_epoch != command.access_epoch
+        ):
+            raise HostAgentDenied()
+        proposed = AuthRouteObservation(
+            binding_id=allocation.binding_id,
+            resource_generation=allocation.resource_generation,
+            access_epoch=command.access_epoch,
+            ingress_revision=revision,
+            desired_state="held",
+            auth_route_state="ready",
+            auth_access_epoch=command.access_epoch,
+            auth_manifest_ref=payload.manifest_ref,
+            auth_manifest_sha256=payload.manifest_sha256,
+            auth_operation_id=command.effect.child_id(),
+            auth_verified_at=0,
+        )
+        try:
+            _, config = self._snapshot(proposed)
+            if not inspect_only:
+                self.admin.load(config)
+            if self.admin.inspect() != config:
+                raise HostAgentUnavailable()
+        except Exception:
+            self._with_containment(
+                command,
+                allocation,
+                lambda: self.admin.load(
+                    closed_config(self.inventory.ingress_projection(), self.settings)
+                ),
+            )
+            raise
+        return EffectObservation(
+            request_hash=semantic_hash(command),
+            binding_id=allocation.binding_id,
+            resource_generation=allocation.resource_generation,
+            status="applied",
+            evidence_ref="gateway-auth-v1:" + sha256(encoded(config)).hexdigest(),
+            ingress_state="held",
+            ingress_revision=revision,
+        )
 
     def reload_closed(self):
         # Only invoked under the owning inventory singleton. A failed load can
@@ -327,6 +398,8 @@ class HostEffects:
         self.runtime, self.gateway = runtime, gateway
 
     def apply(self, command, allocation):
+        if command.effect.kind == "apply_auth_routes":
+            return self.gateway.auth_effect(command, allocation)
         if command.effect.kind == "apply_ingress_policy":
             return self.gateway.apply(command, allocation)
         if command.effect.kind == "prepare_resources":
@@ -334,6 +407,8 @@ class HostEffects:
         return self.runtime.apply(command, allocation)
 
     def inspect(self, command, allocation):
+        if command.effect.kind == "apply_auth_routes":
+            return self.gateway.auth_effect(command, allocation, inspect_only=True)
         if command.effect.kind == "apply_ingress_policy":
             return self.gateway.inspect(command, allocation)
         return self.runtime.inspect(command, allocation)

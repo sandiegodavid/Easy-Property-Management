@@ -21,7 +21,11 @@ def bind_metadata(
     No commit/close, defaults, policy, release, principal, resource or session seed.
     Owning adapters provide their typed metadata; an existing mismatch is never reset.
     """
-    names = {HostedStore.ADMIN: "control_meta", HostedStore.HOST_INVENTORY: "host_identity"}
+    names = {
+        HostedStore.ADMIN: "control_meta",
+        HostedStore.HOST_INVENTORY: "host_identity",
+        HostedStore.HOSTED_ACCESS: "access_meta",
+    }
     validate_schema(connection, store, application_directory=application_directory)
     if not connection.connection.driver_connection.in_transaction:
         raise HostedSchemaError()

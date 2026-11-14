@@ -14,19 +14,22 @@ class TunnelSettings(Contract):
     gateway_port: Annotated[int, Field(strict=True, ge=1024, le=65535)] = 8080
 
 
-def tunnel_config(projection: IngressProjection, settings: TunnelSettings):
+def tunnel_config(projection: IngressProjection, settings: TunnelSettings, *, shared=None):
     # JSON is valid YAML for cloudflared. No wildcard route or origin Host override;
     # the request's original Host and HTTPS context reach Caddy unchanged.
+    origins = [row.public_origin for row in projection.records]
+    if shared is not None:
+        origins.extend((shared.central_origin, shared.admin_origin))
     return {
         "tunnel": settings.tunnel_id,
         "credentials-file": "/run/credentials/epm-tunnel.service/tunnel.json",
         "no-autoupdate": True,
         "ingress": [
             {
-                "hostname": row.public_origin.removeprefix("https://"),
+                "hostname": origin.removeprefix("https://"),
                 "service": f"http://127.0.0.1:{settings.gateway_port}",
             }
-            for row in projection.records
+            for origin in origins
         ]
         + [{"service": "http_status:403"}],
     }

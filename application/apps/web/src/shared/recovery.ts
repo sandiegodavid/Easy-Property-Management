@@ -2,7 +2,7 @@ import { api } from "@epm/contracts";
 import type { components } from "@epm/contracts/generated";
 import type { WorkspaceScope } from "../app/workspace-scope";
 import { canonicalRequest, mutation, MutationFailure, type ApiProblem } from "./mutations";
-import { hostedMode, hostedWritesAllowed } from "../app/hosted-session-state";
+import { hostedMode, hostedWritesAllowed, managedHostedMode } from "../app/hosted-session-state";
 
 export type Recovery = components["schemas"]["RecoveryResponse"];
 export type RecoveryInput = components["schemas"]["RecoveryInput"];
@@ -89,12 +89,20 @@ export class RecoveryController {
   private lastInteraction = Date.now();
   private leaseRequest?: Promise<void>;
   private pendingClaim?: string;
+  private leaseFence = 0;
   private pauseLease = () => {
+    this.leaseFence++;
+    const startedEditing = this.leaseToken || this.pendingClaim || !this.isPristine;
     this.leaseToken = undefined;
     this.pendingClaim = undefined;
     this.publish({
       editAuthority:
-        this.snapshot.record || this.pendingSave || this.pendingPrepare ? "required" : undefined,
+        this.snapshot.record ||
+        this.pendingSave ||
+        this.pendingPrepare ||
+        (managedHostedMode() && startedEditing)
+          ? "required"
+          : undefined,
     });
   };
 
@@ -140,6 +148,7 @@ export class RecoveryController {
     return this.leaseRequest;
   }
   private async claimLease(token: string, takeover: boolean) {
+    const fence = this.leaseFence;
     // A lost response may have advanced the durable revision. Read only the
     // authority revision; never replace/rebase an immutable pending operation.
     let revision = this.snapshot.record?.revision ?? 0;
@@ -147,7 +156,7 @@ export class RecoveryController {
       const result = await this.readSavedForm();
       revision = result?.revision ?? 0;
     }
-    await this.updateLease(token, takeover, false, revision);
+    if (fence === this.leaseFence) await this.updateLease(token, takeover, false, revision);
   }
   private async updateLease(
     token: string,
@@ -155,6 +164,7 @@ export class RecoveryController {
     renew: boolean,
     expectedRevision = this.snapshot.record?.revision ?? 0,
   ) {
+    const fence = this.leaseFence;
     try {
       const result = await mutation(() =>
         api.POST("/api/hosted/drafts/{record_id}/lease", {
@@ -163,7 +173,7 @@ export class RecoveryController {
         }),
       );
       this.scope.requireWrite();
-      if (this.disposed) return;
+      if (this.disposed || fence !== this.leaseFence) return;
       this.leaseToken = token;
       this.leaseExpires = Date.parse(result.expiresAt);
       this.leaseRenewed = Date.now();
@@ -175,6 +185,7 @@ export class RecoveryController {
         ...(this.pendingSave && this.snapshot.draft === "conflicted" ? { draft: "failed" } : {}),
       });
     } catch (error) {
+      if (fence !== this.leaseFence) throw error;
       if (error instanceof MutationFailure && !error.outcomeUnknown) this.pendingClaim = undefined;
       this.leaseToken = undefined;
       this.publish({
@@ -390,7 +401,10 @@ export class RecoveryController {
     this.publish({ draft: "dirty", command: "editing", error: undefined, problem: undefined });
   }
 
-  async submit(dispatch: (record: Recovery) => Promise<unknown>, fingerprint?: string) {
+  async submit(
+    dispatch: (record: Recovery, headers?: Record<string, string>) => Promise<unknown>,
+    fingerprint?: string,
+  ) {
     if (
       this.locked ||
       this.snapshot.command === "outcome_unknown" ||
@@ -399,12 +413,16 @@ export class RecoveryController {
       throw new Error("Reconcile the original attempt first.");
     if (this.pendingDiscard) throw new Error("Resolve discard before submitting.");
     this.locked = true;
+    const fence = this.leaseFence;
     try {
       await this.flush();
       this.scope.requireWrite();
       const current = this.snapshot.record;
       if (!current || current.reuseState !== "available")
         throw new Error("Review the source before submitting.");
+      await this.requireLease();
+      if (managedHostedMode() && fence !== this.leaseFence)
+        throw new Error("Editing paused. Review your saved form before submitting again.");
       this.pendingPrepare ??= {
         expectedRevision: current.revision,
         idempotencyKey: crypto.randomUUID(),
@@ -414,7 +432,6 @@ export class RecoveryController {
       this.publish({ command: "submitting", error: undefined });
       let prepared: Recovery;
       try {
-        await this.requireLease();
         prepared = await this.transport.prepare(this.id, this.pendingPrepare, this.leaseToken);
       } catch (error) {
         if (error instanceof MutationFailure && !error.outcomeUnknown)
@@ -423,7 +440,11 @@ export class RecoveryController {
       }
       this.accept(prepared);
       this.pendingPrepare = undefined;
-      await dispatch(prepared);
+      if (managedHostedMode() && (fence !== this.leaseFence || !this.leaseToken))
+        throw new Error("Editing paused. Claim editing and check the original submission.");
+      await dispatch(prepared, this.preparedHeaders());
+      if (managedHostedMode() && fence !== this.leaseFence)
+        throw new Error("Editing paused. Check the original submission.");
       await this.reconcileAttempt();
     } catch (error) {
       this.checkAuthority(error);
@@ -517,8 +538,15 @@ export class RecoveryController {
     this.publish({ command: "committed", error: undefined });
   }
 
+  private preparedHeaders() {
+    if (!managedHostedMode()) return undefined;
+    if (!this.leaseToken)
+      throw new Error("Claim editing before continuing with the original submission.");
+    return { "X-EPM-Draft-Lease": this.leaseToken, "X-EPM-Prepared-Form": this.id };
+  }
+
   /** Explicit replay uses only the immutable prepared payload and original key. */
-  async replay(dispatch: (record: Recovery) => Promise<unknown>) {
+  async replay(dispatch: (record: Recovery, headers?: Record<string, string>) => Promise<unknown>) {
     if (this.locked) throw new Error("A request is already running.");
     this.locked = true;
     try {
@@ -526,7 +554,8 @@ export class RecoveryController {
       const current = this.snapshot.record;
       if (!current?.attemptKey || current.status !== "outcome_unknown" || this.pendingPrepare)
         throw new Error("Reconcile preparation first.");
-      await dispatch(current);
+      await this.requireLease();
+      await dispatch(current, this.preparedHeaders());
       await this.reconcileAttempt();
     } finally {
       this.locked = false;
@@ -593,6 +622,7 @@ export class RecoveryController {
     window.addEventListener("epm-session-paused", this.pauseLease);
     if (
       hostedMode() &&
+      !managedHostedMode() &&
       this.snapshot.record &&
       this.scope.canWrite &&
       this.snapshot.command !== "committed"

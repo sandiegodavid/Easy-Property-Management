@@ -9,7 +9,7 @@ records the unavailable scaffolds and initialization/packaging handoff.
 The [H01.3 evidence report](../qualification/reports/HOSTED_MVP_H01_3_CONTRACTS_2026-11-10.md)
 records bounded values, semantic hash vectors and pure original-outcome comparison.
 No fresh hosted runtime or deployment is established. Implements the H01 design obligation in the [hosted MVP slices](mvp/delivery-plan.md#implementation-slices).
-The [database schema master](../../database/README.md) owns all table/column definitions.
+The [database schema master](../../database/overview.md) owns all table/column definitions.
 This document owns use-case boundaries, initialization/order, interfaces and proof tasks.
 
 ## Scope and deliverables
@@ -37,7 +37,7 @@ relevant tests together if qualification shows a need.
 | Existing boundary | Evidence | H01 disposition |
 | --- | --- | --- |
 | Hosted source config | [configuration.py](../../../application/apps/server/app/modules/hosted_access/application/configuration.py) | Existing `hosted_demo`, eight-hour sessions and 250 MiB loop-image budget are old release assumptions. Replace with the fresh hosted composition, its session policy and Free 50 MB allowance. Operators remain active unless Admin explicitly disables or retires them. No old deployed-data migration is required. |
-| Hosted schema/session store | [schema.py](../../../application/apps/server/app/modules/hosted_access/infrastructure/schema.py), [session_store.py](../../../application/apps/server/app/modules/hosted_access/infrastructure/session_store.py) | Per-workspace hosted-access store, despite older “administration” naming; not a central Admin registry. Reuse private-file/schema validation, generation/session and transaction concepts. Move all schema definitions to `application/database/hosted-access-migrations/`; runtime modules only invoke resources, bind tables and validate the store; H03 adapts from pending manual enrollment to verified invitation/claim. |
+| Hosted schema/session store | [current source baseline (H03.2 replacement)](../../../application/database/hosted-access-migrations/versions/access_0001_initial.py), [session_store.py](../../../application/apps/server/app/modules/hosted_access/infrastructure/session_store.py) | Per-workspace hosted-access store, despite older “administration” naming; not a central Admin registry. Reuse private-file/schema validation, generation/session and transaction concepts. Move all schema definitions to `application/database/hosted-access-migrations/`; runtime modules only invoke resources, bind tables and validate the store; H03 adapts from pending manual enrollment to verified invitation/claim. |
 | Identity adapter | [cloudflare_identity.py](../../../application/apps/server/app/modules/hosted_access/infrastructure/cloudflare_identity.py) | Older Access identity is not the central Google/email-link target. H03 adds qualified managed proof/handoff and keeps explicit operator actor/context checks. |
 | Storage admission | [storage_budget.py](../../../application/apps/server/app/modules/hosted_access/application/storage_budget.py) | Reuse fail-closed admission/error and cleanup concepts. Existing in-memory reservations/physical volume constants do not implement reproducible logical Free usage or crash-safe reservations. H04 adds source-bound accounting; H02 proves physical enforcement. |
 | Recovery publication | [recovery_publication.py](../../../application/apps/server/app/modules/hosted_access/infrastructure/recovery_publication.py) | Existing private JSON ledger/upload checks are inputs, not proof of unattended keys, new catalog, consistent incremental retention or full control-plane recovery. H05 qualifies and implements the new boundary. |
@@ -54,7 +54,7 @@ than linked as if they already exist.
 Accepted H02 decisions refine the structural handoff: H02 delivers the complete
 main-Admin baseline/FK closure and inventory baseline; H03–H05 retain owning application
 behavior/population and access/recovery resources. See the [H02 decisions](HOSTED_MVP_H02_DESIGN.md#resolved-design-decisions)
-and [schema catalog](../../database/README.md). H01 scaffold evidence remains unchanged.
+and [schema catalog](../../database/overview.md). H01 scaffold evidence remains unchanged.
 
 All executable schema definitions belong under `application/database/`, using the
 separate resource sets in the [schema master](../../database/overview.md#required-schema-definition-location).

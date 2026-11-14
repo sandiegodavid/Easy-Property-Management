@@ -17,7 +17,7 @@ No qualified hosted release or customer-access grant follows from infrastructure
 | What was tested, what failed, and what remains? | [Qualification and handoff](qualification-and-handoff.md) |
 
 These guides describe behavior and limits by topic. Commands remain in the linked
-executable runbooks; schema columns remain in the [database catalog](../../database/README.md).
+executable runbooks; schema columns remain in the [database catalog](../../database/overview.md).
 The [acceptance register](../qualification/HOSTED_MVP_ACCEPTANCE.md) owns release gates.
 Dated observations, original source/artifact pins and machine-readable results are
 preserved in the [evidence index](../qualification/reports/README.md#infrastructure-evidence-by-topic).
@@ -26,3 +26,9 @@ Their numbered filenames identify provenance, not a required reading order.
 The [archived planning snapshot](../archive/HOSTED_MVP_H02_PLANNING_2026-11-13.md)
 retains the earlier ordered plan. Use current guides for behavior and operations;
 use historical reports only with their recorded source, platform and scope.
+
+[Managed identity contract baseline](identity-contracts.md) records H03.1 selected
+inputs, ownership, pure checks and the provider/browser/native gates that remain open.
+
+[Identity persistence](identity-persistence.md) covers H03.2 resources, disabled binding,
+retained-data validation, cleanup and the retired initializer.

@@ -35,3 +35,8 @@ application/playwright-report/
 
 # Generated assets for the checkout-based production server.
 application/apps/server/app/web_build/
+
+# Compiled Admin identity UI.
+application/apps/server/app/admin_build/
+
+application/apps/server/app/central_build/

@@ -1,6 +1,6 @@
 # HOSTED-001 H02 — Container, storage and gateway foundation
 
-[Hosted design index](HOSTED_MVP_DESIGN.md) · [Topic guides](#topic-guides) · [Schema catalog](../../database/README.md)
+[Hosted design index](HOSTED_MVP_DESIGN.md) · [Topic guides](#topic-guides) · [Schema catalog](../../database/overview.md)
 
 Status: the infrastructure subset is delivered within its recorded component,
 native Linux/Docker and GCP qualification scopes. Final hosted-release promotion,
@@ -31,7 +31,7 @@ identities/workspaces are permitted during H02. Customer ingress stays held clos
 | Implementation source | Boundary |
 | --- | --- |
 | [H01 design/contracts](HOSTED_MVP_H01_DESIGN.md), `app.platform.hosted_contracts`, `modules/host_agent/application/contracts.py` | Shared values, manifests and scope/hash/outcome contracts support the typed ingress/fence/receipt boundary; type validation is not live authority. |
-| [Schema resources](../../../application/database/README.md), `app.platform.schema_resources` | The owning resources implement the complete main-Admin structural baseline under D1 and the inventory baseline/runner. The other three hosted sets still reject initialization. Missing access/recovery resources stay explicitly unavailable until their owners deliver them. |
+| [Schema resources](../../database/schema-resources.md), `app.platform.schema_resources` | The owning resources implement the complete main-Admin structural baseline under D1 and the inventory baseline/runner. The other three hosted sets still reject initialization. Missing access/recovery resources stay explicitly unavailable until their owners deliver them. |
 | [Selective quota reuse](../qualification/HOSTED_PROJECT_QUOTA_REUSE.md) | Ext4 primitives and adversarial workloads require new proof where imported pins differ; current scoped native/Docker/GCP results are indexed by topic. |
 | [Old hosted composition](../../../application/apps/server/app/bootstrap/hosted_access.py), [configuration](../../../application/apps/server/app/modules/hosted_access/application/configuration.py) | Old expiry, `hosted_demo`, Cloudflare Access identity and loop-image assumptions cannot serve as the fresh composition. Do not expose local routes by relaxing transport middleware. |
 | [Workspace runtime](../../../application/apps/server/app/modules/workspace/application/runtime.py) | Reuse writer-lock semantics; provide a protected stable lock location for hosted use. Its current parent-directory lock must not become an unbounded or changing path across business-tree replacement. |

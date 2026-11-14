@@ -21,6 +21,10 @@ The global request-validation handler maps declared size violations to 413 and o
 
 ## Commands and receipts
 
+For hosted operational envelopes, use the [shared hosted contract rules](hosted-contracts.md)
+for exact canonical serialization, semantic hashes, original outcomes and bounded
+continuations. Domain command/receipt behavior remains owned by the relevant module.
+
 Use the owning revision and key on consequential mutations. A receipt returns the original committed representation; current detail supplies current state. Receipts can have separate namespaces and APIs for different aggregates. Recovery GETs never rerun a command, publish a file or fetch provider credentials.
 
 OPS recovery registration is a separate browser integration contract. Registration alone does not enable a UI workflow. Prepare a valid canonical attempt, dispatch the owning command, then reconcile by the original key if the outcome is unknown. Preserve edits on conflict and require explicit source review before a new attempt.

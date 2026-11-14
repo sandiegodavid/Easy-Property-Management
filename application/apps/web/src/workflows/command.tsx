@@ -544,7 +544,7 @@ function CommandEditor({
     state.command === "outcome_unknown" ||
     state.command === "committed" ||
     state.draft === "conflicted";
-  async function dispatch(saved: Recovery) {
+  async function dispatch(saved: Recovery, headers?: Record<string, string>) {
     const key = saved.attemptKey;
     if (!key) throw new Error("Prepare the original command identity first.");
     return mutation<unknown>(async () => {
@@ -570,6 +570,7 @@ function CommandEditor({
         return api.POST("/api/intake/sources/import", {
           body: { metadata: "", files: [] },
           bodySerializer: () => body,
+          headers,
         });
       }
       if (evidence) {
@@ -598,6 +599,7 @@ function CommandEditor({
               idempotency_key: key,
             },
             bodySerializer: () => body,
+            headers,
           });
         }
         body.append("expected_revision", scalar(saved.payload.expectedRevision));
@@ -611,6 +613,7 @@ function CommandEditor({
             idempotency_key: key,
           },
           bodySerializer: () => body,
+          headers,
         });
       }
       const response = await dispatchWorkflow(
@@ -618,6 +621,7 @@ function CommandEditor({
         sourceId ?? "",
         scalar(saved.payload[definition.childKey ?? ""], childId),
         toBody(definition, saved.payload, key, sourceId),
+        headers,
       );
       const identifiers = record(record(response.error).detail).candidatePartyIds;
       const detail = record(record(response.error).detail);

@@ -80,7 +80,33 @@ def install_receipt_fences(connection):
         connection.exec_driver_sql(receipt_fence_sql(table.name))
 
 
+class PreparedEditRequired(Exception):
+    """A prepared business receipt must be written by its current draft editor."""
+
+
+def install_prepared_edit_guards(dbapi, namespaces, current_form):
+    """Install connection-local guards; portable workspaces need no SQL function."""
+    dbapi.create_function("epm_current_edit_form", 0, current_form)
+    for table, forms in namespaces.items():
+        registered = ", ".join(repr(form) for form in forms)
+        dbapi.execute(
+            f"""
+            CREATE TEMP TRIGGER IF NOT EXISTS epm_edit_{table}
+            BEFORE INSERT ON main.{table}
+            WHEN epm_current_edit_form() IS NOT '' AND EXISTS (
+                SELECT 1 FROM main.operator_recovery_records AS draft
+                WHERE draft.attempt_key = NEW.idempotency_key
+                    AND draft.form_key IN ({registered})
+                    AND draft.id IS NOT epm_current_edit_form()
+            )
+            BEGIN SELECT RAISE(ABORT, 'EPM prepared edit required'); END
+            """
+        )
+
+
 def raise_closed_attempt(context):
+    if "EPM prepared edit required" in str(context.original_exception):
+        raise PreparedEditRequired() from context.original_exception
     if "EPM submission closed" in str(context.original_exception):
         raise ClosedCommandError(
             "This submission was closed. Continue from the saved form."

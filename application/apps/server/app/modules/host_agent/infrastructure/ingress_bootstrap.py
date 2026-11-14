@@ -76,6 +76,7 @@ class IngressBootstrap:
         tunnel_files,
         *,
         contain_all,
+        project_ingress=None,
     ):
         self.inventory, self.gateway_settings, self.tunnel_settings = (
             inventory,
@@ -88,6 +89,13 @@ class IngressBootstrap:
             contain_all,
         )
 
+        self.project_ingress = project_ingress or (
+            lambda snapshot: (
+                closed_config(snapshot, self.gateway_settings),
+                tunnel_config(snapshot, self.tunnel_settings),
+            )
+        )
+
     def refresh(self):
         # The service runner must call this before *every* gateway start, not just
         # once on boot. No Admin RPC is needed to retain the current protected deny.
@@ -96,8 +104,7 @@ class IngressBootstrap:
                 snapshot = self.inventory.ingress_projection()
                 if self.gateway_settings.port != self.tunnel_settings.gateway_port:
                     raise HostAgentDenied()
-                gateway = closed_config(snapshot, self.gateway_settings)
-                tunnel = tunnel_config(snapshot, self.tunnel_settings)
+                gateway, tunnel = self.project_ingress(snapshot)
                 self.gateway_files.publish(gateway)
                 self.tunnel_files.publish(tunnel)
             except Exception as original:

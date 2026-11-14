@@ -27,9 +27,18 @@ class HostNetworkPrerequisites:
         return rows
 
     def verify(self, targets):
+        if self.settings.shared_identity is not None:
+            target = self.settings.shared_identity.bridge()
+            targets = (*targets, target)
+            pools = (
+                *self.settings.pools,
+                ipaddress.ip_network(target.ipv4),
+                ipaddress.ip_network(target.ipv6),
+            )
+        else:
+            pools = self.settings.pools
         owned = {target.name: target for target in targets}
         interfaces = {target.interface for target in targets}
-        pools = self.settings.pools
         for actual in self.engine.networks():
             if actual["Name"] in owned:
                 owned[actual["Name"]].verify(actual)

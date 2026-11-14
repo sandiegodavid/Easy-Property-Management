@@ -16,8 +16,7 @@ import pytest
 from scripts import release_demo as tool
 from demo.verify import EXPECTED
 from app.modules.hosted_access.application.configuration import HostedDeployment
-from app.modules.hosted_access.application.service import HostedAccessService
-from app.modules.hosted_access.domain.models import HostedAccessError, VerifiedIdentity
+from app.modules.hosted_access.domain.models import HostedAccessError
 from app.modules.hosted_access.infrastructure.session_store import SQLiteHostedSessionStore
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
@@ -305,63 +304,16 @@ def test_recovery_ledger_is_separate_and_rollback_restores_binding(reset_host, m
     assert tool.read_json(path) == original
 
 
-def old_session(identity, now):
-    deployment = HostedDeployment.model_validate(tool.read_json(tool.instance_paths("a")[2]))
-    SQLiteHostedSessionStore.initialize(deployment)
-    store = SQLiteHostedSessionStore(deployment)
-    try:
-        service = HostedAccessService(deployment, store, now=lambda: now)
-        with pytest.raises(HostedAccessError, match="approval"):
-            service.begin_session(identity)
-        store.activate(identity.subject)
-        grant = service.begin_session(identity)
-        store.disable(now)
-        with pytest.raises(HostedAccessError):
-            service.authenticate(identity, grant.token)
-        return grant
-    finally:
-        store.engine.dispose()
-
-
-def test_fresh_access_store_rejects_old_session_and_requires_approval_and_fresh_proof(reset_host):
+def test_reset_cannot_initialize_retired_cloudflare_store(reset_host):
     args, plan = planned(reset_host)
     restored_plan(args, plan)
     deployment = HostedDeployment.model_validate(tool.read_json(plan["candidate_hosted"]))
-    SQLiteHostedSessionStore.initialize(deployment)
-    store = SQLiteHostedSessionStore(deployment)
-    try:
-        now = datetime.now(UTC)
-        store.disable(now)
-        service = HostedAccessService(deployment, store, now=lambda: now + timedelta(seconds=3))
-        old_proof = VerifiedIdentity(
-            deployment.identity_issuer,
-            "verified-operator",
-            deployment.allowed_email,
-            now - timedelta(minutes=1),
-            now + timedelta(hours=1),
-            "a" * 64,
-        )
-        old_grant = old_session(old_proof, now)
-        with pytest.raises(HostedAccessError, match="approval"):
-            service.begin_session(old_proof)
-        with pytest.raises(HostedAccessError):
-            service.authenticate(old_proof, old_grant.token)
-        store.activate("verified-operator")
-        with pytest.raises(HostedAccessError, match="Fresh sign-in"):
-            service.begin_session(old_proof)
-        fresh = VerifiedIdentity(
-            deployment.identity_issuer,
-            "verified-operator",
-            deployment.allowed_email,
-            now + timedelta(seconds=1),
-            now + timedelta(hours=1),
-            "b" * 64,
-        )
-        grant = service.begin_session(fresh)
-        actor = service.authenticate(fresh, grant.token)
-        assert actor.workspace_id == plan["workspace_id"]
-    finally:
-        store.engine.dispose()
+    target = deployment.administration_database
+    assert not target.exists()
+    with pytest.raises(HostedAccessError) as caught:
+        SQLiteHostedSessionStore.initialize(deployment)
+    assert caught.value.code == "hosted_access_unavailable"
+    assert not target.exists()
 
 
 def test_existing_administration_destination_is_never_replaced(reset_host):

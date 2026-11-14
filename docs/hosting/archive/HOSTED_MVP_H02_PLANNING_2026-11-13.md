@@ -6,7 +6,7 @@
 
 # HOSTED-001 H02 — Container, storage and gateway foundation
 
-[Hosted design index](../design/HOSTED_MVP_DESIGN.md) · [Ordered delivery plan](#h02-implementation-plan) · [Schema catalog](../../database/README.md)
+[Hosted design index](../design/HOSTED_MVP_DESIGN.md) · [Ordered delivery plan](#h02-implementation-plan) · [Schema catalog](../../database/overview.md)
 
 Status: design decisions accepted November 11, 2026; H02.1 candidate baseline, H02.2 structural resources, H02.3 private dispatch boundary, H02.4 separate candidate packaging, H02.5 private storage/runtime guardian and H02.6 ingress/network/secret boundary delivered within their component scopes.
 Later implementation and AMD64/cloud qualification remain open. H02.1–H02.6 made

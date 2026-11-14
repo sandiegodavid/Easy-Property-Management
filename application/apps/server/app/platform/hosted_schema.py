@@ -19,6 +19,8 @@ from sqlalchemy import Connection, create_engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.pool import NullPool
 
+from app.modules.hosted_access.infrastructure.schema_validation import validate_identity_records
+
 from app.platform.schema_resources import (
     HostedStore,
     IMPLEMENTED_REVISIONS,
@@ -131,6 +133,10 @@ def validate_schema(
         raise HostedSchemaError()
     if connection.exec_driver_sql("PRAGMA main.quick_check").all() != [("ok",)]:
         raise HostedSchemaError()
+    try:
+        validate_identity_records(connection, store)
+    except (ValueError, TypeError, RecursionError) as error:
+        raise HostedSchemaError() from error
     return sha256(repr(expected).encode()).hexdigest()
 
 

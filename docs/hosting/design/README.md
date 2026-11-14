@@ -11,7 +11,7 @@ The MVP design is a navigation index backed by focused guides in `mvp/`. Start w
 then the [delivery plan](mvp/delivery-plan.md). Use [recovery](mvp/recovery.md),
 [storage/subscriptions](mvp/subscriptions-storage-and-runtime.md) and
 [releases](mvp/releases.md) for specific workflows. The
-[schema catalog](../../database/README.md) links to separate per-store dictionaries.
+[schema catalog](../../database/overview.md) links to separate per-store dictionaries.
 
 | Reference | Status |
 | --- | --- |
@@ -26,7 +26,7 @@ release-compatibility and post-reopen data-preservation requirements. [HOSTED-00
 ## H01 implementation handoff
 
 - [H01 detailed design](HOSTED_MVP_H01_DESIGN.md): current-code inventory, deployment/source contracts, Admin-lite UI and proof plans.
-- [Database schema master](../../database/README.md): shared store ownership and table/column dictionary; proposed hosted schema is not implemented.
+- [Database schema master](../../database/overview.md): shared store ownership and table/column dictionary; proposed hosted schema is not implemented.
 
 ## Container, storage and gateway foundation
 

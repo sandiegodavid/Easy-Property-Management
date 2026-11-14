@@ -26,6 +26,7 @@ class HostedStore(StrEnum):
 IMPLEMENTED_REVISIONS = {
     HostedStore.ADMIN: "admin_0001_initial",
     HostedStore.HOST_INVENTORY: "host_inventory_0001_initial",
+    HostedStore.HOSTED_ACCESS: "access_0001_initial",
 }
 
 

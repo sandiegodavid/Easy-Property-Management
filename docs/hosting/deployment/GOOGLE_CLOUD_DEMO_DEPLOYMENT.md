@@ -313,7 +313,7 @@ new key to compensate.
 
 ### Initialize or restore portfolios
 
-Use [demo/seed.py and verify.py](../../../application/demo/README.md) for separate
+Use [demo/seed.py and verify.py](../../development/demo-workspace.md) for separate
 current-format synthetic portfolios; never generate B by duplicating A's identity. Set
 `/var/lib/epm-<instance>/hosted-local.json` to the corresponding mounted
 `/var/lib/epm-<instance>/volume/workspace`. The seed catalog/journal directory is also

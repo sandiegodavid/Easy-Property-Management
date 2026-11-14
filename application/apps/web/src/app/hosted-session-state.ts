@@ -3,10 +3,16 @@ import { api } from "@epm/contracts";
 let csrf: string | undefined;
 let blocked = true;
 
+function deployment() {
+  return document.querySelector('meta[name="epm-deployment"]')?.getAttribute("content");
+}
+
+export function managedHostedMode() {
+  return deployment() === "hosted_managed";
+}
+
 export function hostedMode() {
-  return (
-    document.querySelector('meta[name="epm-deployment"]')?.getAttribute("content") === "hosted_demo"
-  );
+  return managedHostedMode() || deployment() === "hosted_demo";
 }
 
 export function hostedWritesAllowed() {

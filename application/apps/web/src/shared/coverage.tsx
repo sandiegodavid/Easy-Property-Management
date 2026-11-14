@@ -241,13 +241,14 @@ function ReviewEditor({
         }),
       ),
   });
-  async function dispatch(record: Recovery) {
+  async function dispatch(record: Recovery, headers?: Record<string, string>) {
     const values = record.payload;
     const result = await mutation(() =>
       api.POST("/api/operator/coverage/{kind}/{subject_id}/{area}/reviews", {
         params: {
           path: { kind: current.subjectKind, subject_id: current.subjectId, area: current.area },
         },
+        headers,
         body: {
           expectedEvidenceRevision: String(values.expectedEvidenceRevision),
           basis: values.basis === "not_applicable" ? "not_applicable" : "acknowledged",
