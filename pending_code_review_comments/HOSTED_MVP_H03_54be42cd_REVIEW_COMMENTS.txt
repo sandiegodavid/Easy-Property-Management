@@ -1,0 +1,170 @@
+Review: commit 54be42cd (H03.1-H03.11 impl, H03.12 partial) against docs/hosting/design/HOSTED_MVP_H03_DESIGN.md
+Review date: 2026-11-22
+Branch: hosted_mvp
+
+
+Gateway, host_agent and hosted qualification
+
+1. [P1] Unconditional X-Forwarded-For rejection in Caddy auth routes breaks all Cloudflare Tunnel traffic
+File: application/apps/server/app/modules/host_agent/infrastructure/auth_projection.py:95-105
+Related: application/apps/server/app/modules/host_agent/infrastructure/auth_projection.py:121-126
+
+_route() places "X-Forwarded-For" in the unconditional "not" header matcher. Cloudflare Edge adds X-Forwarded-For to every proxied request forwarded through cloudflared, so all public requests to admin_origin, central_origin and held operator auth routes fail the matcher and fall through to Caddy's terminal 403. Lines 121-126 already strip X-Forwarded-For and Cf-Connecting-Ip before proxying upstream. Remove "X-Forwarded-For" from the unconditional "not" matcher and instead validate in the CEL expression that a single X-Forwarded-For header equals Cf-Connecting-Ip (rejecting mismatches, repeated headers, comma-separated lists or missing Cf-Connecting-Ip), while continuing to strip X-Forwarded-For and Cf-Connecting-Ip upstream (and deleting X-Epm-Client-Network on routes other than POST /auth/email-link).
+
+2. [P1] Gateway.auth_effect wipes shared identity and all other operators' auth routes on any failure, including inspect_only=True
+File: application/apps/server/app/modules/host_agent/infrastructure/gateway.py:195-234
+Related: application/apps/server/app/modules/host_agent/infrastructure/gateway.py:245-252
+
+Any exception inside Gateway.auth_effect() — including a HostAgentUnavailable mismatch during read-only inspect_only=True (line 225) or a transient Caddy admin error — enters the except block at lines 226-234 and calls self._with_containment(..., lambda: self.admin.load(closed_config(...))). Loading closed_config() instead of self._snapshot() strips all shared identity routes (admin_origin, central_origin) and all other operators' held auth routes from Caddy, causing a host-wide auth outage from a single operator's failure. In addition, _with_containment() stops the operator container even when inspect_only=True was only inspecting a pending/unknown receipt. When inspect_only=True, do not mutate Caddy or contain the container on inspection mismatch. When inspect_only=False, roll back Caddy with self._snapshot() (without proposed) so shared identity and other verified bindings remain live, falling back to closed_config() only if self._snapshot() itself fails.
+
+3. [P2] Inventory.can_inspect fails to fence obsolete apply_auth_routes retries
+File: application/apps/server/app/modules/host_agent/infrastructure/inventory.py:841-860
+Related: application/apps/server/app/modules/host_agent/infrastructure/inventory.py:246,274-278
+
+can_inspect() checks ingress_bindings.operation_id == command.effect.child_id() only for apply_ingress_policy (lines 857-858) and falls through to resource_bindings.revision == command.expected_revision for apply_auth_routes. Because _current() permits apply_ingress_policy while an apply_auth_routes receipt is pending/unknown and apply_ingress_policy increments ingress_bindings.revision without changing resource_bindings.revision or access_epoch, a subsequent retry of the obsolete apply_auth_routes receipt passes can_inspect(), then fails in Gateway.auth_effect() with HostAgentDenied. Add an explicit apply_auth_routes branch in can_inspect() requiring row["desired_state"] == "held", row["revision"] == command.payload.expected_ingress_revision + 1 and self._binding(connection, command)["revision"] == command.expected_revision.
+
+4. [P2] probe_as_gateway drops UID without dropping GID, leaving the probe running as gid=0
+File: application/apps/server/app/modules/host_agent/infrastructure/shared_identity_registration.py:139-152
+
+probe_as_gateway() invokes subprocess.run(..., user=uid, extra_groups=[]) from root-owned ServiceRuntime without passing group=. In Python's subprocess.run(), setting user= without group= calls setuid() but not setgid(), leaving the TLS/HTTP probe child running with gid=0 (root). Pass group=gid (the epm-caddy GID) alongside user=uid.
+
+5. [P2] Qualification scripts permit false-positive passes on Cloudflare headers, post-drift gateway denial and group permissions
+File: application/deploy/hosted-mvp/gateway/qualify_shared_identity.py:143-168,343,364,379-387,415,457
+Related: application/deploy/hosted-mvp/gateway/qualify_identity_reboot.py:202-224,260-266
+
+(a) probe_gate() only sends Host and X-Forwarded-Proto: https, omitting the X-Forwarded-For and Cf-Connecting-Ip headers emitted by Cloudflare Edge, so qualification passes despite Finding 1. Test matching Cf-Connecting-Ip + X-Forwarded-For (200) and mismatched/repeated/comma-separated/missing cases (403).
+(b) qualify_identity_reboot.py:260-266 checks only that "reverse_proxy" is absent from caddy_path after mutating admin.sqlite and running bootstrap.refresh(); it never starts Caddy with the closed config to verify live 403 denial or confirms ServiceRuntime.run("verify-shared") rejects the drifted state.
+(c) qualify_shared_identity.py:166,343,364,415,457 pass user= without group=, running qualification children with gid=0 and masking group-permission errors.
+
+
+Central identity, handoffs, invitations and admin schema
+
+6. [P1] email_continuations_immutable trigger aborts CentralLogin._persist when tightening expires_at
+File: application/database/admin-migrations/versions/admin_0001_initial.py:775-776,788-789
+Related: application/apps/server/app/modules/hosted_access/infrastructure/central_login.py:128-130,224-232; application/apps/server/app/modules/hosted_access/infrastructure/schema_validation.py:138-140
+
+admin_0001_initial.py:775-776 registers expires_at as an immutable column in the email_continuations_immutable BEFORE UPDATE trigger. However, CentralLogin._persist() (central_login.py:227-231) executes UPDATE main.email_continuations SET managed_session_id=:session, state='verified', expires_at=min(expires_at,:until), revision=revision+1 WHERE continuation_id=:id. Whenever proof.expires_at < continuation["expires_at"], SQLite aborts with IntegrityError ("immutable hosted record"), which complete_email() catches to mark the continuation 'unknown' and fail the login after the single-use email code has already been consumed. Remove expires_at from the immutable list for email_continuations and replace it with a monotonic-tightening guard (rejecting NEW.expires_at > OLD.expires_at or any change once OLD.managed_session_id IS NOT NULL), or stop mutating expires_at and validate bounds on read/write consistently with schema_validation.py:140.
+
+7. [P1] Multi-device warm RevocationCache hits cause CentralSessionAuthority.observe to falsely fail with ProviderUnavailable
+File: application/apps/server/app/modules/hosted_access/infrastructure/central_session_authority.py:60-76
+Related: application/apps/server/app/modules/hosted_access/infrastructure/provider_status.py:48-56; application/apps/server/app/modules/hosted_access/infrastructure/central_login.py:219
+
+RevocationCache.account_status() caches one StatusObservation per (realm, subject) for 5 minutes across all devices. When Device B signs in while Device A's cache entry is warm, central_login.py:219 stores revocation_checked_at = max(proof.issued_at, observation.checked_at), so managed_identity_sessions.issued_at is newer than the cached status.checked_at. Subsequent CentralSessionAuthority.observe() calls for Device B hit the warm cache and fail the check row["issued_at"] <= status.checked_at <= now < min(until, row["remembered_until"]) (lines 70-76), returning ProviderUnavailable (503) for up to 5 minutes and failing to apply cached revocations during that window. Validate status.checked_at <= now, clamp checked_at = max(row["issued_at"], status.checked_at) before checking row["issued_at"] <= checked_at <= now < min(until, row["remembered_until"]), and use checked_at for the revocation_checked_at update.
+
+8. [P1] Paired email-continuation replacement login_attempts rows are never transitioned to 'completed', permanently leaking attempts and managed_identity_sessions
+File: application/apps/server/app/modules/hosted_access/infrastructure/central_handoffs.py:506-532
+Related: application/apps/server/app/modules/hosted_access/infrastructure/central_pairing.py:133,200-206; application/apps/server/app/modules/hosted_access/infrastructure/identity_cleanup.py:51,56; application/database/admin-migrations/versions/admin_0001_initial.py:628
+
+CentralPairing._write() inserts the replacement login_attempts row with state='verified' and parent_managed_session_id pointing to the managed session. CentralHandoffs.acknowledge() transitions identity_commands -> 'succeeded', login_handoffs -> 'redeemed' and email_continuations -> 'completed', but never transitions the replacement login_attempts row (row["attempt_id"]) from 'verified' to 'completed'. Because identity_cleanup.py:51 only deletes attempts in ('completed','failed','superseded','expired') and login_attempts.parent_managed_session_id has an ON DELETE RESTRICT FK (identity_cleanup.py:56), both the attempt row and its managed_identity_sessions row are permanently retained and the redeemed attempt continues counting against the 32-attempt cap until expires_at. Transition the attempt in CentralHandoffs.acknowledge() inside the same immediate_transaction: UPDATE main.login_attempts SET state='completed', revision=revision+1 WHERE attempt_id=:id AND state='verified'.
+
+9. [P2] Unclaimed operator Google login skips email_key verification, allowing any realm Google account to mint a central managed session
+File: application/apps/server/app/modules/hosted_access/infrastructure/central_login.py:134-140,156-159
+Related: application/apps/server/app/modules/hosted_access/infrastructure/central_attempts.py:38
+
+For method="google", central_attempts.start() stores email_key=None so line 137 does not verify email_key. When the operator has not yet been claimed (assignment["subject"] is None), line 158 also skips the subject check. Any Google account in the same Firebase project can therefore complete a Google login attempt for an unclaimed operator, mint a live managed_identity_sessions row under that operator_id, mark the attempt 'completed' and receive a __Host-epm-central cookie (even though invitation claim and handoff still reject the wrong email later). When expected_subject is None at line 158, enforce proof.email_key == assignment["email_key"] before creating the managed session.
+
+10. [P2] CentralInvitations._claim leaves identity_commands stuck 'pending' on ProviderDenied and raises unhandled IntegrityError on duplicate (issuer, subject)
+File: application/apps/server/app/modules/hosted_access/infrastructure/central_invitations.py:264-328
+Related: application/database/admin-migrations/versions/admin_0001_initial.py:158-164
+
+Lines 264-303 commit invitations.state='claimed', operators.subject and identity_commands(state='pending') before calling self.source_claim.claim() at line 318.
+(a) Lines 325-327 only catch ProviderUnavailable; if source_claim.claim() raises ProviderDenied (e.g., source epoch/fence changed), identity_commands remains permanently 'pending' (blocking cleanup_identity forever) while operators.subject stays permanently bound. Catch ProviderDenied and transition the command out of 'pending' (e.g., to 'unknown' pending source-receipt reconciliation).
+(b) If (managed["issuer"], managed["subject"]) is already bound to another operator, UPDATE main.operators SET subject=:subject hits the unique index operators_subject and raises an unhandled IntegrityError (HTTP 500) instead of ProviderDenied (HTTP 401). Catch IntegrityError on the claim transaction and raise ProviderDenied().
+
+11. [P3] POST /auth/complete runs synchronous SQLite I/O on the async event loop and can drop the central cookie or overwrite claim_needs_checking
+File: application/apps/server/app/modules/hosted_access/api/central_identity.py:252-259
+
+After run_in_threadpool(service.complete_google, ...) succeeds, lines 253-254 open service.engine.connect() and call service.attempts.attempt() directly on the async event loop. If expires_at elapses right after complete_google commits, attempts.attempt() raises ProviderDenied (401) and discards the CentralCompletion cookie for an already-committed session. Moreover, if complete_google returned {"claim": {"state": "claim_needs_checking"}} while google_ready() is True, lines 256-258 overwrite result.result with {"state": "verified", "handoffAttempt": value.attemptId}, hiding the unresolved claim state. Return operator_id on CentralCompletion (avoiding the second DB lookup and expiry re-check) and only promote to verified+handoffAttempt when no pending/unready claim state is present.
+
+
+Admin identity, destination entry and Firebase provider
+
+12. [P1] Unauthenticated GET /auth/start on both Admin and Operator origins allows trivial 15-minute global sign-in lockout DoS
+File: application/apps/server/app/modules/hosted_access/infrastructure/admin_sessions.py:143-172
+Related: application/apps/server/app/modules/hosted_access/api/admin_identity.py:107-112; application/apps/server/app/modules/hosted_access/api/destination_identity.py:90-155; application/apps/server/app/modules/hosted_access/infrastructure/destination_identity.py:136-144
+
+Both Admin GET /auth/start (global cap 128 in main.login_attempts) and Operator GET /auth/start (global cap LIVE_SESSION_CAP=32 in main.source_login_attempts) are unauthenticated, unthrottled GET endpoints that insert durable 15-minute pending rows and fail closed with ProviderDenied (401) for all callers once the global count is reached. Any unauthenticated remote caller (or cross-site subresource request) can send 32 or 128 GET requests in under a second to lock out all legitimate Admin or Operator sign-ins, renewals and email-link continuations indefinitely. Rate-limit GET /auth/start per client network, and either use a stateless signed challenge cookie for pre-auth browser binding or evict the oldest unredeemed anonymous pending attempt (keeping authenticated renewals/continuations in a separate budget). Also prune expired admin_login attempts so login_attempts does not grow unbounded.
+
+13. [P1] Zero clock-skew tolerance breaks legitimate Firebase sign-ins under normal NTP drift
+File: application/apps/server/app/modules/hosted_access/infrastructure/firebase_tokens.py:218-223
+Related: application/apps/server/app/modules/hosted_access/infrastructure/firebase_rest.py:341-342; application/apps/server/app/modules/hosted_access/application/admin_admission.py:35; application/apps/server/app/modules/hosted_access/infrastructure/admin_sessions.py:206
+
+Token and cookie timestamp checks enforce strict zero-skew bounds: authenticated <= issued <= now < expires and nbf <= now (firebase_tokens.py:220-222), proof.expires_at <= int(clock() * 1000) + duration * 1000 (firebase_rest.py:341), and authenticated_at + 999 >= row["created_at"] (admin_sessions.py:206). Because Firebase mints tokens using Google's server clock, even a 1-second NTP lag on the host causes issued <= now and the createSessionCookie expiry check to reject 100% of fresh Admin and Operator sign-ins with ProviderDenied (401); a >1s lead rejects fresh logins at admin_sessions.py:206. Apply a small bounded clock-skew leeway (e.g., 5-30 seconds) to these cross-host timestamp comparisons.
+
+14. [P1] CertificateCache._certificates rejects the entire Google key bundle if any single certificate is outside [not_valid_before, not_valid_after)
+File: application/apps/server/app/modules/hosted_access/infrastructure/firebase_tokens.py:105-127
+
+_certificates() iterates over all kid -> pem entries returned by Google's X.509 certificate endpoints and raises ValueError() (mapped to ProviderUnavailable / 503) if any single entry has now < not_valid_before_utc or now >= not_valid_after_utc. During Google's routine key rotation, pre-published upcoming certs or recently expired edge-cached certs are routinely present alongside the active signing key; a single out-of-window certificate takes down all Admin and Operator authentication globally. Skip individual certificates whose validity window does not cover now (still rejecting malformed PEMs, non-RSA or <2048-bit keys) and raise ValueError() only if no valid certificates remain.
+
+15. [P2] CertificateCache.key holds self.lock across blocking 5s subprocess I/O and allows unknown-kid probes to stall verifications and block key rotation
+File: application/apps/server/app/modules/hosted_access/infrastructure/firebase_tokens.py:76-102
+
+FirebaseTokenVerifier._verify() calls cache.key(header.get("kid")) before verifying the signature, and CertificateCache.key() runs self.fetch() (subprocess + up to 5s HTTPS I/O) while holding self.lock, unconditionally setting self.retry_at = now + 60. An unauthenticated caller sending one forged JWT with a bogus kid every 60 seconds stalls all concurrent token verifications (including cached kids) for the duration of the fetch and blocks legitimate newly rotated Google keys for 60 seconds. Release self.lock during self.fetch() using a single-flight Event (matching RevocationCache) so cached kid lookups never block on refresh.
+
+16. [P2] FirebaseRest.create_session_cookie omits tenantId, breaking multi-tenant Identity Platform realms
+File: application/apps/server/app/modules/hosted_access/infrastructure/firebase_rest.py:138-143,322-329
+
+While IdentityRealm.tenant_id, FirebaseTokenVerifier._claim_checks(), FirebaseRest._public() and FirebaseRest._lookup_status() all support tenant_id, create_session_cookie() posts only {"idToken": ..., "validDuration": ...} to /v1/projects/{project}:createSessionCookie without tenantId or the /tenants/{tenant_id} path (and allowed_endpoint() at line 140 does not permit the tenant path). Multi-tenant realms fail with HTTP 400 TENANT_ID_MISMATCH. Include tenantId (or target the tenant path and allow it in allowed_endpoint()) when self.setup.realm.tenant_id is set.
+
+17. [P2] Server-credential HTTP 401/403 responses and corrupt worker stdout map to ProviderDenied (401) instead of ProviderUnavailable (503)
+File: application/apps/server/app/modules/hosted_access/infrastructure/firebase_rest.py:105-110,188-190
+
+_SocketHttp.request() maps HTTP 401 and 403 from identitytoolkit.googleapis.com to ProviderDenied() (401). On server-authenticated Google endpoints (accounts:lookup, :createSessionCookie), HTTP 401 indicates an expired/invalid server OAuth2 bearer token and HTTP 403 indicates IAM/API-key misconfiguration rather than rejected user credentials (HTTP 400); a brief server token refresh lag falsely kicks out active Admins with 401 instead of 503. Likewise, ProviderHttp.request() (line 188) does not convert ProviderDenied from unique_json(result.stdout) into ProviderUnavailable(). Map server-auth HTTP 401/403 and worker stdout parse failures to ProviderUnavailable().
+
+18. [P2] admin_entry.py bypasses run_identity_tls private-key permission checks, port bounds and ws="none"
+File: application/apps/server/app/modules/hosted_access/infrastructure/admin_entry.py:126-141
+Related: application/apps/server/app/modules/hosted_access/infrastructure/tls_candidate.py:8-21
+
+Unlike shared_identity_entry.py and operator_entry.py, admin_entry.py:main() calls uvicorn.run() directly without validating private_file(args.tls_key), without enforcing 1 <= args.port <= 65535 and without passing ws="none". Delegate startup to run_identity_tls(create_app(args.configuration), IPv4Address("127.0.0.1"), args).
+
+19. [P3] FirebaseRest.send_email_link consumes rate-limit quota before validating attempt_id
+File: application/apps/server/app/modules/hosted_access/infrastructure/firebase_rest.py:255-273
+
+self.rate_admission.reserve_email() runs at line 259 before attempt_id is validated as a canonical UUID at lines 265-273 (and email_key() is called redundantly on line 261). Requests with an invalid attempt_id consume durable email rate-limit quota before raising ProviderDenied(). Validate attempt_id before calling reserve_email() and remove the duplicate email_key() call.
+
+
+Operator security, managed business and bootstrap
+
+20. [P2] OperatorSecurity.sign_out hashes unsynchronized meta["revision"], breaking idempotent retry for selection="other" and causing false 401 signed_out under concurrent writes
+File: application/apps/server/app/modules/hosted_access/infrastructure/operator_security.py:140-174
+Related: application/apps/server/app/modules/hosted_access/infrastructure/source_lifecycle.py:97-102,133-150; application/apps/server/app/modules/hosted_access/api/operator_security.py:100
+
+sign_out() reads meta["revision"] in a separate read transaction, hashes it into command.request_hash via _command(..., meta["revision"], target), closes the connection, and then calls self.lifecycle.execute().
+(a) If the HTTP response to selection="other" is lost after commit and the client retries with the same (operation, proof, selection, device), meta["revision"] has advanced from R to R+1; SourceLifecycle._retained() sees a request_hash mismatch and returns HTTP 409 rejected instead of the original outcome.
+(b) If another device or admin command commits between lines 144 and 159, expected_revision != meta["revision"] raises ProviderDenied, which api/operator_security.py:100 maps to HTTP 401 signed_out even though the caller's session is still valid.
+Check for a retained revoke_sessions receipt for (operation, key) first (reusing source_revision - 1 as check_sign_out() does at line 204), or build and execute the Revoke command atomically inside self.owner.mutation().
+
+21. [P2] POST /api/hosted/drafts/{record_id}/lease raises unhandled HostedAccessError (HTTP 500) in local mode
+File: application/apps/server/app/modules/hosted_access/api/draft_leases.py:34-36
+Related: application/apps/server/app/bootstrap/api.py:838-840; application/apps/server/app/modules/hosted_access/infrastructure/operator_identity_runtime.py:186-193
+
+In local mode, bootstrap/api.py:840 mounts build_draft_lease_router() with service=None, but no HostedAccessError exception handler is registered on app. Calling POST /api/hosted/drafts/{record_id}/lease raises HostedAccessError(..., 404) at draft_leases.py:36 and produces HTTP 500 instead of HTTP 404. Raise api_problem(404, "hosted_mode_required", "Hosted drafts are not enabled.") when service is None (matching api/router.py:40), or register a HostedAccessError handler in register_api_error_handlers(app).
+
+22. [P3] ManagedBusiness.dispatch attempts a second ASGI http.response.start if an error occurs after streaming begins
+File: application/apps/server/app/modules/hosted_access/api/managed_business.py:195-222
+
+ManagedBusiness.dispatch() catches (ProviderDenied, ProviderUnavailable, HostedAccessError) around await app(scope, replay, private_send) and calls await business_error(error)(scope, receive, send) without tracking whether http.response.start was already sent. If an error occurs mid-stream (e.g., ENOSPC/EDQUOT or ProviderUnavailable), sending a second response start raises an ASGI RuntimeError. Track response_started in private_send and re-raise when response_started is True.
+
+23. [P3] owned_identity_socket cleanup raises FileNotFoundError if the socket path was already unlinked
+File: application/apps/server/app/modules/hosted_access/infrastructure/shared_identity_entry.py:150-152
+
+The finally block runs path.lstat().st_ino == inode without catching FileNotFoundError. If the socket file was already removed before shutdown, teardown raises FileNotFoundError and masks any original exception. Wrap the lstat()/unlink() cleanup in try ... except FileNotFoundError: pass (matching identity_relay.py:279).
+
+
+Operator web UI (apps/web)
+
+24. [P1] Permanent UI deadlock (persisted across reloads) when managed sign-out fails before receipt commit or exceeds CHECK_WINDOW
+File: application/apps/web/src/app/managed-security.tsx:104-107,157-159,353-394,444,456,463,545-554
+Related: application/apps/server/app/modules/hosted_access/infrastructure/operator_security.py:176-197
+
+revoke() persists the sign-out intent to sessionStorage via remember(intent) and immediately transitions current/all sign-outs to phase="signed_out". If POST /api/hosted/session/logout fails before the server commits a receipt (network drop, 502/503, 401/403/409), POST /api/hosted/session/logout/check returns HTTP 200 {"state": "unknown"} (operator_security.py:191-192) — or HTTP 401 after the 15-minute CHECK_WINDOW (lines 195-197). Because managed-security.tsx:378-387 only calls remember(null) when response.ok && result.state === "confirmed", pending is never cleared: check() exits early (line 158), "Start sign-in" stays hidden (line 545), no retry/clear button is offered, and loadPending() restores the deadlock from sessionStorage across page reloads (while leaving the server session cookie unrevoked). For selection="other", all sign-out buttons remain disabled for the tab's lifetime. Handle state === "unknown" and terminal 401/403 from /logout/check by offering a retry or clearing pending and re-checking session state.
+
+25. [P2] RecoveryController.returnToEditing() never clears pendingReturn on definite 4xx failure, permanently blocking review/retry
+File: application/apps/web/src/shared/recovery.ts:245,369,491-514
+
+Unlike prepare(), reconcileAttempt() and discard(), returnToEditing() does not clear this.pendingReturn in its catch block (lines 504-507) when error instanceof MutationFailure && !error.outcomeUnknown. After a definite 4xx error (e.g., 409 lease or revision conflict), this.pendingReturn remains stuck with the stale expectedRevision, blocking reviewSavedForm() (line 245) and reviewLatest() (line 369) and causing every subsequent returnToEditing() call to fail with the same stale revision. Clear this.pendingReturn = undefined when error instanceof MutationFailure && !error.outcomeUnknown.
+
+26. [P2] RecoveryController.replay() and discard() omit checkAuthority(error), leaving stale draft leases cached after takeover
+File: application/apps/web/src/shared/recovery.ts:274-282,549-563,564-610
+
+Unlike saveLoop(), submit(), reconcile() and returnToEditing(), neither replay() (lines 549-563) nor discard() (lines 599-606) calls this.checkAuthority(error). If another tab/device takes over the draft lease while this tab holds a cached leaseToken, clicking replay or discard fails with 409 hosted_draft_lease_conflict without clearing leaseToken or setting editAuthority="required", so the UI never prompts the operator to reclaim editing until leaseExpires elapses. Call this.checkAuthority(error) in both replay() and discard() catch blocks.
