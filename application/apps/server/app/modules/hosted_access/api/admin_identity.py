@@ -14,6 +14,7 @@ from app.modules.hosted_access.application.managed_provider import (
 )
 from app.modules.hosted_access.api.start_rate import StartRateLimiter
 from app.modules.hosted_access.infrastructure.admin_sessions import AdminSessions
+from app.modules.hosted_admin.api.router import build_admin_lite_router
 
 MAX_BODY = 20000
 
@@ -24,6 +25,7 @@ def build_admin_identity_app(
     web_config=None,
     ui_directory: Path | None = None,
     start_limiter: StartRateLimiter | None = None,
+    admin_control=None,
 ) -> FastAPI:
     app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
     app.router.redirect_slashes = False
@@ -180,6 +182,16 @@ def build_admin_identity_app(
         response = JSONResponse({"message": "Signed out."})
         response.delete_cookie(cookies.admin, secure=True, httponly=True, samesite="lax")
         return response
+
+    if admin_control is not None:
+        app.include_router(
+            build_admin_lite_router(
+                admin_control,
+                sessions,
+                read_cookie=cookie,
+                read_body=body,
+            )
+        )
 
     if ui_directory is not None:
 

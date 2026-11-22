@@ -38,7 +38,7 @@ SMALL_BODY = 1024 * 1024
 @dataclass(frozen=True)
 class ManagedBusinessInputs:
     readiness: Callable[[], bool]
-    storage: HostedStorageBudget
+    storage: object
     files: bool = False
 
 
@@ -193,10 +193,14 @@ class ManagedBusiness:
                     validate_commit()
                     yield validate_commit
 
+            reservation_outcome = None
+
             async def private_send(message):
                 nonlocal response_started
                 if message["type"] == "http.response.start":
                     response_started = True
+                    if reservation_outcome is not None:
+                        reservation_outcome.status_code = message["status"]
                     headers = [
                         (name, value)
                         for name, value in message["headers"]
@@ -209,7 +213,18 @@ class ManagedBusiness:
                     ]
                 await send(message)
 
-            with self.inputs.storage.reserve(size, write=write):
+            if hasattr(self.inputs.storage, "reserve_request"):
+                storage_context = self.inputs.storage.reserve_request(
+                    size,
+                    write=write,
+                    source_epoch=session.access_epoch,
+                    purpose="file_upload" if files else "business_write",
+                )
+            else:
+                storage_context = self.inputs.storage.reserve(size, write=write)
+
+            with storage_context as outcome_handle:
+                reservation_outcome = outcome_handle
                 async with bounded_body(receive, max_bytes=size) as replay:
                     with (
                         operator_actor_scope(actor),

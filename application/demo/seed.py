@@ -1,16 +1,16 @@
 """Create a synthetic demo through the real API, with resumable safe writes."""
 
 import argparse
-import json
 from datetime import UTC, date, datetime, timedelta
 from http import HTTPStatus
+import importlib
+import json
 from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
 from zoneinfo import ZoneInfo
 
 from app.bootstrap.api import create_app
 from app.modules.workspace.application.service import WorkspaceService
-from app.platform.testing_client import LocalApiClient
 
 HERE = Path(__file__).resolve().parent
 TIMEZONE = "America/Los_Angeles"
@@ -570,7 +570,8 @@ def main():
     args = parser.parse_args()
     service, config, journal, runtime, as_of = prepare(args)
     plan = json.loads((HERE / "dataset.json").read_text())
-    with LocalApiClient(create_app(config)) as client:
+    local_client_cls = importlib.import_module("app.platform.testing_client").LocalApiClient
+    with local_client_cls(create_app(config)) as client:
         seed = Seeder(client, journal, as_of)
         seed.owners(plan)
         seed.providers(plan)

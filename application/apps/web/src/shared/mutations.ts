@@ -59,18 +59,28 @@ export class MutationFailure extends Error {
   }
 }
 
+export function isStorageQuotaRejection(status: number, code: string): boolean {
+  return (
+    status === 507 &&
+    (code === "hosted_storage_quota_exceeded" ||
+      code === "hosted_storage_limit_exceeded" ||
+      code === "http_507")
+  );
+}
+
 // A transport error, cancellation or server failure cannot establish rollback.
+// HTTP 507 storage quota rejections are admitted pre-mutation and guarantee rollback.
 export async function mutation<T>(
   request: () => Promise<{ data?: T; error?: unknown; response: Response }>,
 ): Promise<T> {
   try {
     const result = await request();
     if (!result.response.ok || result.data === undefined) {
-      throw new MutationFailure(
-        normalizeApiError(result.response.status, result.error),
-        result.response.status >= 500 || result.response.ok,
-        result.response.status,
-      );
+      const problem = normalizeApiError(result.response.status, result.error);
+      const outcomeUnknown =
+        !isStorageQuotaRejection(result.response.status, problem.code) &&
+        (result.response.status >= 500 || result.response.ok);
+      throw new MutationFailure(problem, outcomeUnknown, result.response.status);
     }
     return result.data;
   } catch (error) {

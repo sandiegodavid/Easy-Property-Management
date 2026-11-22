@@ -17,6 +17,9 @@ HostPrincipal = Annotated[StrictInt, Field(gt=0, lt=4294967295)]
 MAIN_ADMIN_TABLES = (
     "control_meta",
     "storage_policies",
+    "capacity_profiles",
+    "capacity_snapshots",
+    "capacity_commitments",
     "qualified_releases",
     "component_deployments",
     "operators",
@@ -32,6 +35,7 @@ MAIN_ADMIN_TABLES = (
     "operations",
     "operation_events",
     "admin_audit",
+    "operator_source_observations",
     "workspace_recovery_status",
 )
 

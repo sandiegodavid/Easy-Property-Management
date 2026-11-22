@@ -4,7 +4,7 @@
 
 Part of the schema master. Proposed hosted tables are design contracts, not claims of implemented schema. Executable definitions belong exclusively under `application/database/`; see [resource ownership](overview.md#required-schema-definition-location).
 
-In this guide: [Pilot 0 Admin database](#pilot-0-admin-database) · [`control_meta` — H02 protected initialization](#control_meta--h02-protected-initialization) · [`storage_policies` — H04 Free policy](#storage_policies--h04-free-policy) · [`qualified_releases` — H02 release qualification](#qualified_releases--h02-release-qualification) · [`component_deployments` — H02 shared Admin; H04 Operator assignments](#component_deployments--h02-shared-admin-h04-operator-assignments) · [`operators` — H03/H04 assignment and desired state](#operators--h03h04-assignment-and-desired-state)
+In this guide: [Pilot 0 Admin database](#pilot-0-admin-database) · [`control_meta` — H02 protected initialization](#control_meta--h02-protected-initialization) · [`storage_policies` — H04 Free policy](#storage_policies--h04-free-policy) · [`qualified_releases` — H02 release qualification](#qualified_releases--h02-release-qualification) · [`component_deployments` — H02 shared Admin; H04 Operator assignments](#component_deployments--h02-shared-admin-h04-operator-assignments) · [`operators` — H03/H04 assignment and desired state](#operators--h03h04-assignment-and-desired-state) · [`capacity_profiles` — H04](#capacity_profiles--h04) · [`capacity_snapshots` — H04](#capacity_snapshots--h04) · [`capacity_commitments` — H04](#capacity_commitments--h04)
 
 ## Pilot 0 Admin database
 
@@ -260,4 +260,60 @@ Admin enable operation, current readiness/identity checks and matching fences ca
 remove it; stale enable/provision receipts cannot reopen access. H02/H03 own the
 protected gateway projection, verification and reconciliation contracts; H04 surfaces
 safe progress. No public editor or second editable registry is introduced.
+
+### `capacity_profiles` — H04
+
+Pinned, immutable host capacity profile used to serialize operator admission decisions
+without hard-coding an arbitrary operator cap.
+
+| Column | Type | Nullable | Default | Description / column rules |
+| --- | --- | --- | --- | --- |
+| `profile_ref` | `REF` | No | — | PK; logical qualified profile reference. |
+| `profile_revision` | `REV` | No | — | Monotonic profile revision; UNIQUE with `profile_ref`. |
+| `measurement_sha256` | `HASH` | No | — | SHA-256 of pinned native capacity measurements. |
+| `source_sha256` | `HASH` | No | — | SHA-256 of pinned source inputs. |
+| `runtime_policy_sha256` | `HASH` | No | — | SHA-256 of pinned runtime policy inputs. |
+| `maximum_observation_age_ms` | `POSITIVE` | No | — | Maximum allowed snapshot age for admission. |
+| `shared_reserve_json` | `JSON` | No | — | Serialized `Resources` reserve for shared host services. |
+| `recovery_reserve_json` | `JSON` | No | — | Serialized `Resources` reserve for future recovery headroom. |
+| `free_budget_json` | `JSON` | No | — | Serialized `OperatorBudget` physical reservation for Free v1. |
+| `created_at` | `TIME` | No | — | Profile creation timestamp. |
+
+Immutable (append-only); updates, deletes, and `INSERT OR REPLACE` are rejected at the store boundary.
+
+### `capacity_snapshots` — H04
+
+Singleton latest host capacity observation referenced by serialized admission checks.
+
+| Column | Type | Nullable | Default | Description / column rules |
+| --- | --- | --- | --- | --- |
+| `id` | `POSITIVE` | No | — | PK; CHECK `id = 1`. |
+| `snapshot_revision` | `REV` | No | — | Monotonic host observation revision rechecked at admission. |
+| `profile_ref` | `REF` | No | — | FK to `capacity_profiles(profile_ref, profile_revision)`. |
+| `profile_revision` | `REV` | No | — | FK to `capacity_profiles(profile_ref, profile_revision)`. |
+| `observed_at` | `TIME` | No | — | Timestamp of the host capacity measurement. |
+| `complete` | `BOOLEAN` | No | — | Whether all required host metrics were observed. |
+| `total_json` | `JSON` | No | — | Serialized total host `Resources`. |
+| `available_json` | `JSON` | No | — | Serialized currently available host `Resources`. |
+| `shared_observed_json` | `JSON` | No | — | Serialized observed shared-service `Resources`. |
+
+Index `(profile_ref, profile_revision)` supports FK validation.
+
+### `capacity_commitments` — H04
+
+Per-operator serialized host resource commitment ledger. All five unreleased states count
+at 100% of `reserved_json` during admission; capacity is released only after retirement
+cleanup completes.
+
+| Column | Type | Nullable | Default | Description / column rules |
+| --- | --- | --- | --- | --- |
+| `operator_id` | `ID` | No | — | PK; FK `(operator_id, workspace_id)` to `operators`. |
+| `workspace_id` | `ID` | No | — | UNIQUE; FK `(operator_id, workspace_id)` to `operators`. |
+| `state` | `TEXT` | No | — | CHECK `pending`, `active`, `retained`, `unknown`, or `cleanup_pending`. |
+| `reserved_json` | `JSON` | No | — | Serialized full reserved `Resources` for this operator. |
+| `observed_json` | `JSON` | No | — | Serialized materialized `Resources` observed on the host. |
+| `updated_at` | `TIME` | No | — | Last commitment update timestamp. |
+| `revision` | `REV` | No | — | Monotonic commitment revision. |
+
+Indexes `(state, operator_id)` and `(operator_id, workspace_id)` support admission reads and FK checks.
 

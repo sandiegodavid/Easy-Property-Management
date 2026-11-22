@@ -10,7 +10,8 @@ import { api } from "@epm/contracts";
 import { Link } from "react-router-dom";
 import type { components } from "@epm/contracts/generated";
 import { useWorkspace } from "./workspace-gate";
-import { hostedMode } from "./hosted-session-state";
+import { hostedMode, managedHostedMode } from "./hosted-session-state";
+import { HostedSettings } from "./hosted-settings";
 import { defaultOrder, destination } from "./destinations";
 import { mutation, MutationFailure } from "../shared/mutations";
 import { applyAppearance, preferredAppearance } from "./theme";
@@ -190,6 +191,7 @@ export function PreferenceSettings() {
           )}
         </ul>
       </nav>
+      {managedHostedMode() && <HostedSettings />}
       {!writable && (
         <p>Preference editing requires available preferences and workspace write access.</p>
       )}

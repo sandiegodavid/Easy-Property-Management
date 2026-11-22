@@ -40,6 +40,16 @@ ADMIN_IDENTITY_ROUTES = (
     ("GET", "/api/admin/session"),
     ("POST", "/auth/logout"),
 )
+ADMIN_LITE_ROUTES = (
+    *ADMIN_IDENTITY_ROUTES,
+    ("GET", "/api/admin/bootstrap"),
+    ("GET", "/api/admin/operators"),
+    ("POST", "/api/admin/operators"),
+    ("GET", "/api/admin/operators/{operator_id}"),
+    ("POST", "/api/admin/operators/{operator_id}/invitations"),
+    ("POST", "/api/admin/operators/{operator_id}/invitations/{invitation_id}/delivered"),
+    ("POST", "/api/admin/operators/{operator_id}/refresh"),
+)
 Route = tuple[Literal["GET", "POST"], Annotated[str, Field(strict=True, max_length=100)]]
 
 
@@ -80,21 +90,27 @@ class SharedIdentityManifest(SemanticRequest):
     central_origin: HttpsOrigin
     admin_origin: HttpsOrigin
     owning_login_origin: HttpsOrigin
-    route_policy: Literal["separate_exact_host_method_allowlists_v1"] = (
-        "separate_exact_host_method_allowlists_v1"
-    )
+    route_policy: Literal[
+        "separate_exact_host_method_allowlists_v1",
+        "separate_exact_host_method_allowlists_v2",
+    ] = "separate_exact_host_method_allowlists_v1"
     cookie_policy: Literal["distinct_secure_httponly_host_path_lax_v1"] = (
         "distinct_secure_httponly_host_path_lax_v1"
     )
     cookies: IdentityCookiePolicy = IdentityCookiePolicy()
     central_routes: Annotated[tuple[Route, ...], Field(max_length=11)] = CENTRAL_IDENTITY_ROUTES
-    admin_routes: Annotated[tuple[Route, ...], Field(max_length=4)] = ADMIN_IDENTITY_ROUTES
+    admin_routes: Annotated[tuple[Route, ...], Field(max_length=11)] = ADMIN_IDENTITY_ROUTES
 
     @model_validator(mode="after")
     def owning_origins(self):
+        expected_admin_routes = (
+            ADMIN_LITE_ROUTES
+            if self.route_policy == "separate_exact_host_method_allowlists_v2"
+            else ADMIN_IDENTITY_ROUTES
+        )
         if (
             self.central_routes != CENTRAL_IDENTITY_ROUTES
-            or self.admin_routes != ADMIN_IDENTITY_ROUTES
+            or self.admin_routes != expected_admin_routes
         ):
             raise ValueError(
                 "Shared identity routes require the exact versioned host/method allowlists."

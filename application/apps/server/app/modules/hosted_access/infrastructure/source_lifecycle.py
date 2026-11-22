@@ -29,12 +29,15 @@ from app.platform.hosted_contracts.operations import (
 from app.platform.hosted_contracts.values import CanonicalId
 
 RECEIPT_KINDS = {
+    "initialize_disabled": "initialize_binding",
+    "apply_policy": "apply_policy",
     "claim": "claim",
     "enable": "enable",
     "disable": "disable",
     "rebind": "rebind",
     "revoke": "revoke_sessions",
 }
+FREE_V1_USABLE_BYTES = 50_000_000
 
 
 @dataclass(frozen=True)
@@ -110,10 +113,28 @@ class SourceLifecycle:
 
     def original(self, actor, reference):
         with self.engine.connect() as connection:
+            if reference.kind == "initialize_disabled":
+                if (
+                    actor.service != "admin"
+                    or actor.deployment_id != reference.deployment_id
+                    or actor.scope != reference.scope
+                    or reference.scope.kind != "workspace"
+                ):
+                    raise ProviderDenied()
+                return self._retained(connection, reference)
             self._scope(source_meta(connection), actor, reference)
             return self._retained(connection, reference)
 
-    def execute(self, actor, command, *, cookie=None, csrf=None, other_device=False):
+    def execute(
+        self,
+        actor,
+        command,
+        *,
+        cookie=None,
+        csrf=None,
+        other_device=False,
+        email_key=None,
+    ):
         require_invocation(actor, command)
         ref = command.reference()
         previous = self.original(actor, ref) if actor.service == "admin" else None
@@ -121,6 +142,8 @@ class SourceLifecycle:
             return previous
         binding = self.binding()
         intent = command.intent
+        if intent.kind == "initialize_disabled":
+            return self._initialize_disabled(actor, command, binding, email_key=email_key)
         proof = None
         if intent.kind in {"claim", "enable", "rebind"}:
             # The protected owner independently verifies identity, readiness,
@@ -178,6 +201,116 @@ class SourceLifecycle:
                     mutation["email_key"] = proof.email_key
             return self._commit(connection, ref, meta, mutation, now, revocation=revocation)
 
+    def _initialize_disabled(self, actor, command, binding, *, email_key):
+        ref = command.reference()
+        intent = command.intent
+        payload = intent.payload
+        resolved_email = email_key
+        if resolved_email is None and self.proof_owner is not None:
+            proof = self.proof_owner.verify(command, binding)
+            if not isinstance(proof, LifecycleProof) or proof.request_hash != ref.request_hash:
+                raise ProviderDenied()
+            resolved_email = proof.email_key
+        with self.mutation() as connection:
+            previous = self._retained(connection, ref)
+            if previous is not None:
+                return previous
+            existing = connection.execute(
+                text("SELECT id FROM main.access_meta WHERE id=1")
+            ).first()
+            now = self.clock()
+            if (
+                existing is not None
+                or self.binding() != binding
+                or intent.expected_revision != 1
+                or intent.access_epoch != binding.access_epoch
+                or binding.deployment_id != intent.deployment_id
+                or binding.scope != intent.scope
+                or binding.binding_id != payload.binding_id
+                or payload.policy.usable_bytes != FREE_V1_USABLE_BYTES
+                or not isinstance(resolved_email, str)
+                or not 1 <= len(resolved_email) <= 254
+                or not resolved_email.startswith(binding.issuer + ":")
+            ):
+                raise ProviderDenied()
+            connection.execute(
+                text("""
+                INSERT INTO main.access_meta (
+                    id, deployment_id, operator_id, workspace_id, binding_id,
+                    resource_generation, issuer, subject, email_key, effective_access,
+                    access_epoch, session_generation, not_before, effective_policy_id,
+                    usable_bytes, policy_revision, maintenance_operation_id,
+                    restore_generation, revision
+                ) VALUES (
+                    1, :deployment_id, :operator_id, :workspace_id, :binding_id,
+                    :resource_generation, :issuer, NULL, :email_key, 'disabled',
+                    :access_epoch, 1, :now, :policy_id,
+                    :usable_bytes, :policy_revision, NULL,
+                    1, 1
+                )
+            """),
+                {
+                    "deployment_id": intent.deployment_id,
+                    "operator_id": intent.scope.operator_id,
+                    "workspace_id": intent.scope.workspace_id,
+                    "binding_id": binding.binding_id,
+                    "resource_generation": binding.resource_generation,
+                    "issuer": binding.issuer,
+                    "email_key": resolved_email,
+                    "access_epoch": intent.access_epoch,
+                    "now": now,
+                    "policy_id": payload.policy.policy_id,
+                    "usable_bytes": payload.policy.usable_bytes,
+                    "policy_revision": payload.policy.policy_revision,
+                },
+            )
+            connection.execute(
+                text("""
+                INSERT INTO main.usage_state (
+                    id, business_revision, committed_db_bytes, retained_file_bytes,
+                    observed_at, measurement_version, revision
+                ) VALUES (1, 'initial', 0, 0, :now, 'logical-v1', 1)
+            """),
+                {"now": now},
+            )
+            result = SourceResult(
+                access_epoch=intent.access_epoch,
+                effective_enabled=False,
+                receipt_ref="source-receipt:" + ref.operation_id,
+                revocation=None,
+            )
+            connection.execute(
+                text("""
+                INSERT INTO main.access_receipts
+                    (operation_id, idempotency_key, request_hash, kind, access_epoch,
+                     source_revision, result_json, recorded_at)
+                VALUES (:id, :key, :hash, 'initialize_binding', :epoch, 1, :result, :now)
+            """),
+                {
+                    "id": ref.operation_id,
+                    "key": ref.idempotency_key,
+                    "hash": ref.request_hash,
+                    "epoch": intent.access_epoch,
+                    "result": result.model_dump_json(),
+                    "now": now,
+                },
+            )
+            connection.execute(
+                text("""
+                INSERT INTO main.access_audit
+                    (audit_id, operation_id, action, actor_ref, recorded_at, safe_facts_json)
+                VALUES (:audit, :id, 'initialize_binding', 'identity-control', :now, '{}')
+            """),
+                {"audit": str(uuid4()), "id": ref.operation_id, "now": now},
+            )
+            return OperationOutcome[SourceResult](
+                operation=ref,
+                state=OperationState.SUCCEEDED,
+                revision=1,
+                observed_at=now,
+                result=result,
+            )
+
     def _logout_actor(self, connection, meta, command, cookie, csrf, previous, *, other_device):
         if previous is None:
             row = session_row(connection, cookie, meta, self.clock(), lineage=not other_device)
@@ -215,6 +348,18 @@ class SourceLifecycle:
         )
         if kind != "rebind" and not same_resource:
             raise ProviderDenied()
+        if kind == "apply_policy":
+            if (
+                epoch != current
+                or meta["maintenance_operation_id"] is not None
+                or change.policy_revision <= meta["policy_revision"]
+            ):
+                raise ProviderDenied()
+            return {
+                "effective_policy_id": change.policy_id,
+                "policy_revision": change.policy_revision,
+                "usable_bytes": FREE_V1_USABLE_BYTES,
+            }
         if kind == "disable":
             return self._fence(meta, now, epoch) | {"effective_access": "disabled"}
         if kind == "rebind":

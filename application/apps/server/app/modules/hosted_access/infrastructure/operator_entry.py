@@ -14,14 +14,18 @@ from starlette.responses import Response
 
 from app.bootstrap.api import create_app
 from app.hosted_candidates.runtime import inspect
+from app.modules.hosted_access.api.managed_business import ManagedBusinessInputs
 from app.modules.hosted_access.application.identity_evidence import IdentityBinding
 from app.modules.hosted_access.application.identity_setup import HttpsOrigin
 from app.modules.hosted_access.infrastructure.admin_bootstrap import private_file
+from app.modules.hosted_access.infrastructure.free_storage_admission import FreeStorageAdmission
 from app.modules.hosted_access.infrastructure.handoff_channel import CentralHandoffClient
 from app.modules.hosted_access.infrastructure.handoff_signing import IdentitySigner
 from app.modules.hosted_access.infrastructure.operator_identity_runtime import (
     OperatorIdentityInputs,
 )
+from app.modules.hosted_access.infrastructure.usage_accounting import UsageAccountingStore
+from app.modules.workspace.application.service import WorkspacePaths
 from app.modules.hosted_access.infrastructure.shared_identity_entry import (
     Uid,
     owned_identity_socket,
@@ -53,6 +57,7 @@ class OperatorDeployment(Contract):
     socket_directory: Path
     gateway_address: IPv4Address
     listen_address: IPv4Address
+    support_contact: str | None = None
 
     def check_private_network(self):
         if any(
@@ -130,33 +135,48 @@ def candidate(configuration):
         def current_binding():
             return binding
 
-        with owned_identity_socket(
-            configuration.socket_directory, binding.scope.operator_id
-        ) as listener:
-            app = create_app(
-                configuration.workspace_configuration,
-                operator_identity_inputs=OperatorIdentityInputs(
-                    engine=engine,
-                    binding=current_binding,
-                    signer=signer,
-                    central_key=lambda scope, issuer, kid: (
-                        central_key
-                        if (scope, issuer, kid)
-                        == (binding, "central_identity", configuration.central_key_id)
-                        else None
+        clock = lambda: time_ns() // 1_000_000
+        business_engine = create_sqlite_engine(WorkspacePaths(root=workspace).database)
+        try:
+            usage_store = UsageAccountingStore(engine, business_engine, clock=clock)
+            storage_admission = FreeStorageAdmission(usage_store)
+            with owned_identity_socket(
+                configuration.socket_directory, binding.scope.operator_id
+            ) as listener:
+                app = create_app(
+                    configuration.workspace_configuration,
+                    operator_identity_inputs=OperatorIdentityInputs(
+                        engine=engine,
+                        binding=current_binding,
+                        signer=signer,
+                        central_key=lambda scope, issuer, kid: (
+                            central_key
+                            if (scope, issuer, kid)
+                            == (binding, "central_identity", configuration.central_key_id)
+                            else None
+                        ),
+                        central=CentralHandoffClient(
+                            configuration.central_relay, configuration.relay_uid, current_binding
+                        ),
+                        clock=clock,
+                        listener=listener,
+                        relay_uid=configuration.relay_uid,
+                        source_origin=binding.target_origin,
+                        central_origin=configuration.central_origin,
+                        support_contact=configuration.support_contact,
+                        business=ManagedBusinessInputs(
+                            # Real deployments hold business ingress closed until H05 protection passes.
+                            readiness=lambda: False,
+                            storage=storage_admission,
+                            files=True,
+                        ),
+                        writer_lock=HostedWriterLock(configuration.writer_lock),
+                        usage_reader=usage_store.read_usage,
                     ),
-                    central=CentralHandoffClient(
-                        configuration.central_relay, configuration.relay_uid, current_binding
-                    ),
-                    clock=lambda: time_ns() // 1_000_000,
-                    listener=listener,
-                    relay_uid=configuration.relay_uid,
-                    source_origin=binding.target_origin,
-                    central_origin=configuration.central_origin,
-                    writer_lock=HostedWriterLock(configuration.writer_lock),
-                ),
-            )
-            yield TrustedSourceHTTP(app, configuration.gateway_address)
+                )
+                yield TrustedSourceHTTP(app, configuration.gateway_address)
+        finally:
+            business_engine.dispose()
     finally:
         engine.dispose()
 

@@ -534,7 +534,8 @@ export function ApplicationShell() {
                       element={
                         hostedMode() ? (
                           <p>
-                            AI connections are not enabled for this demo. Contact the administrator.
+                            AI connections are not enabled for the Free pilot. Contact the
+                            administrator.
                           </p>
                         ) : (
                           <AiGovernanceSettings />
@@ -595,7 +596,7 @@ export function ApplicationShell() {
           <Route
             path="ai/review/:id"
             element={
-              hostedMode() ? <p>AI review is not enabled for this demo.</p> : <AiDraftReview />
+              hostedMode() ? <p>AI review is not enabled for the Free pilot.</p> : <AiDraftReview />
             }
           />
           <Route path="coverage/:kind/:id/:area" element={<CoveragePage />} />

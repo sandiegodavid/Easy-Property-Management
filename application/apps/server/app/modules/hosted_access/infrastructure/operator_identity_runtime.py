@@ -29,6 +29,11 @@ from app.modules.hosted_access.api.operator_security import (
     SECURITY_ROUTES,
     operator_security_router,
 )
+from app.modules.hosted_access.api.operator_settings import (
+    SETTINGS_ROUTE,
+    OperatorSettingsInputs,
+    operator_settings_router,
+)
 from app.modules.hosted_access.infrastructure.operator_security import OperatorSecurity
 from app.modules.hosted_access.application.identity_evidence import IdentityBinding
 from app.modules.hosted_access.application.identity_setup import HttpsOrigin
@@ -69,6 +74,7 @@ class OperatorIdentityInputs:
     support_contact: str | None = None
     business: ManagedBusinessInputs | None = None
     writer_lock: HostedWriterLock | None = None
+    usage_reader: Callable | None = None
 
 
 def managed_entry_metadata(inputs):
@@ -93,7 +99,9 @@ class DestinationHTTP:
             != [self.host.encode("ascii")]
         ):
             await JSONResponse({"state": "rejected"}, status_code=403)(scope, receive, send)
-        elif scope["type"] == "http" and scope["path"] in AUTH_PATHS | SECURITY_ROUTES:
+        elif scope["type"] == "http" and scope["path"] in AUTH_PATHS | SECURITY_ROUTES | {
+            SETTINGS_ROUTE
+        }:
             await self.destination(scope, receive, send)
         elif self.business and scope["type"] == "http" and scope["path"].startswith("/api/"):
             await self.business.dispatch(self.app, scope, receive, send, self.origin)
@@ -240,6 +248,17 @@ def compose_operator_identity(
             origin=source_origin,
         )
     )
+    if inputs.usage_reader is not None and inputs.support_contact is not None:
+        auth.include_router(
+            operator_settings_router(
+                sessions,
+                OperatorSettingsInputs(
+                    origin=source_origin,
+                    usage_reader=inputs.usage_reader,
+                    support_contact=inputs.support_contact,
+                ),
+            )
+        )
     app.add_middleware(
         DestinationHTTP, destination=auth, source_origin=source_origin, business=business
     )

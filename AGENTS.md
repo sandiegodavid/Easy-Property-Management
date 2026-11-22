@@ -24,6 +24,8 @@ On each turn, continue through checkpoints until complete. Unless instructed oth
 - Address only the named feature and findings.
 - Pause if clarification is needed.
 - Implement each slice as one cohesive change where practical.
+- Document a checkpoint after completing each implementation slice.
+- When changes are made for a slice, update its status and link to its checkpoint in the owning design doc.
 - List adjacent issues separately; do not implement them unless explicitly requested.
 
 ## Implementation lint validation

@@ -1,0 +1,107 @@
+{
+  "actor_image_id": "6d40382c2dfc52ce978e75ff635352b7eb3c55cf6dd9f013680ad50f305e62df",
+  "base_image": "us-west1-docker.pkg.dev/project-47b72bb7-ba90-42c9-910/epm-h02-candidates/operator@sha256:6c264a90ff2f9a64e1d66b8e5b1405680d517210b4e3d1c586816603c486c995",
+  "exhaustion": {
+    "byte_exhaustion": {
+      "acknowledged_rows_preserved": true,
+      "errno": 122,
+      "http_507_observed": true,
+      "kind": "byte_exhaustion",
+      "reservations_reconciled": true,
+      "sqlite_integrity_ok": true
+    },
+    "inode_exhaustion": {
+      "acknowledged_rows_preserved": true,
+      "errno": 122,
+      "http_507_observed": true,
+      "kind": "inode_exhaustion",
+      "reservations_reconciled": true,
+      "sqlite_integrity_ok": true
+    }
+  },
+  "filesystem_uuid": "8d2fd2e0-274b-4535-90d5-da78aa6bd9b6",
+  "kernel": "7.0.0-1017-gcp",
+  "machine": "x86_64",
+  "mount_options": [
+    "nodev",
+    "noexec",
+    "nosuid",
+    "prjquota",
+    "relatime",
+    "rw"
+  ],
+  "platform": "Linux",
+  "prjquota_verified": true,
+  "source_sha256": "e5f250357a7ac1eb36951a2146f566d8c83a7d09040a09a31b493d2ac681fcf4",
+  "workloads": {
+    "database_heavy": {
+      "committed_db_bytes": 49913856,
+      "items_written": 11648,
+      "logical_507_triggered": true,
+      "logical_used_bytes": 49913856,
+      "retained_file_bytes": 0,
+      "shape": "database_heavy",
+      "target_bytes": 50000000,
+      "trees": {
+        "control": {
+          "peak_bytes": 360448,
+          "peak_inodes": 4
+        },
+        "scratch": {
+          "peak_bytes": 8192,
+          "peak_inodes": 2
+        },
+        "workspace": {
+          "peak_bytes": 100249600,
+          "peak_inodes": 10
+        }
+      }
+    },
+    "many_small_files_history": {
+      "committed_db_bytes": 3981312,
+      "items_written": 2808,
+      "logical_507_triggered": true,
+      "logical_used_bytes": 49987584,
+      "retained_file_bytes": 46006272,
+      "shape": "many_small_files_history",
+      "target_bytes": 50000000,
+      "trees": {
+        "control": {
+          "peak_bytes": 1257472,
+          "peak_inodes": 4
+        },
+        "scratch": {
+          "peak_bytes": 8192,
+          "peak_inodes": 2
+        },
+        "workspace": {
+          "peak_bytes": 55173120,
+          "peak_inodes": 3075
+        }
+      }
+    },
+    "retained_file_heavy": {
+      "committed_db_bytes": 2097152,
+      "items_written": 22,
+      "logical_507_triggered": true,
+      "logical_used_bytes": 48234496,
+      "retained_file_bytes": 46137344,
+      "shape": "retained_file_heavy",
+      "target_bytes": 50000000,
+      "trees": {
+        "control": {
+          "peak_bytes": 225280,
+          "peak_inodes": 4
+        },
+        "scratch": {
+          "peak_bytes": 8192,
+          "peak_inodes": 2
+        },
+        "workspace": {
+          "peak_bytes": 48939008,
+          "peak_inodes": 55
+        }
+      }
+    }
+  }
+}

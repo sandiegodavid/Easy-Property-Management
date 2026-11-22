@@ -1,0 +1,84 @@
+{
+  "admin_lite_boundaries": {
+    "list_count": 2,
+    "pre_ready_invitation_rejected": true,
+    "refresh_source_verified": true,
+    "zero_token_leakage": true
+  },
+  "cleanup": {
+    "disposable_operators_removed": true
+  },
+  "gateway_handoff": {
+    "admin_lite_v2_route_count": 11,
+    "admin_lite_v2_verified": true,
+    "admin_origin_route_count": 12,
+    "eligible_rejected_by_gateway": true,
+    "eligible_rejections": {
+      "h04-empty": true,
+      "h04-synth": true
+    },
+    "held_routes_only": true
+  },
+  "h04_9_sizing_sha256": "a8662dfb000974771d7a591281ee60fbb35796e01c09b208ccd624b5cb2e13ff",
+  "h05_handoff_status": "ready_for_h05",
+  "mode": "gcp_native",
+  "operator_settings": {
+    "closed_business_capabilities_empty": true,
+    "paid_upgrade_controls_absent": true,
+    "plan_code": "free",
+    "protection_state": "unavailable",
+    "settings_status_code": 200,
+    "support_contact": "support@epmdemo.xyz",
+    "usable_bytes": 50000000,
+    "used_bytes": 3698688
+  },
+  "operators": [
+    {
+      "binding_id": "b443ff7f-614e-44a7-98eb-ac2041f0b639",
+      "desired_access": "enabled",
+      "effective_access_cached": "disabled",
+      "idempotent_retry_succeeded": true,
+      "initial_data": "empty",
+      "invitation_marked_sent": true,
+      "observed_usage_bytes": 2088960,
+      "operator_id": "168ee5f5-8649-4ece-aa2f-918350224823",
+      "physical_quota_enforced": true,
+      "protection_state": "unavailable",
+      "public_origin": "https://h04-empty.epmdemo.xyz",
+      "readiness_protection_gate": "unavailable",
+      "seed_bundle": null,
+      "setup_state": "ready_for_claim",
+      "slug": "h04-empty",
+      "token_leaked_in_detail": false,
+      "workspace_id": "9953490b-fec4-4d92-a2dd-d2e6ef818118"
+    },
+    {
+      "binding_id": "8ac34d98-4151-4f14-a934-31073f836885",
+      "desired_access": "enabled",
+      "effective_access_cached": "disabled",
+      "idempotent_retry_succeeded": true,
+      "initial_data": "synthetic",
+      "invitation_marked_sent": true,
+      "observed_usage_bytes": 3698688,
+      "operator_id": "e379c3b7-c2c4-425b-985f-c0e075888d17",
+      "physical_quota_enforced": true,
+      "protection_state": "unavailable",
+      "public_origin": "https://h04-synth.epmdemo.xyz",
+      "readiness_protection_gate": "unavailable",
+      "seed_bundle": "synthetic-demo-v1:2ad5ca6acec28823a2988c77e3c81e0bfc2bec61d43839db8e1324b73761aa5a",
+      "setup_state": "ready_for_claim",
+      "slug": "h04-synth",
+      "token_leaked_in_detail": false,
+      "workspace_id": "5f440449-0f79-4d9b-b0d6-0a7267211a10"
+    }
+  ],
+  "platform": {
+    "machine": "x86_64",
+    "release": "7.0.0-1017-gcp",
+    "system": "Linux",
+    "uid": 0,
+    "user": "root"
+  },
+  "slice": "H04.10",
+  "version": 1
+}

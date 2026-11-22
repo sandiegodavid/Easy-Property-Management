@@ -8,7 +8,7 @@ H02 delivers these tables in the complete main-Admin structural baseline. H04 re
 operation/audit/provisioning behavior and H05 owns workspace recovery reporting;
 creating the schema neither starts operations nor claims recovery protection.
 
-In this guide: [`operations` — H04 supported manual effects](#operations--h04-supported-manual-effects) · [`operation_events` — H04](#operation_events--h04) · [`admin_audit` — H03/H04](#admin_audit--h03h04) · [`workspace_recovery_status` — H05](#workspace_recovery_status--h05)
+In this guide: [`operations` — H04 supported manual effects](#operations--h04-supported-manual-effects) · [`operation_events` — H04](#operation_events--h04) · [`admin_audit` — H03/H04](#admin_audit--h03h04) · [`operator_source_observations` — H04](#operator_source_observations--h04) · [`workspace_recovery_status` — H05](#workspace_recovery_status--h05)
 
 ### `operations` — H04 supported manual effects
 
@@ -21,7 +21,7 @@ workspace and Admin backup/restore have separate owning operation tables.
 | `operation_id` | `ID` | No | — | Original owning operation identity; see local FK or logical-reference rules. PK. |
 | `operator_id` | `ID` | Yes | — | Operator identity; see table scope and relationship rules. FK operators. |
 | `component_deployment_id` | `ID` | Yes | — | Scoped component deployment assignment identity. FK component_deployments. |
-| `kind` | `TEXT` | No | — | Typed operation/effect kind; see allowed values below. (`provision`, `repair_runtime`, `disable`, `enable`, `rebind`, `retire`, `maintenance_release`). |
+| `kind` | `TEXT` | No | — | Typed operation/effect kind; see allowed values below. (`provision`, `repair_runtime`, `disable`, `enable`, `rebind`, `retire`, `maintenance_release`, `reissue_invitation`, `refresh_source`). |
 | `idempotency_key` | `TEXT` | No | — | Stable caller key identifying the original semantic request. |
 | `request_hash` | `HASH` | No | — | Hash of the canonical consequential request parameters. |
 | `request_json` | `TEXT` | No | — | Bounded canonical non-secret request for safe replay/reconciliation. |
@@ -103,6 +103,32 @@ Append-only, allowlisted IDs/revisions/status only; no token/email/body dumps.
 Indexes `(operator_id, recorded_at, audit_id)` and `(operation_id)`.
 Owning mutation/result/audit commit together; audit failure rolls back its transaction.
 Cross-store effects get independent source receipts, not fictitious central atomicity.
+
+### `operator_source_observations` — H04
+
+Set-based Admin projection of each operator source’s cached effective access and logical
+Free storage usage, updated only by explicit `refresh_source` operations or verified
+source-lifecycle receipts. Never queried by opening per-operator databases during list or
+detail reads.
+
+| Column | Type | Nullable | Default | Description / column rules |
+| --- | --- | --- | --- | --- |
+| `operator_id` | `ID` | No | — | PK; FK `(operator_id, workspace_id)` to `operators`. |
+| `workspace_id` | `ID` | No | — | Logical owning workspace; FK `(operator_id, workspace_id)` to `operators`. |
+| `access_epoch` | `REV` | No | — | Verified reporting source epoch. |
+| `effective_enabled` | `BOOLEAN` | Yes | — | Cached source `effective_access = enabled` state when known/stale. |
+| `usage_bytes` | `COUNT` | Yes | — | Cached logical usage bytes when known/stale. |
+| `usable_bytes` | `POSITIVE` | Yes | — | Cached logical allowance bytes when known/stale. |
+| `source_revision` | `REV` | Yes | — | Source revision at observation capture when known/stale. |
+| `observed_at` | `TIME` | Yes | — | Timestamp of source capture when known/stale; `checked_at >= observed_at`. |
+| `checked_at` | `TIME` | No | — | Timestamp Admin last evaluated or recorded the observation. |
+| `freshness_state` | `TEXT` | No | — | CHECK `known`, `stale`, `unknown`, or `unavailable`. |
+| `revision` | `REV` | No | — | Monotonic Admin projection revision. |
+
+When `freshness_state` is `unknown` or `unavailable`, all observed value columns must be
+`NULL`; when `known` or `stale`, all observed value columns must be non-null. Indexes
+`(freshness_state, checked_at, operator_id)` and `(operator_id, workspace_id)` support
+bounded directory reads and FK checks.
 
 ### `workspace_recovery_status` — H05
 

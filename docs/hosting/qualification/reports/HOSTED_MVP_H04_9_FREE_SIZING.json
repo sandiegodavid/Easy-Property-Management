@@ -1,0 +1,39 @@
+{
+  "admission_enabled": false,
+  "derived_trees": {
+    "control": {
+      "byte_ceiling": 18874368,
+      "inode_ceiling": 768
+    },
+    "scratch": {
+      "byte_ceiling": 34603008,
+      "inode_ceiling": 768
+    },
+    "workspace": {
+      "byte_ceiling": 169869312,
+      "inode_ceiling": 5376
+    }
+  },
+  "h05_backup_restore_reserve": "deferred_to_H05",
+  "logical_free_bytes": 50000000,
+  "margin_factor": 1.35,
+  "measured_peaks": {
+    "control": {
+      "peak_bytes": 1257472,
+      "peak_inodes": 4
+    },
+    "scratch": {
+      "peak_bytes": 8192,
+      "peak_inodes": 2
+    },
+    "workspace": {
+      "peak_bytes": 100249600,
+      "peak_inodes": 3075
+    }
+  },
+  "measurement_sha256": "da1acb506aef5ca87a7500d841ef1e75cf76f3a5c255a1a0d6873e0970eead41",
+  "restore_readiness": "unavailable_pending_H05",
+  "slice": "H04.9",
+  "source_sha256": "e5f250357a7ac1eb36951a2146f566d8c83a7d09040a09a31b493d2ac681fcf4",
+  "version": 1
+}

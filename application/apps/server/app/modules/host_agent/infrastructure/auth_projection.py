@@ -67,11 +67,22 @@ class VerifiedAuthEndpoint:
         return f"{host}:{self.port}"
 
 
+CANONICAL_UUID_PATTERN = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+UUID_PLACEHOLDERS = ("{operator_id}", "{invitation_id}")
+
+
+def _uri_pattern(path: str) -> str:
+    escaped = re.escape(path)
+    for placeholder in UUID_PLACEHOLDERS:
+        escaped = escaped.replace(re.escape(placeholder), CANONICAL_UUID_PATTERN)
+    return "^" + escaped + r"(?:[?].*)?$"
+
+
 def _route(origin, method, path, endpoint):
     host = origin.removeprefix("https://")
     # Use the original URI for the path check. Caddy's path matcher can decode
     # escapes and normalize a path before matching.
-    uri_pattern = "^" + re.escape(path) + r"(?:[?].*)?$"
+    uri_pattern = _uri_pattern(path)
     expression = (
         "{http.request.hostport} == "
         + json.dumps(host)

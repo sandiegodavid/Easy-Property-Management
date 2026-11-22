@@ -13,6 +13,9 @@ depends_on = None
 TABLES = (
     "control_meta",
     "storage_policies",
+    "capacity_profiles",
+    "capacity_snapshots",
+    "capacity_commitments",
     "qualified_releases",
     "component_deployments",
     "operators",
@@ -28,6 +31,7 @@ TABLES = (
     "operations",
     "operation_events",
     "admin_audit",
+    "operator_source_observations",
     "workspace_recovery_status",
 )
 
@@ -39,6 +43,7 @@ fk = helpers["foreign"]
 
 def upgrade():
     _registry()
+    _capacity()
     _assignments()
     _mail_reservations()
     _identity_flows()
@@ -164,6 +169,59 @@ def _registry():
     )
     op.create_index("operators_setup", "operators", ["setup_state", "operator_id"])
     op.create_index("operators_access", "operators", ["desired_access", "operator_id"])
+
+
+def _capacity():
+    op.create_table(
+        "capacity_profiles",
+        f("profile_ref", "REF", primary=True),
+        f("profile_revision", "REV"),
+        f("measurement_sha256", "HASH"),
+        f("source_sha256", "HASH"),
+        f("runtime_policy_sha256", "HASH"),
+        f("maximum_observation_age_ms", "POSITIVE"),
+        f("shared_reserve_json", "JSON"),
+        f("recovery_reserve_json", "JSON"),
+        f("free_budget_json", "JSON"),
+        f("created_at", "TIME"),
+        sa.UniqueConstraint("profile_ref", "profile_revision"),
+    )
+    op.create_table(
+        "capacity_snapshots",
+        f("id", "POSITIVE", primary=True),
+        f("snapshot_revision", "REV"),
+        f("profile_ref", "REF"),
+        f("profile_revision", "REV"),
+        f("observed_at", "TIME"),
+        f("complete", "BOOLEAN"),
+        f("total_json", "JSON"),
+        f("available_json", "JSON"),
+        f("shared_observed_json", "JSON"),
+        fk(
+            "profile_ref profile_revision",
+            "capacity_profiles.profile_ref capacity_profiles.profile_revision",
+        ),
+        sa.CheckConstraint("id=1", name="ck_capacity_snapshot_singleton"),
+    )
+    op.create_index(
+        "capacity_snapshots_profile", "capacity_snapshots", ["profile_ref", "profile_revision"]
+    )
+    op.create_table(
+        "capacity_commitments",
+        f("operator_id", "ID", primary=True),
+        f("workspace_id", "ID", unique=True),
+        f("state", "CODE"),
+        f("reserved_json", "JSON"),
+        f("observed_json", "JSON"),
+        f("updated_at", "TIME"),
+        f("revision", "REV"),
+        fk("operator_id workspace_id", "operators.operator_id operators.workspace_id"),
+        c("state", "pending active retained unknown cleanup_pending"),
+    )
+    op.create_index("capacity_commitments_state", "capacity_commitments", ["state", "operator_id"])
+    op.create_index(
+        "capacity_commitments_pair", "capacity_commitments", ["operator_id", "workspace_id"]
+    )
 
 
 def _assignments():
@@ -403,7 +461,11 @@ def _operations():
         fk("operator_id", "operators.operator_id"),
         fk("component_deployment_id", "component_deployments.component_deployment_id"),
         fk("actor_principal_id", "admin_principals.principal_id"),
-        c("kind", "provision repair_runtime disable enable rebind retire maintenance_release"),
+        c(
+            "kind",
+            "provision repair_runtime disable enable rebind retire maintenance_release "
+            "reissue_invitation refresh_source",
+        ),
         c("state", "pending running needs_attention unknown succeeded failed"),
         sa.UniqueConstraint("kind", "idempotency_key"),
         sa.CheckConstraint(
@@ -459,6 +521,44 @@ def _operations():
     )
     op.create_index("admin_audit_operation", "admin_audit", ["operation_id"])
     op.create_table(
+        "operator_source_observations",
+        f("operator_id", "ID", primary=True),
+        f("workspace_id", "ID"),
+        f("access_epoch", "REV"),
+        f("effective_enabled", "BOOLEAN", nullable=True),
+        f("usage_bytes", "COUNT", nullable=True),
+        f("usable_bytes", "POSITIVE", nullable=True),
+        f("source_revision", "REV", nullable=True),
+        f("observed_at", "TIME", nullable=True),
+        f("checked_at", "TIME"),
+        f("freshness_state", "CODE"),
+        f("revision", "REV"),
+        fk("operator_id workspace_id", "operators.operator_id operators.workspace_id"),
+        c("freshness_state", "known stale unknown unavailable"),
+        sa.CheckConstraint(
+            (
+                "(freshness_state IN ('known','stale') AND effective_enabled IS NOT NULL AND "
+                "usage_bytes IS NOT NULL AND usable_bytes IS NOT NULL AND "
+                "source_revision IS NOT NULL AND observed_at IS NOT NULL AND "
+                "checked_at>=observed_at) OR "
+                "(freshness_state IN ('unknown','unavailable') AND effective_enabled IS NULL AND "
+                "usage_bytes IS NULL AND usable_bytes IS NULL AND "
+                "source_revision IS NULL AND observed_at IS NULL)"
+            ),
+            name="ck_source_obs_freshness",
+        ),
+    )
+    op.create_index(
+        "operator_source_observations_state",
+        "operator_source_observations",
+        ["freshness_state", "checked_at", "operator_id"],
+    )
+    op.create_index(
+        "operator_source_observations_pair",
+        "operator_source_observations",
+        ["operator_id", "workspace_id"],
+    )
+    op.create_table(
         "workspace_recovery_status",
         f("operator_id", "ID", primary=True),
         f("workspace_id", "ID"),
@@ -493,7 +593,7 @@ def _operations():
 
 def _guards():
     immutable = helpers["immutable"]
-    for table in ("storage_policies", "operation_events", "admin_audit"):
+    for table in ("storage_policies", "capacity_profiles", "operation_events", "admin_audit"):
         immutable(op, table)
     immutable(
         op,

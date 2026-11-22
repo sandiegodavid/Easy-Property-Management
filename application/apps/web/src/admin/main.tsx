@@ -17,16 +17,13 @@ import {
   type TotpSecret,
 } from "firebase/auth";
 import "./style.css";
+import { AdminWorkspace } from "./AdminWorkspace";
+import type { AdminSession as Session } from "./admin-api";
 
 interface Start {
   attemptId: string;
   firebase: FirebaseOptions;
   supportContact: string;
-}
-interface Session {
-  expiresAt: number;
-  recentAuthRequired?: boolean;
-  csrfToken?: string;
 }
 async function request<T>(path: string, value?: object, csrf?: string): Promise<T> {
   const response = await fetch(path, {
@@ -187,16 +184,13 @@ function Admin() {
   }
 
   return (
-    <section aria-busy={busy}>
+    <section aria-busy={busy} className={session ? "admin-shell" : "auth-shell"}>
       <p className="brand">Easy Property Management</p>
-      <h1 tabIndex={-1} ref={heading}>
-        {session ? "Admin" : "Admin sign-in"}
-      </h1>
-      <p role="status">{message}</p>
-      {session ? (
-        <>
-          <p>Session ends {new Date(session.expiresAt).toLocaleString()}.</p>
-          <p>Operator management will be available after platform setup is complete.</p>
+      <div className="header-bar">
+        <h1 tabIndex={-1} ref={heading}>
+          {session ? "Admin" : "Admin sign-in"}
+        </h1>
+        {session && (
           <button
             type="button"
             disabled={busy || !session.csrfToken}
@@ -206,7 +200,14 @@ function Admin() {
           >
             Sign out
           </button>
+        )}
+      </div>
+      <p role="status">{message}</p>
+      {session ? (
+        <>
+          <p className="muted">Session ends {new Date(session.expiresAt).toLocaleString()}.</p>
           {!session.csrfToken && <p>Sign in again to manage this session.</p>}
+          <AdminWorkspace session={session} />
         </>
       ) : step === "google" ? (
         <button
