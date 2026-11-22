@@ -2,10 +2,10 @@
 
 import argparse
 from contextlib import asynccontextmanager
+from ipaddress import IPv4Address
 from pathlib import Path
 from time import time_ns
 
-import uvicorn
 from pydantic import BaseModel, ConfigDict
 
 from app.modules.hosted_access.api.admin_identity import build_admin_identity_app
@@ -15,6 +15,7 @@ from app.modules.hosted_access.infrastructure.admin_bootstrap import private_fil
 from app.modules.hosted_access.infrastructure.admin_sessions import AdminSessions
 from app.modules.hosted_access.infrastructure.mail_rate_store import SQLiteMailRateStore
 from app.modules.hosted_access.infrastructure.provider_configuration import build_central_provider
+from app.modules.hosted_access.infrastructure.tls_candidate import run_identity_tls
 from app.platform.hosted_schema import validate_schema
 from app.platform.hosted_writer_lock import HostedWriterLock
 from app.platform.schema_resources import HostedStore
@@ -130,15 +131,7 @@ def main():
     parser.add_argument("--tls-key", type=Path, required=True)
     parser.add_argument("--tls-certificate", type=Path, required=True)
     args = parser.parse_args()
-    uvicorn.run(
-        create_app(args.configuration),
-        host="127.0.0.1",
-        port=args.port,
-        proxy_headers=False,
-        access_log=False,
-        ssl_keyfile=str(args.tls_key),
-        ssl_certfile=str(args.tls_certificate),
-    )
+    run_identity_tls(create_app(args.configuration), IPv4Address("127.0.0.1"), args)
 
 
 if __name__ == "__main__":

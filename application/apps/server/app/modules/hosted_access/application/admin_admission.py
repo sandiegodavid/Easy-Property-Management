@@ -22,6 +22,9 @@ class AdminPrincipalReader(Protocol):
     def by_identity(self, issuer: str, subject: str) -> AdminPrincipal | None: ...
 
 
+CLOCK_SKEW_MS = 30_000
+
+
 class AdminAdmission:
     def __init__(self, realm: IdentityRealm, principals: AdminPrincipalReader):
         self.realm = realm
@@ -32,7 +35,8 @@ class AdminAdmission:
         if (
             proof.realm != self.realm.alias
             or proof.method not in {"google", "google_totp"}
-            or not proof.authenticated_at <= proof.issued_at <= now < proof.expires_at
+            or not proof.authenticated_at <= proof.issued_at <= now + CLOCK_SKEW_MS
+            or now >= proof.expires_at
             or now - proof.authenticated_at >= 15 * MINUTE
         ):
             raise ProviderDenied()
@@ -63,9 +67,8 @@ def require_admin_session(
         or principal.principal_id != session.principal_id
         or principal.session_generation != session.generation
         or session.revoked_at is not None
-        or not session.mfa_verified_at
-        <= now
-        < min(session.expires_at, session.revocation_valid_until)
+        or not session.mfa_verified_at <= now + CLOCK_SKEW_MS
+        or now >= min(session.expires_at, session.revocation_valid_until)
         or (sensitive and now - session.mfa_verified_at >= 15 * MINUTE)
     ):
         raise ProviderDenied()

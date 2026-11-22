@@ -140,38 +140,63 @@ class OperatorSecurity:
     def sign_out(self, cookie, csrf, operation, proof, *, selection, device=None):
         operation = TypeAdapter(CanonicalId).validate_python(operation)
         key = session_hash(proof)
-        with self.owner.engine.connect() as connection, connection.begin():
-            binding, meta = self.owner._current(connection, enabled=True)
-            row = session_row(
-                connection, cookie, meta, self.owner.clock(), lineage=selection != "other"
-            )
-            check_csrf(row, csrf)
-            if selection == "other":
-                if device == row["session_id"]:
-                    raise ProviderDenied()
-                target = TypeAdapter(CanonicalId).validate_python(device)
-            elif selection == "current":
-                target = row["session_id"]
-            else:
-                target = None
-            command = _command(binding, operation, key, meta["revision"], target)
-        if selection == "other":
-            self.lifecycle.execute(
-                ServiceAuthority(
-                    deployment_id=binding.deployment_id,
-                    scope=binding.scope,
-                    service="source",
-                    authenticated_channel_ref="operator-session",
-                ),
-                command,
-                cookie=cookie,
-                csrf=csrf,
-                other_device=True,
-            )
-            return self._finish(command)
-        return self.sessions.logout(
-            self.lifecycle, self.central, cookie, csrf, command
-        ).central_reconciled
+        for attempt in range(3):
+            with self.owner.engine.connect() as connection, connection.begin():
+                binding, meta = self.owner._current(connection, enabled=True)
+                row = session_row(
+                    connection, cookie, meta, self.owner.clock(), lineage=selection != "other"
+                )
+                check_csrf(row, csrf)
+                if selection == "other":
+                    if device == row["session_id"]:
+                        raise ProviderDenied()
+                    target = TypeAdapter(CanonicalId).validate_python(device)
+                elif selection == "current":
+                    target = row["session_id"]
+                else:
+                    target = None
+                retained = (
+                    connection.execute(
+                        text("""
+                    SELECT source_revision FROM main.access_receipts
+                    WHERE operation_id=:id AND kind='revoke_sessions' AND idempotency_key=:key
+                """),
+                        {"id": operation, "key": key},
+                    )
+                    .mappings()
+                    .one_or_none()
+                )
+                expected_revision = (
+                    retained["source_revision"] - 1 if retained is not None else meta["revision"]
+                )
+                command = _command(binding, operation, key, expected_revision, target)
+            try:
+                if selection == "other":
+                    self.lifecycle.execute(
+                        ServiceAuthority(
+                            deployment_id=binding.deployment_id,
+                            scope=binding.scope,
+                            service="source",
+                            authenticated_channel_ref="operator-session",
+                        ),
+                        command,
+                        cookie=cookie,
+                        csrf=csrf,
+                        other_device=True,
+                    )
+                    return self._finish(command)
+                return self.sessions.logout(
+                    self.lifecycle, self.central, cookie, csrf, command
+                ).central_reconciled
+            except ProviderDenied:
+                if retained is not None or attempt == 2:
+                    raise
+                with self.owner.engine.connect() as connection:
+                    current_revision = connection.execute(
+                        text("SELECT revision FROM main.access_meta WHERE id=1")
+                    ).scalar_one()
+                if current_revision == expected_revision:
+                    raise
 
     def check_sign_out(self, operation, proof, *, cookie=None, device=None, selection):
         key = session_hash(proof)

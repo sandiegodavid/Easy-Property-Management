@@ -8,6 +8,7 @@ from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
+from app.modules.hosted_access.application.admin_admission import CLOCK_SKEW_MS
 from app.modules.hosted_access.application.central_login import UnavailableClaimReadiness
 from app.modules.hosted_access.application.identity_setup import DAY
 from app.modules.hosted_access.application.managed_provider import (
@@ -24,6 +25,7 @@ from app.platform.sqlite_engine import immediate_transaction
 class CentralCompletion:
     result: dict
     cookie: SecretStr = field(repr=False)
+    operator_id: str | None = None
 
 
 class CentralLogin:
@@ -135,7 +137,7 @@ class CentralLogin:
             proof.realm != self.attempts.setup.realm.alias
             or proof.method != attempt["method"]
             or (attempt["email_key"] is not None and proof.email_key != attempt["email_key"])
-            or proof.authenticated_at + 999 < attempt["created_at"]
+            or proof.authenticated_at + CLOCK_SKEW_MS < attempt["created_at"]
         ):
             raise ProviderDenied()
         observation = self.provider.status_cache.observe(proof)
@@ -156,6 +158,8 @@ class CentralLogin:
             assignment = self.attempts.assignment(connection, context)
             expected_subject = assignment["subject"]
             if expected_subject is not None and expected_subject != proof.subject:
+                raise ProviderDenied()
+            if expected_subject is None and proof.email_key != assignment["email_key"]:
                 raise ProviderDenied()
             row = self.attempts.attempt(connection, attempt["attempt_id"])
             if row["state"] != ("pending" if continuation_id else "verified"):
@@ -267,4 +271,5 @@ class CentralLogin:
                 ),
             },
             SecretStr(central_cookie),
+            operator_id=context.operator_id,
         )

@@ -1,0 +1,115 @@
+Response to: docs/pending_code_review_comments/HOSTED_MVP_H03_54be42cd_REVIEW_COMMENTS.txt
+Date: 2026-11-22
+Branch: hosted_mvp
+
+
+Summary of Changes
+
+Gateway, host_agent and hosted qualification (1-5)
+
+1. application/apps/server/app/modules/host_agent/infrastructure/auth_projection.py:70-135
+   Removed X-Forwarded-For from the unconditional "not" matcher, added CEL validation requiring a single literal Cf-Connecting-Ip matching X-Forwarded-For, kept stripping X-Forwarded-For and Cf-Connecting-Ip upstream, and stripped X-Epm-Client-Network on all routes other than POST /auth/email-link.
+
+2. application/apps/server/app/modules/host_agent/infrastructure/gateway.py:220-240
+   Made inspect_only=True in Gateway.auth_effect() non-mutating (no Caddy reload or containment on mismatch), and updated inspect_only=False rollback to reload self._snapshot() (preserving shared identity and other verified bindings), falling back to closed_config() only if _snapshot() itself fails.
+
+3. application/apps/server/app/modules/host_agent/infrastructure/inventory.py:857-865
+   Added an explicit apply_auth_routes branch in can_inspect() checking desired_state == "held", revision == command.payload.expected_ingress_revision + 1, and the resource binding revision.
+
+4. application/apps/server/app/modules/host_agent/infrastructure/shared_identity_registration.py:140-162
+   Updated probe_as_gateway() to drop GID (group=gid, resolved from pwd.getpwuid(uid).pw_gid with non-zero validation) alongside user=uid.
+
+5. application/deploy/hosted-mvp/gateway/qualify_shared_identity.py:143-190,357-465
+   application/deploy/hosted-mvp/gateway/qualify_identity_reboot.py:180-295
+   Updated probe_gate() to send matching Cf-Connecting-Ip + X-Forwarded-For and added 403 assertions for missing/mismatched/comma-separated/repeated headers; added group= to all subprocess calls; verified live 403 Caddy denial and ServiceRuntime.run("verify-shared") rejection after post-reboot drift.
+
+
+Central identity, handoffs, invitations and admin schema (6-11)
+
+6. application/database/admin-migrations/versions/admin_0001_initial.py:775-809
+   Removed expires_at from email_continuations immutable columns and added a monotonic-tightening guard (NEW.expires_at > OLD.expires_at OR (OLD.managed_session_id IS NOT NULL AND NEW.expires_at IS NOT OLD.expires_at)).
+
+7. application/apps/server/app/modules/hosted_access/infrastructure/central_session_authority.py:68-96
+   Validated status.checked_at <= now, clamped checked_at = max(row["issued_at"], status.checked_at), and used checked_at for both bounds and revocation_checked_at updates.
+
+8. application/apps/server/app/modules/hosted_access/infrastructure/central_handoffs.py:526-539
+   Transitioned paired email-continuation replacement login_attempts rows from 'verified' to 'completed' inside CentralHandoffs.acknowledge().
+
+9. application/apps/server/app/modules/hosted_access/infrastructure/central_login.py:157-162
+   Enforced proof.email_key == assignment["email_key"] when expected_subject is None.
+
+10. application/apps/server/app/modules/hosted_access/infrastructure/central_invitations.py:179-335
+    Wrapped the claim transaction to map IntegrityError (duplicate (issuer, subject)) to ProviderDenied, and caught ProviderDenied from source_claim.claim() to transition identity_commands to 'unknown' before re-raising.
+
+11. application/apps/server/app/modules/hosted_access/infrastructure/central_login.py:23-28,256-274
+    application/apps/server/app/modules/hosted_access/api/central_identity.py:252-263
+    Included operator_id on CentralCompletion (removing the extra synchronous DB lookup on the event loop) and only promoted to verified + handoffAttempt when no pending/unready claim state is present.
+
+
+Admin identity, destination entry and Firebase provider (12-19)
+
+12. application/apps/server/app/modules/hosted_access/api/start_rate.py
+    application/apps/server/app/modules/hosted_access/api/admin_identity.py:113-119
+    application/apps/server/app/modules/hosted_access/api/destination_identity.py:94-99
+    application/apps/server/app/modules/hosted_access/infrastructure/admin_sessions.py:144-185
+    application/apps/server/app/modules/hosted_access/infrastructure/destination_identity.py:136-176
+    Added bounded per-network rate limiting on GET /auth/start, expired-attempt pruning, oldest-anonymous-attempt eviction on capacity, and separate budgets for authenticated renewals/continuations vs anonymous starts.
+
+13. application/apps/server/app/modules/hosted_access/infrastructure/firebase_tokens.py:64-66,247-259
+    application/apps/server/app/modules/hosted_access/infrastructure/firebase_rest.py:361-365
+    application/apps/server/app/modules/hosted_access/application/admin_admission.py:25-75
+    application/apps/server/app/modules/hosted_access/infrastructure/admin_sessions.py:230-233
+    application/apps/server/app/modules/hosted_access/infrastructure/central_login.py:139-141
+    Applied a bounded 30-second (CLOCK_SKEW_SECONDS / CLOCK_SKEW_MS) clock-skew tolerance to cross-host Firebase timestamp comparisons.
+
+14. application/apps/server/app/modules/hosted_access/infrastructure/firebase_tokens.py:130-154
+    Updated CertificateCache._certificates() to skip individual out-of-window certificates and raise ValueError() only when no valid certificates remain.
+
+15. application/apps/server/app/modules/hosted_access/infrastructure/firebase_tokens.py:76-128
+    Replaced lock-held fetch in CertificateCache.key() with a single-flight Event so cached kid lookups never block on refresh.
+
+16. application/apps/server/app/modules/hosted_access/infrastructure/firebase_rest.py:140-147,333-348
+    Added multi-tenant /tenants/{tenant_id} path support in allowed_endpoint() and included the tenant path + tenantId in create_session_cookie().
+
+17. application/apps/server/app/modules/hosted_access/infrastructure/firebase_rest.py:105-111,195-199
+    Mapped server-authenticated (bearer is not None) HTTP 401/403 responses and worker stdout JSON parse failures to ProviderUnavailable.
+
+18. application/apps/server/app/modules/hosted_access/infrastructure/admin_entry.py:126-135
+    Delegated server startup to run_identity_tls(create_app(args.configuration), IPv4Address("127.0.0.1"), args).
+
+19. application/apps/server/app/modules/hosted_access/infrastructure/firebase_rest.py:266-296
+    Validated attempt_id before calling reserve_email() and removed the redundant email_key() call.
+
+
+Operator security, managed business and bootstrap (20-23)
+
+20. application/apps/server/app/modules/hosted_access/infrastructure/operator_security.py:140-196
+    Checked for a retained revoke_sessions receipt for (operation, key) before building the command (reusing source_revision - 1 for idempotent retries) and retried on concurrent access_meta.revision drift before failing.
+
+21. application/apps/server/app/modules/hosted_access/api/draft_leases.py:35-38
+    Raised api_problem(404, "hosted_mode_required", "Hosted drafts are not enabled.") when service is None.
+
+22. application/apps/server/app/modules/hosted_access/api/managed_business.py:144-227
+    Tracked response_started in private_send and re-raised errors occurring after http.response.start.
+
+23. application/apps/server/app/modules/hosted_access/infrastructure/shared_identity_entry.py:150-155
+    Wrapped lstat()/unlink() cleanup in try ... except FileNotFoundError: pass.
+
+
+Operator web UI (24-26)
+
+24. application/apps/web/src/app/managed-security.tsx:377-413
+    Handled state === "unknown" and terminal 401/403/409 responses from /logout and /logout/check by clearing pending (and stale local logout state) and re-checking session state.
+
+25. application/apps/web/src/shared/recovery.ts:502-510
+    Cleared this.pendingReturn = undefined on definite non-unknown MutationFailure in returnToEditing().
+
+26. application/apps/web/src/shared/recovery.ts:559-610
+    Added this.checkAuthority(error) in both replay() and discard() catch blocks.
+
+
+Validation
+
+- Focused Python tests: Passed (test_gateway.py, test_shared_identity_registration.py, test_firebase_provider.py, test_provider_transport.py, test_draft_leases.py, test_admin_admission.py, test_admin_sessions.py, test_admin_http.py, test_sessions.py, test_composition.py, test_transport.py, plus new regression tests for Findings 1, 2, 4, 13, 14, 15, 16, 17, 19, 21). Note: two pre-existing socket-binding tests (test_handoff.py::test_operator_runtime_uses_same_owner_via_bounded_unix_relay and test_admin_entry.py::test_loopback_tls_serves_exact_admin_host_and_releases_lock) fail inside the macOS sandbox due to AF_UNIX/loopback connect PermissionError.
+- Python lint/format: ruff format --check passed on all 30 changed Python files; ruff check --select F,W,B passed with 0 errors across all 30 files, and full ruff check passed on new start_rate.py (pre-existing PLR2004/PLC0415/E501 findings remain in untouched lines of existing files).
+- Frontend lint/format/typecheck: npm run lint (0 warnings), npm run typecheck (202 source files), and npx prettier --check apps/web/src/app/managed-security.tsx apps/web/src/shared/recovery.ts all passed (npm run format:check across the whole repo flagged only pre-existing untouched deploy/hosted-mvp/README.md).

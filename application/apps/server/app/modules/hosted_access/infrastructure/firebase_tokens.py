@@ -7,7 +7,7 @@ objects authorize no EPM principal or workspace and never retain a bearer token.
 import base64
 import json
 import re
-from threading import Lock
+from threading import Event, Lock
 import time
 
 from cryptography import x509
@@ -61,17 +61,23 @@ def _decode(segment):
     return value
 
 
+CLOCK_SKEW_SECONDS = 30
+MAX_WAIT_SECONDS = 5
+
+
 class CertificateCache:
     """One bounded cache per token kind; unknown-key refresh is globally throttled.
 
     Fetch returns (kid->PEM, Cache-Control max-age). Failure cannot slide the retained
-    deadline. The lock deduplicates concurrent misses; refresh never invokes a DB.
+    deadline. A single-flight event deduplicates concurrent misses without blocking
+    cached lookups; refresh never invokes a DB.
     """
 
     def __init__(self, fetch, *, clock=time.time):
         self.fetch, self.clock = fetch, clock
         self.keys, self.expires, self.retry_at = {}, 0, 0
         self.lock = Lock()
+        self.refreshing: Event | None = None
 
     def key(self, kid):
         if not isinstance(kid, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", kid):
@@ -80,26 +86,47 @@ class CertificateCache:
             now = self.clock()
             if now < self.expires and kid in self.keys:
                 return self.keys[kid][0]
-            if now < self.retry_at:
+            waiting = self.refreshing
+            leader = waiting is None
+            if leader:
+                if now < self.retry_at:
+                    if now >= self.expires:
+                        raise ProviderUnavailable()
+                    raise ProviderDenied()
+                self.retry_at = now + MIN_REFRESH_SECONDS
+                waiting = Event()
+                self.refreshing = waiting
+        if not leader:
+            if not waiting.wait(MAX_WAIT_SECONDS):
+                raise ProviderUnavailable()
+            with self.lock:
+                now = self.clock()
+                if now < self.expires and kid in self.keys:
+                    return self.keys[kid][0]
                 if now >= self.expires:
                     raise ProviderUnavailable()
                 raise ProviderDenied()
-            self.retry_at = now + MIN_REFRESH_SECONDS
-            try:
-                documents, max_age = self.fetch()
-                keys = self._certificates(documents, now)
-                if type(max_age) is not int or max_age <= 0:
-                    raise ValueError()
-            except ValueError, TypeError, OSError, ProviderUnavailable:
-                raise ProviderUnavailable() from None
-            self.keys = keys
-            self.expires = min(
+        try:
+            documents, max_age = self.fetch()
+            keys = self._certificates(documents, now)
+            if type(max_age) is not int or max_age <= 0:
+                raise ValueError()
+            expires = min(
                 min(self.clock(), now) + min(max_age, MAX_CACHE_SECONDS),
                 *(expiry for _key, expiry in keys.values()),
             )
-            if kid not in keys:
-                raise ProviderDenied()
-            return keys[kid][0]
+            with self.lock:
+                self.keys = keys
+                self.expires = expires
+        except ValueError, TypeError, OSError, ProviderUnavailable:
+            raise ProviderUnavailable() from None
+        finally:
+            with self.lock:
+                self.refreshing = None
+            waiting.set()
+        if kid not in keys:
+            raise ProviderDenied()
+        return keys[kid][0]
 
     @staticmethod
     def _certificates(documents, now):
@@ -115,15 +142,17 @@ class CertificateCache:
                 raise ValueError()
             cert = x509.load_pem_x509_certificate(pem.encode("ascii"))
             key = cert.public_key()
+            if not isinstance(key, rsa.RSAPublicKey) or key.key_size < MIN_RSA_BITS:
+                raise ValueError()
             if (
-                not isinstance(key, rsa.RSAPublicKey)
-                or key.key_size < MIN_RSA_BITS
-                or not cert.not_valid_before_utc.timestamp()
+                not cert.not_valid_before_utc.timestamp()
                 <= now
                 < cert.not_valid_after_utc.timestamp()
             ):
-                raise ValueError()
+                continue
             keys[kid] = (key, cert.not_valid_after_utc.timestamp())
+        if not keys:
+            raise ValueError()
         return keys
 
 
@@ -217,9 +246,15 @@ class FirebaseTokenVerifier:
             raise ProviderDenied()
         authenticated, issued, expires = times
         maximum = 14 * 86400 if session else 3600
-        if not authenticated <= issued <= now < expires or expires - issued > maximum:
+        if (
+            not authenticated <= issued <= now + CLOCK_SKEW_SECONDS
+            or now >= expires
+            or expires - issued > maximum
+        ):
             raise ProviderDenied()
-        if "nbf" in claims and (type(claims["nbf"]) is not int or claims["nbf"] > now):
+        if "nbf" in claims and (
+            type(claims["nbf"]) is not int or claims["nbf"] > now + CLOCK_SKEW_SECONDS
+        ):
             raise ProviderDenied()
         if not session and now - authenticated > 15 * 60:
             raise ProviderDenied()

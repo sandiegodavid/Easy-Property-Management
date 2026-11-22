@@ -374,10 +374,38 @@ export function ManagedSecurity({ children }: { children: ReactNode }) {
         headers: { "X-EPM-CSRF": csrf ?? "" },
         body: new URLSearchParams(intent),
       });
-      const result = (await response.json()) as { state: string };
+      let result: { state?: string } = {};
+      try {
+        result = (await response.json()) as { state?: string };
+      } catch {
+        // Non-JSON error body is treated as unconfirmed.
+      }
       if (response.ok && result.state === "confirmed") {
         remember(null);
         setMessage(intent.selection === "other" ? "Device signed out." : "Signed out.");
+      } else if (
+        (checkOnly &&
+          ((response.ok && result.state === "unknown") ||
+            response.status === 401 ||
+            response.status === 403)) ||
+        (!checkOnly &&
+          (response.status === 401 || response.status === 403 || response.status === 409))
+      ) {
+        remember(null);
+        if (intent.selection !== "other") {
+          closed.current = null;
+          try {
+            localStorage.removeItem(logoutSignal);
+          } catch {
+            /* Storage may be unavailable. */
+          }
+        }
+        setMessage(
+          checkOnly && result.state === "unknown"
+            ? "Sign-out was not recorded. Check your session state or try again."
+            : "Sign-out could not be completed. Check your session state.",
+        );
+        void check();
       } else {
         setMessage(
           result.state === "pending"

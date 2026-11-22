@@ -102,7 +102,7 @@ def test_unregistered_endpoint_never_starts_worker(monkeypatch, url, body):
     [
         (b"{}", 1, ProviderUnavailable),
         (b"x" * (transport.MAX_RESPONSE * 2 + 1), 0, ProviderUnavailable),
-        (b"not-json", 0, ProviderDenied),
+        (b"not-json", 0, ProviderUnavailable),
         (b'{"state":"ok","data":[],"cache_seconds":1}', 0, ProviderUnavailable),
         (b'{"state":"ok","data":{},"cache_seconds":true}', 0, ProviderUnavailable),
         (b'{"state":"ok","data":{},"cache_seconds":-1}', 0, ProviderUnavailable),
@@ -132,3 +132,15 @@ def test_valid_worker_response_keeps_credentials_in_pipe(monkeypatch):
     assert result == transport.JsonResponse({}, 600)
     assert "private-proof" not in repr(run.call_args.args)
     assert json.loads(run.call_args.kwargs["input"])["bearer"] == "private-proof"
+
+
+@pytest.mark.parametrize("code", [401, 403])
+def test_server_bearer_401_403_maps_to_provider_unavailable(code):
+    http = transport._SocketHttp()
+    http.opener = Mock()
+    url = "https://identitytoolkit.googleapis.com/v1/projects/example-project/accounts:lookup"
+    http.opener.open.side_effect = urllib.error.HTTPError(
+        url, code, "auth", hdrs={}, fp=io.BytesIO(b"{}")
+    )
+    with pytest.raises(ProviderUnavailable):
+        http.request(url, {"localId": ["uid"]}, bearer="expired-token")

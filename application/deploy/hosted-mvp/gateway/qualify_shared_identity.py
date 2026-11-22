@@ -141,13 +141,31 @@ def wait_ready(predicate):
 
 
 def probe_gate(host, path, *, uid=UID_TUNNEL, method="GET", headers=None):
+    merged = {
+        "Host": host,
+        "X-Forwarded-Proto": "https",
+        "Cf-Connecting-Ip": "203.0.113.10",
+        "X-Forwarded-For": "203.0.113.10",
+    }
+    if headers:
+        merged.update(headers)
+    items = []
+    for key, value in merged.items():
+        if value is None:
+            continue
+        if isinstance(value, list):
+            for entry in value:
+                items.append([key, entry])
+        else:
+            items.append([key, value])
     code = """
 import http.client, json, sys
 connection = http.client.HTTPConnection("127.0.0.1", 18880, timeout=2)
 try:
-    connection.request(sys.argv[3], sys.argv[2], headers={
-      "Host":sys.argv[1], "X-Forwarded-Proto":"https", **json.loads(sys.argv[4])
-    })
+    connection.putrequest(sys.argv[2], sys.argv[1], skip_host=True)
+    for name, value in json.loads(sys.argv[3]):
+        connection.putheader(name, value)
+    connection.endheaders()
     print(connection.getresponse().status)
 except OSError:
     print("denied")
@@ -159,11 +177,11 @@ finally:
         "-B",
         "-c",
         code,
-        host,
         path,
         method,
-        json.dumps(headers or {}),
+        json.dumps(items),
         user=uid,
+        group=uid,
         extra_groups=[],
     )
 
@@ -341,6 +359,7 @@ def peer_is_listening(address):
     probe = subprocess.run(
         [sys.executable, "-B", "-c", code, address],
         user=UID_CADDY,
+        group=UID_CADDY,
         extra_groups=[],
         capture_output=True,
         timeout=2,
@@ -362,6 +381,7 @@ def launch_gateway(root, settings, endpoint, login_origin, caddy):
     return subprocess.Popen(
         [str(caddy), "run", "--config", str(config_file)],
         user=UID_CADDY,
+        group=UID_CADDY,
         extra_groups=[],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -384,6 +404,36 @@ def check_routes():
     assert probe_gate("login.fixture.invalid", "/api/admin/session") == "403"
     assert probe_gate("admin.fixture.invalid", "/", uid=UID_EGRESS) == "denied"
     assert probe_gate("login.fixture.invalid", "/__/auth/handler", method="POST") == "403"
+    assert probe_gate("admin.fixture.invalid", "/", headers={"Cf-Connecting-Ip": None}) == "403"
+    assert probe_gate("admin.fixture.invalid", "/", headers={"X-Forwarded-For": None}) == "403"
+    assert (
+        probe_gate("admin.fixture.invalid", "/", headers={"X-Forwarded-For": "198.51.100.1"})
+        == "403"
+    )
+    assert (
+        probe_gate(
+            "admin.fixture.invalid",
+            "/",
+            headers={"X-Forwarded-For": "203.0.113.10, 198.51.100.1"},
+        )
+        == "403"
+    )
+    assert (
+        probe_gate(
+            "admin.fixture.invalid",
+            "/",
+            headers={"X-Forwarded-For": ["203.0.113.10", "203.0.113.10"]},
+        )
+        == "403"
+    )
+    assert (
+        probe_gate(
+            "admin.fixture.invalid",
+            "/",
+            headers={"Cf-Connecting-Ip": ["203.0.113.10", "203.0.113.10"]},
+        )
+        == "403"
+    )
 
 
 def launch_egress(root, target):
@@ -413,6 +463,7 @@ def launch_egress(root, target):
             str(path),
         ],
         user=UID_EGRESS,
+        group=UID_EGRESS,
         extra_groups=[],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -455,6 +506,7 @@ except OSError:
             target.gateway4,
             str(target.proxy_port),
             user=UID_TUNNEL,
+            group=UID_TUNNEL,
             extra_groups=[],
         )
         == "denied"

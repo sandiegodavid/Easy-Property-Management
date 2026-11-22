@@ -13,6 +13,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 
 from app.modules.hosted_access.application.admin_admission import (
+    CLOCK_SKEW_MS,
     AdminAdmission,
     AdminPrincipal,
     require_admin_session,
@@ -144,6 +145,13 @@ class AdminSessions:
         attempt_id, browser = str(uuid4()), token_urlsafe(32)
         now = self.clock()
         with immediate_transaction(self.engine) as connection:
+            connection.execute(
+                text(
+                    "DELETE FROM main.login_attempts WHERE purpose='admin_login' "
+                    "AND state IN ('pending','expired','failed','superseded') AND expires_at<=:now"
+                ),
+                {"now": now},
+            )
             count = connection.scalar(
                 text(
                     "SELECT count(*) FROM main.login_attempts WHERE purpose='admin_login' "
@@ -152,7 +160,24 @@ class AdminSessions:
                 {"now": now},
             )
             if count >= 128:
-                raise ProviderDenied()
+                connection.execute(
+                    text(
+                        "DELETE FROM main.login_attempts WHERE attempt_id IN ("
+                        "SELECT attempt_id FROM main.login_attempts "
+                        "WHERE purpose='admin_login' AND state='pending' "
+                        "ORDER BY created_at ASC, attempt_id ASC LIMIT :excess)"
+                    ),
+                    {"excess": count - 128 + 1},
+                )
+                count = connection.scalar(
+                    text(
+                        "SELECT count(*) FROM main.login_attempts WHERE purpose='admin_login' "
+                        "AND state IN ('pending','verified') AND expires_at>:now"
+                    ),
+                    {"now": now},
+                )
+                if count >= 128:
+                    raise ProviderDenied()
             connection.execute(
                 text("""
                 INSERT INTO main.login_attempts (
@@ -203,7 +228,7 @@ class AdminSessions:
                 or row["state"] != "pending"
                 or row["target_origin"] != self.provider.setup.origins.admin
                 or not row["created_at"] <= now < row["expires_at"]
-                or authenticated_at + 999 < row["created_at"]
+                or authenticated_at + CLOCK_SKEW_MS < row["created_at"]
                 or not compare_digest(row["central_browser_hash"], _digest(browser))
             ):
                 raise ProviderDenied()

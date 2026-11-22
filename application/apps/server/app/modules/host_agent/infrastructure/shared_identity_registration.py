@@ -3,6 +3,7 @@
 import base64
 from contextlib import closing
 from pathlib import Path
+import pwd
 import re
 import sqlite3
 import ssl
@@ -136,12 +137,20 @@ def verify_runtime_mounts(actual):
         raise HostAgentDenied()
 
 
-def probe_as_gateway(registration, target, uid):
-    # Use the same kernel UID as Caddy while preventing root from taking an
+def probe_as_gateway(registration, target, uid, gid=None):
+    # Use the same kernel UID/GID as Caddy while preventing root from taking an
     # alternate route and preventing any browser-supplied probe target.
+    if gid is None:
+        try:
+            gid = pwd.getpwuid(uid).pw_gid
+        except KeyError:
+            gid = uid
+    if type(uid) is not int or uid <= 0 or type(gid) is not int or gid <= 0:
+        raise HostAgentDenied()
     probe = subprocess.run(
         [sys.executable, "-B", "-m", "app.modules.host_agent.infrastructure.shared_identity_probe"],
         user=uid,
+        group=gid,
         extra_groups=[],
         input=(registration.model_dump_json() + "\n" + target.address4).encode(),
         capture_output=True,

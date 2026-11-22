@@ -15,6 +15,7 @@ from types import SimpleNamespace
 from qualify_shared_identity import (
     ADMIN,
     ID,
+    LOGIN,
     UID_CADDY,
     UID_PROXY,
     UID_SHARED,
@@ -33,6 +34,7 @@ from qualify_shared_identity import (
     wait_ready,
 )
 
+from app.modules.host_agent.application.dispatch import HostAgentDenied, HostAgentUnavailable
 from app.modules.host_agent.application.ingress import IngressProjection
 from app.modules.host_agent.infrastructure.docker_engine import DockerEngine
 from app.modules.host_agent.infrastructure.gateway import GatewaySettings
@@ -180,6 +182,8 @@ def qualify(caddy, firewall):
         ingress_projection=lambda: IngressProjection(records=()),
         exclusive=nullcontext,
     )
+    runtime.inventory = lambda: inventory
+    runtime.run("verify-shared")
     bootstrap = IngressBootstrap(
         inventory,
         gateway,
@@ -196,7 +200,23 @@ def qualify(caddy, firewall):
     }
     check_gateway(caddy, config_path)
     check_socket()
-    return result, bootstrap, config_path, tunnel_path
+    return result, bootstrap, runtime, config_path, tunnel_path
+
+
+def check_closed_gateway(caddy, config):
+    process = subprocess.Popen(
+        [str(caddy), "run", "--config", str(config)],
+        user=UID_CADDY,
+        group=UID_CADDY,
+        extra_groups=[],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        wait_ready(lambda: probe_gate(ADMIN.removeprefix("https://"), "/") == "403")
+        assert probe_gate(LOGIN.removeprefix("https://"), "/__/auth/handler") == "403"
+    finally:
+        stop_gateway(process)
 
 
 def check_gateway(caddy, config):
@@ -255,7 +275,7 @@ def after(caddy, firewall, engine):
     try:
         engine.start(container)
         wait_ready(lambda: peer_is_listening(target.address4))
-        pins, bootstrap, caddy_path, tunnel_path = qualify(caddy, firewall)
+        pins, bootstrap, runtime, caddy_path, tunnel_path = qualify(caddy, firewall)
         assert all(retained[name] == value for name, value in pins.items())
         with sqlite3.connect(STATE / "admin.sqlite") as connection:
             connection.execute(
@@ -264,6 +284,13 @@ def after(caddy, firewall, engine):
         bootstrap.refresh()
         assert "reverse_proxy" not in caddy_path.read_text()
         assert json.loads(tunnel_path.read_bytes())["ingress"] == [{"service": "http_status:403"}]
+        check_closed_gateway(caddy, caddy_path)
+        try:
+            runtime.run("verify-shared")
+        except HostAgentDenied, HostAgentUnavailable:
+            pass
+        else:
+            raise AssertionError("verify-shared accepted drifted shared identity state.")
         print(
             json.dumps(
                 {

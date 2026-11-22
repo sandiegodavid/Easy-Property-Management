@@ -11,6 +11,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.modules.host_agent.application.auth_routes import IdentityCookiePolicy
 from app.modules.hosted_access.api.handoff_forms import read_form, transfer_form
+from app.modules.hosted_access.api.start_rate import StartRateLimiter
 from app.modules.hosted_access.application.managed_provider import (
     ProviderDenied,
     ProviderUnavailable,
@@ -40,9 +41,12 @@ def _device_label(agent):
     return "Browser"
 
 
-def destination_router(owner, central, *, source_origin, central_origin):
+def destination_router(
+    owner, central, *, source_origin, central_origin, start_limiter: StartRateLimiter | None = None
+):
     router = APIRouter(include_in_schema=False)
     cookies = IdentityCookiePolicy()
+    limiter = start_limiter or StartRateLimiter()
 
     def boundary(request):
         if (
@@ -91,6 +95,7 @@ def destination_router(owner, central, *, source_origin, central_origin):
     async def start(request: Request):
         try:
             boundary(request)
+            limiter.check(request)
             query = dict(request.query_params)
             if len(query) != len(request.query_params.multi_items()):
                 raise ProviderDenied()

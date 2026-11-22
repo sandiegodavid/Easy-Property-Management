@@ -217,21 +217,27 @@ class Gateway:
             auth_operation_id=command.effect.child_id(),
             auth_verified_at=0,
         )
-        try:
+        if inspect_only:
             _, config = self._snapshot(proposed)
-            if not inspect_only:
-                self.admin.load(config)
             if self.admin.inspect() != config:
                 raise HostAgentUnavailable()
-        except Exception:
-            self._with_containment(
-                command,
-                allocation,
-                lambda: self.admin.load(
-                    closed_config(self.inventory.ingress_projection(), self.settings)
-                ),
-            )
-            raise
+        else:
+            try:
+                _, config = self._snapshot(proposed)
+                self.admin.load(config)
+                if self.admin.inspect() != config:
+                    raise HostAgentUnavailable()
+            except Exception:
+
+                def rollback():
+                    try:
+                        _, previous = self._snapshot()
+                    except Exception:
+                        previous = closed_config(self.inventory.ingress_projection(), self.settings)
+                    self.admin.load(previous)
+
+                self._with_containment(command, allocation, rollback)
+                raise
         return EffectObservation(
             request_hash=semantic_hash(command),
             binding_id=allocation.binding_id,

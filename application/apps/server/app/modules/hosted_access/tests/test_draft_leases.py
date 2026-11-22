@@ -31,3 +31,22 @@ def test_missing_hosted_actor_cannot_enter_recovery_mutation():
     assert caught.value.code == "hosted_draft_lease_conflict"
     store.guard.assert_not_called()
     clock.assert_not_called()
+
+
+def test_local_mode_draft_lease_route_returns_404_not_500():
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.modules.hosted_access.api.draft_leases import build_draft_lease_router
+    from app.platform.api_errors import register_api_error_handlers
+
+    app = FastAPI()
+    register_api_error_handlers(app)
+    app.include_router(build_draft_lease_router(service=None))
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.post(
+        "/api/hosted/drafts/00000000-0000-4000-8000-000000000001/lease",
+        json={"token": "a" * 43, "expectedRevision": 1},
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "hosted_mode_required"

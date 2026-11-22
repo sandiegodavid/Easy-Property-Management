@@ -597,3 +597,109 @@ def test_registered_source_rejects_stale_epoch_before_live_host_inspection():
     with pytest.raises(HostAgentDenied):
         sources.resolve_identity_source(ID, SimpleNamespace(operator_id=ID, workspace_id=ID), 1)
     engine.inspect.assert_not_called()
+
+
+def test_auth_route_allows_matching_cloudflare_xff_and_strips_client_network():
+    import json
+    import re
+
+    from app.modules.host_agent.application.auth_routes import SharedIdentityManifest
+    from app.modules.host_agent.infrastructure.auth_projection import (
+        VerifiedAuthEndpoint,
+        auth_config,
+    )
+    from app.modules.host_agent.tests.test_agent import ID
+
+    manifest = SharedIdentityManifest(
+        component_id=ID,
+        artifact_sha256="a" * 64,
+        private_endpoint_id=ID,
+        central_origin="https://login.example.invalid",
+        admin_origin="https://admin.example.invalid",
+        owning_login_origin="https://login.example.invalid",
+    )
+    endpoint = VerifiedAuthEndpoint(manifest, "10.3.0.2", 8000, "identity.local")
+    config = auth_config(
+        IngressProjection(records=()),
+        GatewaySettings(Path("/run/epm-caddy/admin.sock"), 1001),
+        shared=endpoint,
+        login_origin=manifest.central_origin,
+    )
+    routes = config["apps"]["http"]["servers"]["gateway"]["routes"][:-1]
+    for route in routes:
+        denied_headers = {
+            next(iter(item["header"])) for item in route["match"][0]["not"] if "header" in item
+        }
+        assert "X-Forwarded-For" not in denied_headers
+        expr = route["match"][0]["expression"]
+        assert "{http.request.header.Cf-Connecting-Ip}" in expr
+        assert (
+            "{http.request.header.X-Forwarded-For} == {http.request.header.Cf-Connecting-Ip}"
+            in expr
+        )
+        req_headers = route["handle"][0]["headers"]["request"]
+        assert "X-Forwarded-For" in req_headers["delete"]
+        assert "Cf-Connecting-Ip" in req_headers["delete"]
+        if (
+            route["match"][0]["method"] == ["POST"]
+            and json.dumps("^" + re.escape("/auth/email-link") + r"(?:[?].*)?$")
+            in route["match"][0]["expression"]
+        ):
+            assert req_headers["set"]["X-Epm-Client-Network"] == [
+                "{http.request.header.Cf-Connecting-Ip}"
+            ]
+            assert "X-Epm-Client-Network" not in req_headers["delete"]
+        else:
+            assert "X-Epm-Client-Network" in req_headers["delete"]
+
+
+def test_auth_effect_inspect_only_does_not_contain_and_apply_failure_rolls_back_snapshot(gateway):
+    from unittest.mock import Mock
+
+    from app.modules.host_agent.application.auth_routes import SharedIdentityManifest
+    from app.modules.host_agent.infrastructure.auth_projection import (
+        VerifiedAuthEndpoint,
+        auth_config,
+    )
+    from app.modules.host_agent.tests.test_agent import ID
+
+    service = gateway.value
+    manifest = SharedIdentityManifest(
+        component_id=ID,
+        artifact_sha256="a" * 64,
+        private_endpoint_id=ID,
+        central_origin="https://login.example.invalid",
+        admin_origin="https://admin.example.invalid",
+        owning_login_origin="https://login.example.invalid",
+    )
+    shared = VerifiedAuthEndpoint(manifest, "10.3.0.2", 8000, "identity.local")
+    service.auth_endpoints = SimpleNamespace(
+        resolve_held=Mock(side_effect=HostAgentUnavailable()),
+        resolve_shared=lambda: (shared, manifest.central_origin),
+    )
+    _, expected_previous = service._snapshot()
+    command = SimpleNamespace(
+        payload=SimpleNamespace(
+            expected_ingress_revision=1, manifest_ref="pinned", manifest_sha256="a" * 64
+        ),
+        effect=SimpleNamespace(binding_id=ID, resource_generation=1, child_id=lambda: ID),
+        access_epoch=1,
+    )
+    allocation = SimpleNamespace(
+        ingress_projection_revision=3, binding_id=ID, resource_generation=1, access_epoch=1
+    )
+    gateway.calls.clear()
+    with pytest.raises(HostAgentUnavailable):
+        service.auth_effect(command, allocation, inspect_only=True)
+    assert gateway.calls == []
+
+    with pytest.raises(HostAgentUnavailable):
+        service.auth_effect(command, allocation, inspect_only=False)
+    assert "contain" in gateway.calls
+    assert gateway.active == expected_previous
+    assert gateway.active == auth_config(
+        service.inventory.ingress_projection(),
+        service.settings,
+        shared=shared,
+        login_origin=manifest.central_origin,
+    )

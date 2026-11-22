@@ -856,6 +856,12 @@ class Inventory:
             return False
         if command.effect.kind == "apply_ingress_policy":
             return row["operation_id"] == command.effect.child_id()
+        if command.effect.kind == "apply_auth_routes":
+            return (
+                row["desired_state"] == "held"
+                and row["revision"] == command.payload.expected_ingress_revision + 1
+                and self._binding(connection, command)["revision"] == command.expected_revision
+            )
         return self._binding(connection, command)["revision"] == command.expected_revision
 
 

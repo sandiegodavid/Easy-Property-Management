@@ -250,11 +250,17 @@ def build_central_identity_app(
             remembered=value.remembered,
         )
         if handoffs is not None and isinstance(result, CentralCompletion):
-            with service.engine.connect() as connection:
-                attempt = service.attempts.attempt(connection, value.attemptId, browser)
-            if await run_in_threadpool(handoffs.google_ready, attempt["operator_id"]):
+            claim = result.result.get("claim")
+            claim_ready = claim is None or "state" not in claim
+            if (
+                claim_ready
+                and result.operator_id is not None
+                and await run_in_threadpool(handoffs.google_ready, result.operator_id)
+            ):
                 result = CentralCompletion(
-                    {"state": "verified", "handoffAttempt": value.attemptId}, result.cookie
+                    {"state": "verified", "handoffAttempt": value.attemptId},
+                    result.cookie,
+                    operator_id=result.operator_id,
                 )
         return completion_response(result, value.remembered)
 

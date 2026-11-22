@@ -9,7 +9,8 @@ On each turn, continue through checkpoints until complete. Unless instructed oth
 
 ## code reviews
 
-- Report only actionable findings, grouped by module or boundary, with priority and precise file and line references, in a plain text file in pending_code_review_comments folder
+- Report only actionable findings, grouped by module or boundary, with priority and precise file and line references, in a plain text file in `docs/pending_code_review_comments` folder
+- When addressing code review comments from `docs/pending_code_review_comments`, save a plain text response (summary of changes with file and line references, plus validation results) alongside the original review file in `docs/pending_code_review_comments` (e.g., `<review_prefix>_REVIEW_RESPONSE.txt`).
 
 ### Re-reviews and Follow-up code reviews
 

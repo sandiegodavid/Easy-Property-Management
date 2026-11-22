@@ -78,10 +78,20 @@ def _route(origin, method, path, endpoint):
         + " && {http.request.orig_uri}.matches("
         + json.dumps(uri_pattern)
         + ') && {http.request.header.X-Forwarded-Proto} == "https"'
+        + ' && {http.request.header.Cf-Connecting-Ip}.matches("^[0-9A-Fa-f:.]+$")'
+        + " && {http.request.header.X-Forwarded-For} == {http.request.header.Cf-Connecting-Ip}"
     )
     upstream_headers = {"Host": [host], "X-Forwarded-Proto": ["https"]}
+    delete_headers = [
+        "Forwarded",
+        "X-Forwarded-Host",
+        "X-Forwarded-For",
+        "Cf-Connecting-Ip",
+    ]
     if path == "/auth/email-link" and method == "POST":
         upstream_headers["X-Epm-Client-Network"] = ["{http.request.header.Cf-Connecting-Ip}"]
+    else:
+        delete_headers.append("X-Epm-Client-Network")
     tls = {"server_name": endpoint.tls_name}
     if endpoint.trust_der_base64 is not None:
         tls["root_ca_pool"] = [endpoint.trust_der_base64]
@@ -97,7 +107,6 @@ def _route(origin, method, path, endpoint):
                     for name in (
                         "Forwarded",
                         "X-Forwarded-Host",
-                        "X-Forwarded-For",
                         "X-Forwarded-Port",
                         "X-Original-URL",
                         "X-Rewrite-URL",
@@ -118,12 +127,7 @@ def _route(origin, method, path, endpoint):
                 "headers": {
                     "request": {
                         "set": upstream_headers,
-                        "delete": [
-                            "Forwarded",
-                            "X-Forwarded-Host",
-                            "X-Forwarded-For",
-                            "Cf-Connecting-Ip",
-                        ],
+                        "delete": delete_headers,
                     }
                 },
             }

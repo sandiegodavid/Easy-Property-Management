@@ -148,8 +148,11 @@ def owned_identity_socket(directory, scope_id):
             listener.listen(8)
             yield listener
         finally:
-            if path.lstat().st_ino == inode:
-                path.unlink()
+            try:
+                if path.lstat().st_ino == inode:
+                    path.unlink()
+            except FileNotFoundError:
+                pass
 
 
 def network_source(request):

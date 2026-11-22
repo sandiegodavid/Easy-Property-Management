@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from pydantic import SecretStr
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from app.modules.hosted_access.application.central_login import (
     UnavailableClaimReadiness,
@@ -176,138 +177,141 @@ class CentralInvitations:
                 connection.rollback()
                 return self._reconcile(retained)
         ready = self.readiness.ready(attempt["operator_id"], operator.access_epoch)
-        with immediate_transaction(self.engine) as connection:
-            owned = connection.execute(
-                text(
-                    "SELECT cookie_hash FROM main.managed_identity_sessions WHERE managed_session_id=:id"
-                ),
-                {"id": managed_id},
-            ).scalar_one_or_none()
-            if owned is None or not compare_digest(
-                owned, digest(central_cookie.get_secret_value())
-            ):
-                raise ProviderDenied()
-            # A matching original receipt is inspected before current readiness or invite state.
-            key = attempt_id + ":" + managed_id + ":" + invitation_id
-            request_hash = digest(key + ":" + token_hash)
-            prior = (
-                connection.execute(
+        try:
+            with immediate_transaction(self.engine) as connection:
+                owned = connection.execute(
                     text(
-                        "SELECT * FROM main.identity_commands WHERE kind='claim' AND idempotency_key=:key"
-                    ),
-                    {"key": key},
-                )
-                .mappings()
-                .one_or_none()
-            )
-            if prior:
-                if prior["request_hash"] != request_hash:
-                    raise ProviderDenied()
-                return (
-                    json.loads(prior["result_json"])
-                    if prior["state"] == "succeeded"
-                    else {"state": "claim_needs_checking"}
-                )
-            managed = (
-                connection.execute(
-                    text(
-                        "SELECT * FROM main.managed_identity_sessions WHERE managed_session_id=:id"
+                        "SELECT cookie_hash FROM main.managed_identity_sessions WHERE managed_session_id=:id"
                     ),
                     {"id": managed_id},
+                ).scalar_one_or_none()
+                if owned is None or not compare_digest(
+                    owned, digest(central_cookie.get_secret_value())
+                ):
+                    raise ProviderDenied()
+                # A matching original receipt is inspected before current readiness or invite state.
+                key = attempt_id + ":" + managed_id + ":" + invitation_id
+                request_hash = digest(key + ":" + token_hash)
+                prior = (
+                    connection.execute(
+                        text(
+                            "SELECT * FROM main.identity_commands WHERE kind='claim' AND idempotency_key=:key"
+                        ),
+                        {"key": key},
+                    )
+                    .mappings()
+                    .one_or_none()
                 )
-                .mappings()
-                .one_or_none()
-            )
-            invite = (
+                if prior:
+                    if prior["request_hash"] != request_hash:
+                        raise ProviderDenied()
+                    return (
+                        json.loads(prior["result_json"])
+                        if prior["state"] == "succeeded"
+                        else {"state": "claim_needs_checking"}
+                    )
+                managed = (
+                    connection.execute(
+                        text(
+                            "SELECT * FROM main.managed_identity_sessions WHERE managed_session_id=:id"
+                        ),
+                        {"id": managed_id},
+                    )
+                    .mappings()
+                    .one_or_none()
+                )
+                invite = (
+                    connection.execute(
+                        text("SELECT * FROM main.invitations WHERE invitation_id=:id"),
+                        {"id": invitation_id},
+                    )
+                    .mappings()
+                    .one_or_none()
+                )
+                current = (
+                    connection.execute(
+                        text("SELECT * FROM main.operators WHERE operator_id=:id"),
+                        {"id": attempt["operator_id"]},
+                    )
+                    .mappings()
+                    .one()
+                )
+                now = self.clock()
+                if (
+                    managed is None
+                    or invite is None
+                    or managed["operator_id"] != current["operator_id"]
+                    or managed["purpose"] != "operator"
+                    or managed["revoked_at"] is not None
+                    or not managed["issued_at"]
+                    <= now
+                    < min(managed["provider_valid_until"], managed["revocation_valid_until"])
+                    or attempt["state"] not in {"completed", "superseded"}
+                    or now >= attempt["expires_at"]
+                    or current["desired_access"] != "enabled"
+                    or invite["operator_id"] != current["operator_id"]
+                    or invite["state"] not in {"pending_delivery", "sent"}
+                    or now >= invite["expires_at"]
+                    or invite["access_epoch"] != current["access_epoch"]
+                    or current["access_epoch"] != operator.access_epoch
+                    or invite["assignment_revision"] != current["revision"]
+                    or invite["email_key"] != managed["email_key"]
+                    or current["issuer"] != managed["issuer"]
+                    or current["subject"] not in {None, managed["subject"]}
+                    or not compare_digest(invite["token_hash"], token_hash)
+                ):
+                    raise ProviderDenied()
+                if not ready or current["setup_state"] != "ready_for_claim":
+                    return {"state": "workspace_not_ready"}
                 connection.execute(
-                    text("SELECT * FROM main.invitations WHERE invitation_id=:id"),
-                    {"id": invitation_id},
+                    text(
+                        "UPDATE main.invitations SET state='claimed', claimed_at=:now, claimed_issuer=:issuer, "
+                        "claimed_subject=:subject, revision=revision+1 WHERE invitation_id=:id"
+                    ),
+                    {
+                        "now": now,
+                        "issuer": managed["issuer"],
+                        "subject": managed["subject"],
+                        "id": invitation_id,
+                    },
                 )
-                .mappings()
-                .one_or_none()
-            )
-            current = (
                 connection.execute(
-                    text("SELECT * FROM main.operators WHERE operator_id=:id"),
-                    {"id": attempt["operator_id"]},
+                    text(
+                        "UPDATE main.operators SET subject=:subject, revision=revision+1, updated_at=:now "
+                        "WHERE operator_id=:id"
+                    ),
+                    {"subject": managed["subject"], "now": now, "id": current["operator_id"]},
                 )
-                .mappings()
-                .one()
-            )
-            now = self.clock()
-            if (
-                managed is None
-                or invite is None
-                or managed["operator_id"] != current["operator_id"]
-                or managed["purpose"] != "operator"
-                or managed["revoked_at"] is not None
-                or not managed["issued_at"]
-                <= now
-                < min(managed["provider_valid_until"], managed["revocation_valid_until"])
-                or attempt["state"] not in {"completed", "superseded"}
-                or now >= attempt["expires_at"]
-                or current["desired_access"] != "enabled"
-                or invite["operator_id"] != current["operator_id"]
-                or invite["state"] not in {"pending_delivery", "sent"}
-                or now >= invite["expires_at"]
-                or invite["access_epoch"] != current["access_epoch"]
-                or current["access_epoch"] != operator.access_epoch
-                or invite["assignment_revision"] != current["revision"]
-                or invite["email_key"] != managed["email_key"]
-                or current["issuer"] != managed["issuer"]
-                or current["subject"] not in {None, managed["subject"]}
-                or not compare_digest(invite["token_hash"], token_hash)
-            ):
-                raise ProviderDenied()
-            if not ready or current["setup_state"] != "ready_for_claim":
-                return {"state": "workspace_not_ready"}
-            connection.execute(
-                text(
-                    "UPDATE main.invitations SET state='claimed', claimed_at=:now, claimed_issuer=:issuer, "
-                    "claimed_subject=:subject, revision=revision+1 WHERE invitation_id=:id"
-                ),
-                {
-                    "now": now,
-                    "issuer": managed["issuer"],
-                    "subject": managed["subject"],
-                    "id": invitation_id,
-                },
-            )
-            connection.execute(
-                text(
-                    "UPDATE main.operators SET subject=:subject, revision=revision+1, updated_at=:now "
-                    "WHERE operator_id=:id"
-                ),
-                {"subject": managed["subject"], "now": now, "id": current["operator_id"]},
-            )
-            operation_id = str(uuid4())
-            connection.execute(
-                text("""
-                INSERT INTO main.identity_commands (
-                    operation_id, kind, idempotency_key, request_hash, operator_id,
-                    managed_session_id, attempt_id, access_epoch, state, result_json,
-                    created_at, updated_at, revision
-                ) VALUES (:id,'claim',:key,:hash,:operator,:managed,:attempt,:epoch,
-                          'pending',NULL,:now,:now,1)
-            """),
-                {
-                    "id": operation_id,
-                    "key": key,
-                    "hash": request_hash,
-                    "operator": current["operator_id"],
-                    "managed": managed_id,
-                    "attempt": attempt_id,
-                    "epoch": current["access_epoch"],
-                    "now": now,
-                },
-            )
-            self.audit(
-                connection,
-                "invitation_claim",
-                "central-identity",
-                {"identity_operation_id": operation_id},
-                current["operator_id"],
-            )
+                operation_id = str(uuid4())
+                connection.execute(
+                    text("""
+                    INSERT INTO main.identity_commands (
+                        operation_id, kind, idempotency_key, request_hash, operator_id,
+                        managed_session_id, attempt_id, access_epoch, state, result_json,
+                        created_at, updated_at, revision
+                    ) VALUES (:id,'claim',:key,:hash,:operator,:managed,:attempt,:epoch,
+                              'pending',NULL,:now,:now,1)
+                """),
+                    {
+                        "id": operation_id,
+                        "key": key,
+                        "hash": request_hash,
+                        "operator": current["operator_id"],
+                        "managed": managed_id,
+                        "attempt": attempt_id,
+                        "epoch": current["access_epoch"],
+                        "now": now,
+                    },
+                )
+                self.audit(
+                    connection,
+                    "invitation_claim",
+                    "central-identity",
+                    {"identity_operation_id": operation_id},
+                    current["operator_id"],
+                )
+        except IntegrityError:
+            raise ProviderDenied() from None
         command = {
             "operation_id": operation_id,
             "operator_id": current["operator_id"],
@@ -325,6 +329,9 @@ class CentralInvitations:
         except ProviderUnavailable:
             self._unknown(operation_id)
             return {"state": "claim_needs_checking"}
+        except ProviderDenied:
+            self._unknown(operation_id)
+            raise
         return self._acknowledge(command, receipt)
 
     def _unknown(self, operation_id):

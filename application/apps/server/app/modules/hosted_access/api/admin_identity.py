@@ -12,18 +12,24 @@ from app.modules.hosted_access.application.managed_provider import (
     ProviderDenied,
     ProviderUnavailable,
 )
+from app.modules.hosted_access.api.start_rate import StartRateLimiter
 from app.modules.hosted_access.infrastructure.admin_sessions import AdminSessions
 
 MAX_BODY = 20000
 
 
 def build_admin_identity_app(
-    sessions: AdminSessions, *, web_config=None, ui_directory: Path | None = None
+    sessions: AdminSessions,
+    *,
+    web_config=None,
+    ui_directory: Path | None = None,
+    start_limiter: StartRateLimiter | None = None,
 ) -> FastAPI:
     app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
     app.router.redirect_slashes = False
     origin = sessions.provider.setup.origins.admin
     cookies = IdentityCookiePolicy()
+    limiter = start_limiter or StartRateLimiter()
 
     def cookie(request, name):
         raw = request.headers.get("cookie", "")
@@ -105,7 +111,8 @@ def build_admin_identity_app(
         return value
 
     @app.get("/auth/start")
-    def start():
+    def start(request: Request):
+        limiter.check(request)
         attempt, challenge = sessions.begin()
         response = JSONResponse({"attemptId": attempt, **(web_config or {})})
         set_cookie(response, cookies.central_challenge, challenge, 900)

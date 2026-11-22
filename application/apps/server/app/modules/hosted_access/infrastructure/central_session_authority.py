@@ -67,18 +67,16 @@ class CentralSessionAuthority:
             row = _managed(connection, managed_id, binding)
             now = self.clock()
             until = min(status.valid_until, row["provider_valid_until"])
-            if (
-                not row["issued_at"]
-                <= status.checked_at
-                <= now
-                < min(until, row["remembered_until"])
+            checked_at = max(row["issued_at"], status.checked_at)
+            if status.checked_at > now or not row["issued_at"] <= checked_at <= now < min(
+                until, row["remembered_until"]
             ):
                 raise ProviderUnavailable()
             revoke = status.status.disabled or row["authenticated_at"] < status.status.valid_since
             revoked_at = (
                 row["revoked_at"] if row["revoked_at"] is not None else now if revoke else None
             )
-            if status.checked_at >= row["revocation_checked_at"] and (
+            if checked_at >= row["revocation_checked_at"] and (
                 until > row["revocation_valid_until"] or revoked_at != row["revoked_at"]
             ):
                 connection.execute(
@@ -88,7 +86,7 @@ class CentralSessionAuthority:
                     WHERE managed_session_id=:id
                 """),
                     {
-                        "checked": status.checked_at,
+                        "checked": checked_at,
                         "until": max(until, row["revocation_valid_until"]),
                         "revoked": revoked_at,
                         "id": managed_id,

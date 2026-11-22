@@ -228,3 +228,15 @@ def test_shared_registration_refuses_stale_host_evidence(shared, failure):
     shared.engine.inspect.return_value = inspected
     with pytest.raises(HostAgentDenied):
         shared.sources.resolve_shared()
+
+
+def test_probe_as_gateway_drops_both_uid_and_gid(shared, monkeypatch):
+    from importlib import reload
+
+    run = Mock(return_value=SimpleNamespace(returncode=0, stdout=b"verified\n"))
+    real_probe = reload(registration).probe_as_gateway
+    monkeypatch.setattr(registration.subprocess, "run", run)
+    real_probe(shared.registration, shared.bridge, 800, 801)
+    assert run.call_args.kwargs["user"] == 800
+    assert run.call_args.kwargs["group"] == 801
+    assert run.call_args.kwargs["extra_groups"] == []

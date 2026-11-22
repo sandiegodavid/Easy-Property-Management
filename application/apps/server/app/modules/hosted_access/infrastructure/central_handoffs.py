@@ -530,6 +530,13 @@ class CentralHandoffs:
             """),
                 {"id": receipt.handoff_id},
             )
+            connection.execute(
+                text("""
+                UPDATE main.login_attempts SET state='completed', revision=revision+1
+                WHERE attempt_id=:id AND state='verified'
+            """),
+                {"id": row["attempt_id"]},
+            )
             if receipt.replaced_device_managed_id is not None:
                 connection.execute(
                     text("""

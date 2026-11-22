@@ -95,13 +95,13 @@ def test_google_proof_keeps_auth_time_and_conservative_email(provider):
         {"sub": "x" * 129},
         {"email_verified": False},
         {"email_verified": 1},
-        {"auth_time": NOW + 1},
+        {"auth_time": NOW + 31},
         {"auth_time": True},
         {"auth_time": NOW - 1000},
-        {"iat": NOW + 1},
+        {"iat": NOW + 31},
         {"exp": NOW},
         {"exp": NOW + 7200},
-        {"nbf": NOW + 1},
+        {"nbf": NOW + 31},
         {"email": "not-email"},
         {"firebase": {"sign_in_provider": "password"}},
         {"firebase": {"sign_in_provider": "google.com", "tenant": "foreign"}},
@@ -295,3 +295,101 @@ def test_mail_link_retains_only_public_attempt_correlation(provider):
         http.request.call_args.args[1]["continueUrl"]
         == client.setup.origins.email_callback + "?attempt=" + attempt
     )
+
+
+def test_clock_skew_leeway_and_invalid_attempt_id_before_rate_limit(provider):
+    verifier, sign, _, _ = provider
+    proof = verifier.google(sign({"auth_time": NOW + 5, "iat": NOW + 5, "nbf": NOW + 5}))
+    assert proof.subject == "uid"
+
+    client, http = rest(provider)
+    client.rate_admission = Mock()
+    with pytest.raises(ProviderDenied):
+        client.send_email_link(
+            "a@example.invalid",
+            network="server-network",
+            operation=Mock(),
+            attempt_id="not-a-uuid",
+        )
+    client.rate_admission.reserve_email.assert_not_called()
+    http.request.assert_not_called()
+
+
+def test_certificate_cache_skips_out_of_window_cert_and_does_not_block_cached_kid(provider):
+    import threading
+
+    _, _, _, fetch_mock = provider
+    pem = fetch_mock.return_value[0]["key1"]
+    expired_key = rsa.generate_private_key(65537, 2048)
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "expired.invalid")])
+    expired_pem = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(expired_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.fromtimestamp(NOW - 7200, tz=UTC))
+        .not_valid_after(datetime.fromtimestamp(NOW - 3600, tz=UTC))
+        .sign(expired_key, hashes.SHA256())
+        .public_bytes(serialization.Encoding.PEM)
+        .decode("ascii")
+    )
+    entered = threading.Event()
+    release = threading.Event()
+    calls = 0
+
+    def fetch():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return {"active": pem, "expired": expired_pem}, 3600
+        entered.set()
+        release.wait(2)
+        return {"active": pem}, 3600
+
+    now = [NOW]
+    cache = CertificateCache(fetch, clock=lambda: now[0])
+    active = cache.key("active")
+    assert active is not None
+    with pytest.raises(ProviderDenied):
+        cache.key("expired")
+
+    now[0] += 61
+    miss = threading.Thread(target=lambda: pytest.raises(ProviderDenied, cache.key, "missing"))
+    miss.start()
+    assert entered.wait(2)
+    # Cached kid lookup returns immediately without waiting for in-flight fetch.
+    assert cache.key("active") == active
+    release.set()
+    miss.join(2)
+
+
+def test_create_session_cookie_targets_tenant_path_when_tenant_is_configured(provider):
+    from pydantic import SecretStr
+
+    from app.modules.hosted_access.infrastructure.firebase_rest import (
+        JsonResponse,
+        allowed_endpoint,
+    )
+
+    verifier, sign, _, _ = provider
+    client, http = rest(provider)
+    tenant = "tenant-alpha"
+    client.setup = client.setup.model_copy(
+        update={"realm": client.setup.realm.model_copy(update={"tenant_id": tenant})}
+    )
+    verifier.realm = client.setup.realm
+    id_token = sign({"firebase": {"sign_in_provider": "google.com", "tenant": tenant}})
+    cookie_token = sign(
+        {
+            "iss": f"https://session.firebase.google.com/{client.setup.realm.project_id}",
+            "firebase": {"sign_in_provider": "google.com", "tenant": tenant},
+        }
+    )
+    http.request.return_value = JsonResponse({"sessionCookie": cookie_token}, 0)
+    identity = verifier.google(id_token)
+    client.create_session_cookie(SecretStr(id_token), identity, remembered=False)
+    url, body = http.request.call_args.args
+    assert url.endswith(f"/tenants/{tenant}:createSessionCookie")
+    assert body["tenantId"] == tenant
+    assert allowed_endpoint(url, body)

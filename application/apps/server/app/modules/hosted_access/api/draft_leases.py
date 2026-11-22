@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 
 from app.modules.hosted_access.domain.models import HostedAccessError
 from app.platform.actor_context import current_operator_actor
+from app.platform.api_errors import api_problem
 
 
 class DraftLeaseInput(BaseModel):
@@ -33,7 +34,7 @@ def build_draft_lease_router(service=None, deployment=None):
     )
     def claim(record_id: UUID, data: DraftLeaseInput, request: Request):
         if service is None:
-            raise HostedAccessError("hosted_mode_required", "Hosted drafts are not enabled.", 404)
+            raise api_problem(404, "hosted_mode_required", "Hosted drafts are not enabled.")
         if deployment is not None and "records.write" not in deployment.capabilities:
             raise HostedAccessError(
                 "hosted_capability_forbidden", "Read-only access cannot claim edits.", 403

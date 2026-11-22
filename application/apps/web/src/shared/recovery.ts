@@ -502,6 +502,7 @@ export class RecoveryController {
     try {
       result = await this.transport.returnToEditing(this.id, this.pendingReturn, this.leaseToken);
     } catch (error) {
+      if (error instanceof MutationFailure && !error.outcomeUnknown) this.pendingReturn = undefined;
       this.checkAuthority(error);
       throw error;
     }
@@ -557,6 +558,9 @@ export class RecoveryController {
       await this.requireLease();
       await dispatch(current, this.preparedHeaders());
       await this.reconcileAttempt();
+    } catch (error) {
+      this.checkAuthority(error);
+      throw error;
     } finally {
       this.locked = false;
     }
@@ -599,6 +603,7 @@ export class RecoveryController {
     } catch (error) {
       if (error instanceof MutationFailure && !error.outcomeUnknown)
         this.pendingDiscard = undefined;
+      this.checkAuthority(error);
       this.publish({
         draft: "failed",
         error: error instanceof Error ? error.message : "Discard failed.",

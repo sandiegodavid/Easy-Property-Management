@@ -21,7 +21,11 @@ from app.modules.hosted_access.application.managed_provider import (
     ProviderUnavailable,
     email_key,
 )
-from app.modules.hosted_access.infrastructure.firebase_tokens import MAX_TOKEN, unique_json
+from app.modules.hosted_access.infrastructure.firebase_tokens import (
+    CLOCK_SKEW_SECONDS,
+    MAX_TOKEN,
+    unique_json,
+)
 from app.modules.hosted_access.infrastructure.provider_status import RevocationCache, UserStatus
 
 MAX_RESPONSE = 131072
@@ -104,6 +108,8 @@ class _SocketHttp:
                 return JsonResponse(unique_json(content), int(match[1]) if match else 0)
         except urllib.error.HTTPError as error:
             # Never expose URL/API key/provider payload or retry an ambiguous mutation.
+            if bearer is not None and error.code in {401, 403}:
+                raise ProviderUnavailable() from None
             if error.code in {400, 401, 403, 404}:
                 raise ProviderDenied() from None
             raise ProviderUnavailable() from None
@@ -137,7 +143,9 @@ def allowed_endpoint(url, body):
         )
     return not parsed.query and bool(
         re.fullmatch(
-            r"/v1/projects/[a-z][a-z0-9-]{4,28}[a-z0-9](?:/accounts:lookup|:createSessionCookie)",
+            r"/v1/projects/[a-z][a-z0-9-]{4,28}[a-z0-9]"
+            r"(?:/tenants/[A-Za-z0-9_-]{1,128})?"
+            r"(?:/accounts:lookup|:createSessionCookie)",
             parsed.path,
         )
     )
@@ -185,7 +193,10 @@ class ProviderHttp:
             )
             if result.returncode or len(result.stdout) > MAX_RESPONSE * 2:
                 raise ProviderUnavailable()
-            message = unique_json(result.stdout)
+            try:
+                message = unique_json(result.stdout)
+            except ProviderDenied, ValueError, TypeError, RecursionError:
+                raise ProviderUnavailable() from None
             if message.get("state") == "denied":
                 raise ProviderDenied()
             if (
@@ -253,14 +264,7 @@ class FirebaseRest:
         return self.create_session_cookie(SecretStr(token), identity, remembered=remembered)
 
     def send_email_link(self, email, *, network=None, operation=None, attempt_id=None):
-        email_key(self.setup.realm.alias, email)
-        if self.rate_admission is None or network is None or operation is None:
-            raise ProviderUnavailable()
-        if self.rate_admission.reserve_email(email, network, operation) != "reserved":
-            raise ProviderUnavailable()
-        email_key(self.setup.realm.alias, email)
-        # Caller must reserve its durable per-attempt/network/deployment rate admission.
-        # No ID token: this must not implicitly link an existing provider account.
+        normalized = email_key(self.setup.realm.alias, email)
         continuation = self.setup.origins.email_callback
         if attempt_id is not None:
             from uuid import UUID
@@ -271,6 +275,12 @@ class FirebaseRest:
             except ValueError, TypeError, AttributeError:
                 raise ProviderDenied() from None
             continuation += "?attempt=" + attempt_id
+        if self.rate_admission is None or network is None or operation is None:
+            raise ProviderUnavailable()
+        if self.rate_admission.reserve_email(email, network, operation) != "reserved":
+            raise ProviderUnavailable()
+        # Caller must reserve its durable per-attempt/network/deployment rate admission.
+        # No ID token: this must not implicitly link an existing provider account.
         result = self._public(
             "sendOobCode",
             {
@@ -280,9 +290,10 @@ class FirebaseRest:
                 "canHandleCodeInApp": True,
             },
         )
-        if not isinstance(result.get("email"), str) or email_key(
-            self.setup.realm.alias, result["email"]
-        ) != email_key(self.setup.realm.alias, email):
+        if (
+            not isinstance(result.get("email"), str)
+            or email_key(self.setup.realm.alias, result["email"]) != normalized
+        ):
             raise ProviderDenied()
         return "sent"
 
@@ -322,9 +333,18 @@ class FirebaseRest:
     def create_session_cookie(self, token: SecretStr, identity, *, remembered):
         duration = 14 * 86400 if remembered else 8 * 3600
         project = self.setup.realm.project_id
+        tenant = self.setup.realm.tenant_id
+        path = (
+            f"/v1/projects/{project}/tenants/{tenant}:createSessionCookie"
+            if tenant is not None
+            else f"/v1/projects/{project}:createSessionCookie"
+        )
+        body = {"idToken": token.get_secret_value(), "validDuration": str(duration)}
+        if tenant is not None:
+            body["tenantId"] = tenant
         result = self.http.request(
-            f"https://identitytoolkit.googleapis.com/v1/projects/{project}:createSessionCookie",
-            {"idToken": token.get_secret_value(), "validDuration": str(duration)},
+            "https://identitytoolkit.googleapis.com" + path,
+            body,
             bearer=self.bearer(),
         ).data
         cookie = result.get("sessionCookie")
@@ -338,6 +358,9 @@ class FirebaseRest:
             identity.authenticated_at,
         ):
             raise ProviderDenied()
-        if proof.expires_at > int(self.verifier.clock() * 1000) + duration * 1000:
+        if (
+            proof.expires_at
+            > int(self.verifier.clock() * 1000) + (duration + CLOCK_SKEW_SECONDS) * 1000
+        ):
             raise ProviderDenied()
         return SecretStr(cookie), proof

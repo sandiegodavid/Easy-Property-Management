@@ -773,7 +773,7 @@ def _identity_guards():
         "source_attempt_id source_browser_hash central_browser_hash method target_origin "
         "return_path confirmed_request_hash created_at expires_at",
         "email_continuations": "continuation_id original_attempt_id code_hash "
-        "central_browser_hash operator_id target_origin access_epoch created_at expires_at",
+        "central_browser_hash operator_id target_origin access_epoch created_at",
         "managed_identity_sessions": "managed_session_id cookie_hash purpose operator_id issuer "
         "subject email_key method authenticated_at mfa_verified_at issued_at "
         "provider_valid_until remembered_until",
@@ -799,6 +799,12 @@ def _identity_guards():
         "email_continuations",
         "managed_session_id replacement_attempt_id source_attempt_id "
         "source_binding_hash handoff_id",
+    )
+    _guard(
+        "email_continuations",
+        "expires_at_tighten",
+        "NEW.expires_at > OLD.expires_at OR "
+        "(OLD.managed_session_id IS NOT NULL AND NEW.expires_at IS NOT OLD.expires_at)",
     )
     _once("login_handoffs", "issuer subject code_hash redeemed_at source_receipt_ref")
     _once("identity_commands", "source_receipt_ref")

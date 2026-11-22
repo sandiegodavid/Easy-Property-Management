@@ -142,6 +142,7 @@ class ManagedBusiness:
         return matches[0], headers.get("x-epm-csrf"), write, uses_files, size, edit, prepared
 
     async def dispatch(self, app, scope, receive, send, origin):
+        response_started = False
         try:
             cookie, csrf, write, files, size, edit, prepared = self._request(scope, origin)
 
@@ -193,7 +194,9 @@ class ManagedBusiness:
                     yield validate_commit
 
             async def private_send(message):
+                nonlocal response_started
                 if message["type"] == "http.response.start":
+                    response_started = True
                     headers = [
                         (name, value)
                         for name, value in message["headers"]
@@ -219,4 +222,6 @@ class ManagedBusiness:
                     ):
                         await app(scope, replay, private_send)
         except (ProviderDenied, ProviderUnavailable, HostedAccessError) as error:
+            if response_started:
+                raise
             await business_error(error)(scope, receive, send)

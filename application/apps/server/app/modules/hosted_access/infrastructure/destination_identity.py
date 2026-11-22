@@ -133,15 +133,46 @@ class DestinationIdentity:
                 raise ProviderDenied()
             if expected_binding is not None and binding != expected_binding:
                 raise ProviderDenied()
-            pending = connection.scalar(
+            connection.execute(
                 text(
-                    "SELECT count(*) FROM main.source_login_attempts "
-                    "WHERE state IN ('pending','redeeming') AND expires_at>:now"
+                    "DELETE FROM main.source_login_attempts "
+                    "WHERE state='pending' AND expires_at<=:now"
                 ),
                 {"now": now},
             )
-            if pending >= LIVE_SESSION_CAP:
-                raise ProviderDenied()
+            privileged = renewal_cookie is not None or continuation_id is not None
+            if privileged:
+                pending = connection.scalar(
+                    text(
+                        "SELECT count(*) FROM main.source_login_attempts "
+                        "WHERE state IN ('pending','redeeming') "
+                        "AND (continuation_id IS NOT NULL OR renewal_session_id IS NOT NULL) "
+                        "AND expires_at>:now"
+                    ),
+                    {"now": now},
+                )
+                if pending >= LIVE_SESSION_CAP:
+                    raise ProviderDenied()
+            else:
+                pending = connection.scalar(
+                    text(
+                        "SELECT count(*) FROM main.source_login_attempts "
+                        "WHERE state='pending' AND continuation_id IS NULL "
+                        "AND renewal_session_id IS NULL AND expires_at>:now"
+                    ),
+                    {"now": now},
+                )
+                if pending >= LIVE_SESSION_CAP:
+                    connection.execute(
+                        text(
+                            "DELETE FROM main.source_login_attempts WHERE attempt_id IN ("
+                            "SELECT attempt_id FROM main.source_login_attempts "
+                            "WHERE state='pending' AND continuation_id IS NULL "
+                            "AND renewal_session_id IS NULL "
+                            "ORDER BY created_at ASC, attempt_id ASC LIMIT :excess)"
+                        ),
+                        {"excess": pending - LIVE_SESSION_CAP + 1},
+                    )
             attempt_id = str(uuid4())
             expires = min(now + 15 * MINUTE, continuation_expires or now + 15 * MINUTE)
             if expires <= now or (continuation_id is None) != (continuation_expires is None):
