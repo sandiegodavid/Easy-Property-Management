@@ -1,0 +1,478 @@
+{
+  "version": 1,
+  "report_id": "d6279686-aecd-41f5-8fb5-774b6c31f144",
+  "proof": "identity_handoff",
+  "specification_sha256": "c1fd8ba2fe519e26f03173f3111335ee8b79de31dc409be0c50c6d53596f1cd8",
+  "specification_revision": 2,
+  "owner": "H03",
+  "source_commit": "63fd487a6eb5db54067f88ef62d0c24bae9f5797",
+  "source_dirty": true,
+  "recorded_at": 1795376498761,
+  "started_at": 1795376430328,
+  "finished_at": 1795376498761,
+  "environment": {
+    "level": "component",
+    "os": "darwin",
+    "architecture": "arm64",
+    "machine_ref": "local-component-runner",
+    "kernel": "27.0.0",
+    "filesystem": null,
+    "container_runtime": null,
+    "provider_configuration_ref": "isolated-component-selection"
+  },
+  "invocation": {
+    "driver_ref": "qualify-identity-proof-v1",
+    "input_manifest_ref": "identity-component-inputs-v1",
+    "input_manifest_sha256": "c77b3e8e065fb5e83dc88589ded2b932501bd68f99d523fe22e737e94b823f50",
+    "phase": "run",
+    "repetition": 1
+  },
+  "pins": [
+    {
+      "reference": "git-head",
+      "kind": "source",
+      "state": "pinned",
+      "sha256": "34e4a37fc02d56aab45fd6e293629484745b1e7036607dd4c547e94eeacd4c2c",
+      "reason": null
+    },
+    {
+      "reference": "python-pytest-toolchain",
+      "kind": "tool",
+      "state": "pinned",
+      "sha256": "99c487b8f9fffc39ae86022dfa7cbabd3d14fd6415a820688bcbd302cf3ffc7c",
+      "reason": null
+    },
+    {
+      "reference": "component-runtime-files",
+      "kind": "image",
+      "state": "pinned",
+      "sha256": "045c35107a4a30b22ff02cc5b8310225d0fadddfa57135df8fd9c1678cb8b892",
+      "reason": null
+    },
+    {
+      "reference": "hosted-identity-schemas",
+      "kind": "schema",
+      "state": "pinned",
+      "sha256": "7ebe4d12197dde4b8608fa2fe349f7b6d4ff35137e81cff606a5a27589d151a4",
+      "reason": null
+    },
+    {
+      "reference": "hosted-access-component-suites",
+      "kind": "workload",
+      "state": "pinned",
+      "sha256": "25268103628a2680a91e444c3d786773075eb31bfe5ca577b847225c7c4580f1",
+      "reason": null
+    },
+    {
+      "reference": "identity-selection-json",
+      "kind": "configuration",
+      "state": "pinned",
+      "sha256": "98189c861a4f75a69ae990e231923cb1dab3f7bd6859503671213a113754585d",
+      "reason": null
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "suite-01",
+      "artifact_ref": "test-firebase-provider",
+      "sha256": "a95aa421ca8f2d8b4728a99ab3ebb11c1bbd65718368cf00e7a738f59b0b591f"
+    },
+    {
+      "evidence_id": "suite-02",
+      "artifact_ref": "test-central-login",
+      "sha256": "dd7ae6cfbb5dc4bfee5794eec4342c9a4a2d2035f1eeee94f79a5a480681c5bc"
+    },
+    {
+      "evidence_id": "suite-03",
+      "artifact_ref": "test-central-pairing",
+      "sha256": "034b944e6d4d5f2304d549ccb0d5f2394be42122fb8405ebe9f5755ecf4d28d6"
+    },
+    {
+      "evidence_id": "suite-04",
+      "artifact_ref": "test-central-http",
+      "sha256": "da1a2a7f98449c0de2f62ef3d0d75b2885e945042b595c7b78ccbc0c236f77c4"
+    },
+    {
+      "evidence_id": "suite-05",
+      "artifact_ref": "test-handoff",
+      "sha256": "078630712fddcf3ce84507fb45af358746762a6508796a15689a66f4cb92ab1c"
+    },
+    {
+      "evidence_id": "suite-06",
+      "artifact_ref": "test-gateway",
+      "sha256": "f095bd4327592c39cb70b29c3fe8808494355d159caac05f6021653980c6f8b9"
+    },
+    {
+      "evidence_id": "suite-07",
+      "artifact_ref": "test-shared-identity-registration",
+      "sha256": "07e39372eb54cccba59444f2467c8f85e0ed71b852e601007f78d6bd0a3ffb37"
+    },
+    {
+      "evidence_id": "suite-08",
+      "artifact_ref": "test-admin-http",
+      "sha256": "8932604d321d90c5eb022eb6d278556bf9b0a08e2829121c3af913f3dbed09ba"
+    },
+    {
+      "evidence_id": "suite-09",
+      "artifact_ref": "test-transport",
+      "sha256": "a66dde609e12606a17955f3bb742e6e68b4bedc7bbf50417bf7fadae15c76b3a"
+    },
+    {
+      "evidence_id": "suite-10",
+      "artifact_ref": "test-admin-admission",
+      "sha256": "2414a2212489f319c07cdf01a224bb6b194154da9036a3dfcd1655b3b27b481e"
+    },
+    {
+      "evidence_id": "suite-11",
+      "artifact_ref": "test-admin-sessions",
+      "sha256": "6de9abf46746e94e83f788c9a4a5f81a5afd956c3f06b263a40be56f0efb7660"
+    },
+    {
+      "evidence_id": "suite-12",
+      "artifact_ref": "test-admin-bootstrap",
+      "sha256": "c675306df2bc95e73aaab9c0ac0f622726828173b043060306641652b64b845b"
+    },
+    {
+      "evidence_id": "suite-13",
+      "artifact_ref": "test-sessions",
+      "sha256": "632f047c7d310c74d84a14da16e22cffd67d27006f1190f0dacb60c5600636e0"
+    },
+    {
+      "evidence_id": "suite-14",
+      "artifact_ref": "test-identity-exit-gaps",
+      "sha256": "1518966dbdd186700288c6b32982306a43b0609f96f8429aaf5c5a907292e830"
+    },
+    {
+      "evidence_id": "suite-15",
+      "artifact_ref": "test-draft-leases",
+      "sha256": "f7b4e1dd8cab73232d5f3cc48334f2c3cd17dcfb8cf0b97f717aa80485a4d954"
+    },
+    {
+      "evidence_id": "suite-16",
+      "artifact_ref": "test-identity-exit-gaps",
+      "sha256": "652b19880ee7a2b3bcf37d7c7e5dd031e312abe56c1e32b61655be9aac65ee0c"
+    },
+    {
+      "evidence_id": "suite-17",
+      "artifact_ref": "test-composition",
+      "sha256": "dcc72b84eadfcf46ad73ed6a4cddfa45c74ace4646cef3a270e74d31a5429069"
+    },
+    {
+      "evidence_id": "suite-18",
+      "artifact_ref": "test-identity-states",
+      "sha256": "6bd93a4d147a67f31ba5f5f76830c488ee867122021d63b565d6938e2a5a212f"
+    },
+    {
+      "evidence_id": "suite-19",
+      "artifact_ref": "test-identity-persistence",
+      "sha256": "148d6d0cca4358b95e5f8a3ecbb82e13c266baa94086af977a01059660b52fd5"
+    },
+    {
+      "evidence_id": "suite-20",
+      "artifact_ref": "test-provider-status",
+      "sha256": "c49dc4c3ad2052c01521c3cdfa265100585d91da00f69d5e73f26c920c070dde"
+    },
+    {
+      "evidence_id": "suite-21",
+      "artifact_ref": "test-provider-transport",
+      "sha256": "cf854a514a7657b730ea59e492bdabf9d1b9a85024836537b7ff7124945f50bc"
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "google_email_identity",
+      "status": "passed",
+      "observation": "Component pytest verification passed across 2 suite(s).",
+      "evidence_ids": [
+        "suite-01",
+        "suite-02"
+      ],
+      "metrics": [
+        {
+          "name": "suite_count",
+          "value": 2,
+          "unit": "count"
+        },
+        {
+          "name": "elapsed_ms",
+          "value": 9193,
+          "unit": "milliseconds"
+        }
+      ]
+    },
+    {
+      "case_id": "exact_invitation_claim",
+      "status": "passed",
+      "observation": "Component pytest verification passed across 1 suite(s).",
+      "evidence_ids": [
+        "suite-02"
+      ],
+      "metrics": [
+        {
+          "name": "suite_count",
+          "value": 1,
+          "unit": "count"
+        },
+        {
+          "name": "elapsed_ms",
+          "value": 6789,
+          "unit": "milliseconds"
+        }
+      ]
+    },
+    {
+      "case_id": "browser_origin_state_binding",
+      "status": "passed",
+      "observation": "Component pytest verification passed across 2 suite(s).",
+      "evidence_ids": [
+        "suite-03",
+        "suite-04"
+      ],
+      "metrics": [
+        {
+          "name": "suite_count",
+          "value": 2,
+          "unit": "count"
+        },
+        {
+          "name": "elapsed_ms",
+          "value": 5313,
+          "unit": "milliseconds"
+        }
+      ]
+    },
+    {
+      "case_id": "single_use_handoff",
+      "status": "passed",
+      "observation": "Component pytest verification passed across 1 suite(s).",
+      "evidence_ids": [
+        "suite-05"
+      ],
+      "metrics": [
+        {
+          "name": "suite_count",
+          "value": 1,
+          "unit": "count"
+        },
+        {
+          "name": "elapsed_ms",
+          "value": 17995,
+          "unit": "milliseconds"
+        }
+      ]
+    },
+    {
+      "case_id": "cross_workspace_role_denial",
+      "status": "passed",
+      "observation": "Component pytest verification passed across 2 suite(s).",
+      "evidence_ids": [
+        "suite-06",
+        "suite-07"
+      ],
+      "metrics": [
+        {
+          "name": "suite_count",
+          "value": 2,
+          "unit": "count"
+        },
+        {
+          "name": "elapsed_ms",
+          "value": 17079,
+          "unit": "milliseconds"
+        }
+      ]
+    },
+    {
+      "case_id": "host_only_cookie_csrf",
+      "status": "passed",
+      "observation": "Component pytest verification passed across 2 suite(s).",
+      "evidence_ids": [
+        "suite-08",
+        "suite-09"
+      ],
+      "metrics": [
+        {
+          "name": "suite_count",
+          "value": 2,
+          "unit": "count"
+        },
+        {
+          "name": "elapsed_ms",
+          "value": 2959,
+          "unit": "milliseconds"
+        }
+      ]
+    },
+    {
+      "case_id": "mfa_step_up",
+      "status": "passed",
+      "observation": "Component pytest verification passed across 3 suite(s).",
+      "evidence_ids": [
+        "suite-10",
+        "suite-11",
+        "suite-12"
+      ],
+      "metrics": [
+        {
+          "name": "suite_count",
+          "value": 3,
+          "unit": "count"
+        },
+        {
+          "name": "elapsed_ms",
+          "value": 3009,
+          "unit": "milliseconds"
+        }
+      ]
+    },
+    {
+      "case_id": "disable_rebind_logout",
+      "status": "passed",
+      "observation": "Component pytest verification passed across 1 suite(s).",
+      "evidence_ids": [
+        "suite-13"
+      ],
+      "metrics": [
+        {
+          "name": "suite_count",
+          "value": 1,
+          "unit": "count"
+        },
+        {
+          "name": "elapsed_ms",
+          "value": 753,
+          "unit": "milliseconds"
+        }
+      ]
+    },
+    {
+      "case_id": "no_secret_url_log",
+      "status": "passed",
+      "observation": "Component pytest verification passed across 1 suite(s).",
+      "evidence_ids": [
+        "suite-14"
+      ],
+      "metrics": [
+        {
+          "name": "suite_count",
+          "value": 1,
+          "unit": "count"
+        },
+        {
+          "name": "elapsed_ms",
+          "value": 2198,
+          "unit": "milliseconds"
+        }
+      ]
+    },
+    {
+      "case_id": "multi_device_draft_fences",
+      "status": "passed",
+      "observation": "Component pytest verification passed across 2 suite(s).",
+      "evidence_ids": [
+        "suite-15",
+        "suite-13"
+      ],
+      "metrics": [
+        {
+          "name": "suite_count",
+          "value": 2,
+          "unit": "count"
+        },
+        {
+          "name": "elapsed_ms",
+          "value": 1338,
+          "unit": "milliseconds"
+        }
+      ]
+    },
+    {
+      "case_id": "local_mode_independent",
+      "status": "passed",
+      "observation": "Component pytest verification passed across 2 suite(s).",
+      "evidence_ids": [
+        "suite-16",
+        "suite-17"
+      ],
+      "metrics": [
+        {
+          "name": "suite_count",
+          "value": 2,
+          "unit": "count"
+        },
+        {
+          "name": "elapsed_ms",
+          "value": 5778,
+          "unit": "milliseconds"
+        }
+      ]
+    },
+    {
+      "case_id": "renewal_cap_and_lineage",
+      "status": "passed",
+      "observation": "Component pytest verification passed across 2 suite(s).",
+      "evidence_ids": [
+        "suite-13",
+        "suite-18"
+      ],
+      "metrics": [
+        {
+          "name": "suite_count",
+          "value": 2,
+          "unit": "count"
+        },
+        {
+          "name": "elapsed_ms",
+          "value": 1141,
+          "unit": "milliseconds"
+        }
+      ]
+    },
+    {
+      "case_id": "identity_dependency_cleanup",
+      "status": "passed",
+      "observation": "Component pytest verification passed across 1 suite(s).",
+      "evidence_ids": [
+        "suite-19"
+      ],
+      "metrics": [
+        {
+          "name": "suite_count",
+          "value": 1,
+          "unit": "count"
+        },
+        {
+          "name": "elapsed_ms",
+          "value": 2410,
+          "unit": "milliseconds"
+        }
+      ]
+    },
+    {
+      "case_id": "provider_outage_deadlines",
+      "status": "passed",
+      "observation": "Component pytest verification passed across 2 suite(s).",
+      "evidence_ids": [
+        "suite-20",
+        "suite-21"
+      ],
+      "metrics": [
+        {
+          "name": "suite_count",
+          "value": 2,
+          "unit": "count"
+        },
+        {
+          "name": "elapsed_ms",
+          "value": 760,
+          "unit": "milliseconds"
+        }
+      ]
+    }
+  ],
+  "status": "passed",
+  "remaining_limits": [
+    "Component-level proof uses isolated fixed-clock adapters and does not substitute for deployed GCP/Lima native or live provider qualification.",
+    "H04/H05-owned deployed workspace handoff, eligible claim, and recovery step-up cases remain outside H03 component scope."
+  ]
+}

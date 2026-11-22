@@ -267,10 +267,16 @@ def test_unverified_configuration_and_operator_role_cannot_load_credentials(tmp_
             Path(__file__).resolve().parents[6] / "deploy/hosted-mvp/identity/selection.json"
         ).read_bytes()
     )
+    unverified = IdentitySetup(
+        **(
+            value.model_dump()
+            | {"configuration_state": "selected_not_verified", "provider_config_sha256": None}
+        )
+    )
     path = tmp_path / "must-not-create.json"
     for component in ("operator", "central_identity"):
         with pytest.raises(ProviderUnavailable):
-            load_provider_configuration(path, value, component=component)
+            load_provider_configuration(path, unverified, component=component)
     assert not path.exists()
 
 

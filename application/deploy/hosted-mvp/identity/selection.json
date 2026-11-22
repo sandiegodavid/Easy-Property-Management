@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "revision": 3,
-  "configuration_state": "selected_not_verified",
+  "revision": 4,
+  "configuration_state": "verified",
   "realm": {
     "version": 1,
     "alias": "identity-epmdemo-v1",
@@ -25,7 +25,7 @@
     "sha256": "1cb353371ad14c3233a2ddf86c85b665341123b6c5df73b3cb84e7def45397dc"
   },
   "provider_config_ref": "identity-provider-epmdemo-v1",
-  "provider_config_sha256": null,
+  "provider_config_sha256": "49b7678d417ed000b8bebf856fbe3d39d058009791c623de0329c70c3d601446",
   "central_signing_key_ref": "identity-central-ed25519-v1",
   "source_signing_key_registry_ref": "identity-source-ed25519-registry-v1",
   "rate_key_ref": "identity-rate-hmac-v1",

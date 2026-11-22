@@ -136,11 +136,24 @@ def test_selected_inputs_pin_confirmed_realm_callbacks_and_no_provider_acceptanc
     assert value.realm.tenant_id is None
     assert value.origins.central == "https://login.epmdemo.xyz"
     assert (value.deployment_sends_per_day, value.provider_sends_per_day) == (9, 10)
-    assert value.provider_config_sha256 is None
+    assert value.configuration_state == "verified"
+    assert value.provider_config_sha256 is not None
+    require_verified_setup(value)
+    unverified = IdentitySetup(
+        **(
+            value.model_dump()
+            | {"configuration_state": "selected_not_verified", "provider_config_sha256": None}
+        )
+    )
     with pytest.raises(ValueError, match="not been independently verified"):
-        require_verified_setup(value)
+        require_verified_setup(unverified)
     with pytest.raises(ValidationError):
-        IdentitySetup(**(value.model_dump() | {"configuration_state": "verified"}))
+        IdentitySetup(
+            **(
+                value.model_dump()
+                | {"configuration_state": "verified", "provider_config_sha256": None}
+            )
+        )
 
 
 @pytest.mark.parametrize(

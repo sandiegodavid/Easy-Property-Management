@@ -22,6 +22,8 @@ The [MVP acceptance register](../qualification/HOSTED_MVP_ACCEPTANCE.md) owns fr
 | --- | --- |
 | Understand private trees, writer exclusion and guarded containment | [Runtime supervision](runtime-supervision.md) |
 | Configure, inspect and qualify gateway/egress/Tunnel services | [Network and host services](network-and-host-services.md) |
+| Run H03 identity qualification, native/GCP checks, outage tests and sealing | [Managed identity operations and qualification](identity-qualification-and-operations.md) |
+| Recover an Admin principal or TOTP factor offline | [Admin account recovery](admin-account-recovery.md) |
 | Build, install or prepare the GCP/Linux environment | [Deployment runbooks](../deployment/README.md#infrastructure-runbooks) |
 
 Tool source remains under `application/deploy/hosted-mvp/`; execute the documented

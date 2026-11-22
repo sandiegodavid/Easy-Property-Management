@@ -1,0 +1,52 @@
+{
+  "inputs": {
+    "version": 1,
+    "setup_sha256": "c74eb315272408b1d1d0de3604c6fb8eecd9ebdaf84020a7bd926a94a20939a5",
+    "policy_sha256": "87b4ae4b2b3f202c00752347d87dee32e2374e0e534b940137bb49364dbd76b5",
+    "source_commit": "63fd487a6eb5db54067f88ef62d0c24bae9f5797",
+    "assignments": [
+      "00000000-0000-4000-8000-000000000101",
+      "00000000-0000-4000-8000-000000000102"
+    ],
+    "admin_principal_id": "00000000-0000-4000-8000-000000000103",
+    "browser_contexts": [
+      "op-a-dev-1",
+      "op-a-dev-2",
+      "op-b-dev-1",
+      "op-b-dev-2"
+    ],
+    "clock": "fixed_component",
+    "level": "component",
+    "adapter": "isolated_development",
+    "provider_configuration_sha256": null
+  },
+  "assertions": {
+    "version": 1,
+    "methods": [
+      "google",
+      "email_link"
+    ],
+    "admin_method": "google_totp",
+    "email_provenance": "backend_sign_in_with_email_link",
+    "completed_mfa_proven": true,
+    "wrong_realm_denied": true,
+    "continuation_swaps_denied": true,
+    "same_link_race_single_pair": true,
+    "bearer_replays": 0,
+    "maximum_live_sessions": 32,
+    "renewal_lineage_unchanged": true,
+    "revoked_lineage_not_revived": true,
+    "freshness_ms": 300000,
+    "provider_cookie_ms": 1209600000,
+    "remembered_lineage_ms": 2592000000,
+    "admin_session_ms": 28800000,
+    "retained_unknown_results": true,
+    "cleanup_restricts_live_dependencies": true,
+    "business_export_contains_auth": false,
+    "secrets_in_retained_urls_logs": false,
+    "unavoidable_email_action_scrubbed": true,
+    "local_mode_without_cloud": true
+  },
+  "report_id": "d6279686-aecd-41f5-8fb5-774b6c31f144",
+  "report_sha256": "967879be1f90feb9a8f55837d12455d1261bc1f161d142b8550d5e2010be175d"
+}
