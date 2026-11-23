@@ -9,8 +9,11 @@ from app.modules.host_agent.application.auth_routes import (
     AuthRouteManifest,
     AuthRouteObservation,
     SharedIdentityManifest,
+    WORKSPACE_FORBIDDEN_PREFIXES,
+    WorkspaceRouteManifest,
+    WorkspaceRouteObservation,
 )
-from app.modules.host_agent.application.dispatch import HostAgentDenied
+from app.modules.host_agent.application.dispatch import HostAgentDenied, HostAgentUnavailable
 from app.modules.host_agent.infrastructure.gateway import closed_config
 from app.modules.host_agent.infrastructure.endpoint_policy import hostname
 from app.platform.hosted_contracts.semantic import semantic_hash
@@ -25,7 +28,7 @@ PRIVATE_BRIDGE_RANGES = tuple(
 class VerifiedAuthEndpoint:
     """Resolved by the host owner after inspecting the running artifact and network."""
 
-    manifest: AuthRouteManifest | SharedIdentityManifest
+    manifest: AuthRouteManifest | SharedIdentityManifest | WorkspaceRouteManifest
     address: str
     port: int
     tls_name: str
@@ -68,7 +71,7 @@ class VerifiedAuthEndpoint:
 
 
 CANONICAL_UUID_PATTERN = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
-UUID_PLACEHOLDERS = ("{operator_id}", "{invitation_id}")
+UUID_PLACEHOLDERS = ("{operator_id}", "{invitation_id}", "{operation_id}")
 
 
 def _uri_pattern(path: str) -> str:
@@ -147,12 +150,141 @@ def _route(origin, method, path, endpoint):
     }
 
 
-def auth_config(projection, settings, *, held=(), shared=None, login_origin=None):
+def _workspace_eligible_routes(origin, endpoint):
+    host = origin.removeprefix("https://")
+    forbidden_alt = "|".join(
+        re.escape(prefix.lstrip("/")) for prefix in WORKSPACE_FORBIDDEN_PREFIXES
+    )
+    forbidden_pattern = f"^/(?:{forbidden_alt})(?:/|[?]|$)"
+    traversal_pattern = r"(?:^|/)\.\.(?:/|[?]|$)"
+    deny_route = {
+        "match": [
+            {"host": [host], "header": {"Upgrade": ["*"]}},
+            {
+                "host": [host],
+                "expression": "{http.request.orig_uri}.matches("
+                + json.dumps(forbidden_pattern)
+                + ")",
+            },
+            {
+                "host": [host],
+                "expression": "{http.request.orig_uri}.matches("
+                + json.dumps(traversal_pattern)
+                + ")",
+            },
+        ],
+        "handle": [
+            {
+                "handler": "static_response",
+                "status_code": 403,
+                "headers": {"Cache-Control": ["no-store"]},
+                "body": "Request denied.",
+            }
+        ],
+        "terminal": True,
+    }
+    expression = (
+        "{http.request.hostport} == "
+        + json.dumps(host)
+        + ' && {http.request.header.X-Forwarded-Proto} == "https"'
+        + ' && {http.request.header.Cf-Connecting-Ip}.matches("^[0-9A-Fa-f:.]+$")'
+        + " && {http.request.header.X-Forwarded-For} == {http.request.header.Cf-Connecting-Ip}"
+    )
+    tls = {"server_name": endpoint.tls_name}
+    if endpoint.trust_der_base64 is not None:
+        tls["root_ca_pool"] = [endpoint.trust_der_base64]
+    proxy_route = {
+        "match": [
+            {
+                "host": [host],
+                "method": list(endpoint.manifest.allowed_methods),
+                "expression": expression,
+                "header": {"X-Forwarded-Proto": ["https"]},
+                "not": [
+                    {"header": {name: ["*"]}}
+                    for name in (
+                        "Forwarded",
+                        "X-Forwarded-Host",
+                        "X-Forwarded-Port",
+                        "X-Original-URL",
+                        "X-Rewrite-URL",
+                        "Upgrade",
+                    )
+                ],
+            }
+        ],
+        "handle": [
+            {
+                "handler": "reverse_proxy",
+                "upstreams": [{"dial": endpoint.dial}],
+                "transport": {
+                    "protocol": "http",
+                    "dial_timeout": "5s",
+                    "response_header_timeout": "5s",
+                    "tls": tls,
+                },
+                "headers": {
+                    "request": {
+                        "set": {"Host": [host], "X-Forwarded-Proto": ["https"]},
+                        "delete": [
+                            "Forwarded",
+                            "X-Forwarded-Host",
+                            "X-Forwarded-For",
+                            "Cf-Connecting-Ip",
+                            "X-Epm-Client-Network",
+                            "Upgrade",
+                        ],
+                    }
+                },
+            }
+        ],
+        "terminal": True,
+    }
+    return [deny_route, proxy_route]
+
+
+def auth_config(projection, settings, *, held=(), eligible=(), shared=None, login_origin=None):
     """Generate a candidate. Callers qualify and inspect it before publication."""
-    config = closed_config(projection, settings)
     records = {row.binding_id: row for row in projection.records}
+    eligible_ids = {row.binding_id for row in projection.records if row.desired_state == "eligible"}
+    non_eligible_records = tuple(
+        row for row in projection.records if row.desired_state != "eligible"
+    )
     routes = []
     seen = set()
+    seen_eligible = set()
+    for observation, endpoint in eligible:
+        if not isinstance(observation, WorkspaceRouteObservation):
+            raise HostAgentDenied()
+        row = records.get(observation.binding_id)
+        manifest = endpoint.manifest
+        if (
+            row is None
+            or row.binding_id in seen
+            or row.desired_state != "eligible"
+            or observation.desired_state != "eligible"
+            or observation.workspace_route_state != "ready"
+            or observation.access_epoch != row.access_epoch
+            or observation.resource_generation != row.resource_generation
+            or not isinstance(manifest, WorkspaceRouteManifest)
+            or observation.workspace_manifest_sha256 != semantic_hash(manifest)
+            or not observation.source_identity_proof_ref
+            or not observation.resource_readiness_proof_ref
+        ):
+            raise HostAgentDenied()
+        seen.add(row.binding_id)
+        seen_eligible.add(row.binding_id)
+        routes.extend(_workspace_eligible_routes(row.public_origin, endpoint))
+    if not eligible_ids.issubset(seen_eligible):
+        raise HostAgentUnavailable()
+
+    closed_projection = (
+        projection.model_copy(update={"records": non_eligible_records})
+        if hasattr(projection, "model_copy")
+        else type(projection)(records=non_eligible_records)
+    )
+    config = closed_config(closed_projection, settings)
+
     for observation, endpoint in held:
         if not isinstance(observation, AuthRouteObservation):
             raise HostAgentDenied()

@@ -8,7 +8,7 @@ architecture, behavior and qualification limits. Runbook commands keep the exist
 | Tools                                                      | Runbook                                                                                                         |
 | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | Packaging scripts, Dockerfiles and offline agent installer | [Packaging and installation](../../../docs/hosting/deployment/packaging-and-installation.md)                    |
-| H03 identity candidates and protected listeners | [Identity candidate build](../../../docs/hosting/deployment/identity-candidates.md) |
+| H03 identity candidates and protected listeners            | [Identity candidate build](../../../docs/hosting/deployment/identity-candidates.md)                             |
 | `launch/`, fixed hosted entry points and status probes     | [Protected launch](../../../docs/hosting/deployment/protected-launch.md)                                        |
 | `lab/`, Compose and immutable-source fixtures              | [Development and native qualification](../../../docs/hosting/deployment/linux-development-and-qualification.md) |
 | `gcp/`, startup, disk setup and host proofs                | [GCP host setup](../../../docs/hosting/deployment/gcp-host-setup.md)                                            |

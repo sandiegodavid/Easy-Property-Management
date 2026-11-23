@@ -52,6 +52,12 @@ def validate_identity_records(connection, store):
     return paths and relationships which cannot be expressed by a SQLite row CHECK.
     Historical stale/revoked rows remain valid data; this is not request admission.
     """
+    if store == HostedStore.RECOVERY:
+        _recovery_records(connection)
+        return
+    if store == HostedStore.ADMIN_RECOVERY:
+        _admin_recovery_records(connection)
+        return
     if store not in {HostedStore.ADMIN, HostedStore.HOSTED_ACCESS}:
         return
     models = ADMIN_MODELS if store == HostedStore.ADMIN else SOURCE_MODELS
@@ -142,3 +148,70 @@ def _admin_relationships(connection):
     """).first()
     if invalid is not None:
         raise ValueError("Retained identity relationships do not match their owning records.")
+
+
+def _validate_json_objects(connection, table, columns):
+    cols = ", ".join(columns)
+    for row in connection.exec_driver_sql(f"SELECT {cols} FROM main.{table}").mappings():
+        for col in columns:
+            raw = row[col]
+            if raw is not None:
+                parsed = _json(raw)
+                if not isinstance(parsed, dict):
+                    raise ValueError(f"{table}.{col} must be a JSON object.")
+
+
+def _recovery_records(connection):
+    _validate_json_objects(connection, "recovery_operations", ("request_json", "result_json"))
+    _validate_json_objects(connection, "recovery_audit", ("safe_facts_json",))
+    invalid = connection.exec_driver_sql("""
+        SELECT 1 FROM main.recovery_points p
+        LEFT JOIN main.recovery_meta m ON m.id=1
+        WHERE m.id IS NULL OR p.workspace_id!=m.workspace_id
+        UNION ALL
+        SELECT 1 FROM main.recovery_operations o
+        LEFT JOIN main.recovery_meta m ON m.id=1
+        WHERE m.id IS NULL
+        UNION ALL
+        SELECT 1 FROM main.recovery_points p
+        JOIN main.recovery_operations o ON o.operation_id=p.operation_id
+        WHERE o.kind!='backup'
+        UNION ALL
+        SELECT 1 FROM main.restore_operations r
+        JOIN main.recovery_operations o ON o.operation_id=r.operation_id
+        WHERE o.kind!='restore' OR o.actor_kind!='operator'
+        UNION ALL
+        SELECT 1 FROM main.backup_state b
+        JOIN main.recovery_points p ON p.point_id=b.last_point_id
+        WHERE b.protected_business_revision!=p.business_revision
+           OR b.protected_files_generation!=p.files_generation
+           OR b.protected_source_generation!=p.source_generation
+        LIMIT 1
+    """).first()
+    if invalid is not None:
+        raise ValueError("Retained recovery relationships do not match their owning records.")
+
+
+def _admin_recovery_records(connection):
+    _validate_json_objects(
+        connection, "control_recovery_operations", ("request_json", "result_json")
+    )
+    _validate_json_objects(connection, "control_recovery_audit", ("safe_facts_json",))
+    invalid = connection.exec_driver_sql("""
+        SELECT 1 FROM main.control_recovery_operations o
+        LEFT JOIN main.admin_recovery_meta m ON m.id=1
+        WHERE m.id IS NULL
+        UNION ALL
+        SELECT 1 FROM main.control_recovery_points p
+        JOIN main.control_recovery_operations o ON o.operation_id=p.operation_id
+        WHERE o.kind!='backup'
+        UNION ALL
+        SELECT 1 FROM main.control_restore_operations r
+        JOIN main.control_recovery_operations o ON o.operation_id=r.operation_id
+        WHERE o.kind!='restore' OR o.actor_kind!='admin'
+        LIMIT 1
+    """).first()
+    if invalid is not None:
+        raise ValueError(
+            "Retained control recovery relationships do not match their owning records."
+        )

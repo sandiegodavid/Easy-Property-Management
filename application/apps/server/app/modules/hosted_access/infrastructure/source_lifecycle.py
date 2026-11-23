@@ -36,6 +36,9 @@ RECEIPT_KINDS = {
     "disable": "disable",
     "rebind": "rebind",
     "revoke": "revoke_sessions",
+    "maintenance_fence": "maintenance_fence",
+    "drain": "drain",
+    "verify_restore_binding": "restore_binding",
 }
 FREE_V1_USABLE_BYTES = 50_000_000
 
@@ -67,14 +70,19 @@ class SourceLifecycle:
     @staticmethod
     def _scope(meta, actor, ref):
         if (
-            actor.service not in {"admin", "source"}
+            actor.service not in {"admin", "source", "operator_recovery"}
             or actor.deployment_id != ref.deployment_id
             or actor.scope != ref.scope
             or ref.scope.kind != "workspace"
             or (meta["deployment_id"], meta["operator_id"], meta["workspace_id"])
             != (ref.deployment_id, ref.scope.operator_id, ref.scope.workspace_id)
             or ref.kind not in RECEIPT_KINDS
-            or (actor.service != "admin" and ref.kind != "revoke")
+            or (actor.service == "operator_recovery" and ref.kind != "verify_restore_binding")
+            or (
+                actor.service == "source"
+                and ref.kind not in {"revoke", "maintenance_fence", "drain"}
+            )
+            or (actor.service == "admin" and ref.kind == "verify_restore_binding")
         ):
             raise ProviderDenied()
 
@@ -145,11 +153,18 @@ class SourceLifecycle:
     ):
         require_invocation(actor, command)
         ref = command.reference()
-        previous = self.original(actor, ref) if actor.service == "admin" else None
+        intent = command.intent
+        previous = (
+            self.original(actor, ref)
+            if (
+                actor.service in {"admin", "operator_recovery"}
+                or intent.kind in {"maintenance_fence", "drain"}
+            )
+            else None
+        )
         if previous is not None:
             return previous
         binding = self.binding()
-        intent = command.intent
         if intent.kind == "initialize_disabled":
             return self._initialize_disabled(actor, command, binding, email_key=email_key)
         proof = None
@@ -165,16 +180,21 @@ class SourceLifecycle:
             meta = source_meta(connection)
             self._scope(meta, actor, ref)
             previous = self._retained(connection, ref)
-            if actor.service == "source":
+            if actor.service == "source" and intent.kind == "revoke":
                 self._logout_actor(
                     connection, meta, command, cookie, csrf, previous, other_device=other_device
                 )
             if previous is not None:
                 return previous
+            epoch_mismatch = (
+                intent.access_epoch < binding.access_epoch
+                if intent.kind == "verify_restore_binding"
+                else intent.access_epoch != binding.access_epoch
+            )
             if (
                 self.binding() != binding
                 or intent.expected_revision != meta["revision"]
-                or intent.access_epoch != binding.access_epoch
+                or epoch_mismatch
                 or binding.deployment_id != intent.deployment_id
                 or binding.scope != intent.scope
             ):
@@ -203,6 +223,12 @@ class SourceLifecycle:
                 ):
                     raise ProviderDenied()
                 mutation, revocation = self._revoke(connection, meta, intent.payload, now)
+            elif intent.kind == "drain":
+                mutation, revocation = self._drain(connection, meta, intent, binding, now)
+            elif intent.kind == "verify_restore_binding":
+                mutation, revocation = self._verify_restore_binding(
+                    connection, meta, intent, binding, now
+                )
             else:
                 mutation, revocation = self._changes(meta, intent, binding, now), None
                 if intent.kind == "rebind":
@@ -398,6 +424,10 @@ class SourceLifecycle:
             if meta["subject"] != binding.subject:
                 raise ProviderDenied()
             return {"effective_access": "enabled"} if kind == "enable" else {}
+        if kind == "maintenance_fence":
+            if epoch != current or meta["maintenance_operation_id"] is not None:
+                raise ProviderDenied()
+            return {"maintenance_operation_id": change.maintenance_id}
         raise ProviderDenied()
 
     @staticmethod
@@ -408,20 +438,60 @@ class SourceLifecycle:
             "not_before": max(meta["not_before"], now + 1),
         }
 
+    @staticmethod
+    def _revoke_live_sessions(connection, meta, now):
+        connection.execute(
+            text("""
+            UPDATE main.access_sessions SET revoked_at=:now
+            WHERE generation=:generation AND access_epoch=:epoch
+                AND revoked_at IS NULL AND issued_at<=:now AND expires_at>:now
+        """),
+            {
+                "now": now,
+                "generation": meta["session_generation"],
+                "epoch": meta["access_epoch"],
+            },
+        )
+
+    def _drain(self, connection, meta, intent, binding, now):
+        same_resource = (meta["binding_id"], meta["resource_generation"], meta["issuer"]) == (
+            binding.binding_id,
+            binding.resource_generation,
+            binding.issuer,
+        )
+        if (
+            not same_resource
+            or intent.access_epoch != meta["access_epoch"]
+            or meta["maintenance_operation_id"] != intent.payload.maintenance_id
+        ):
+            raise ProviderDenied()
+        self._revoke_live_sessions(connection, meta, now)
+        fence = self._fence(meta, now, meta["access_epoch"])
+        return fence, SourceRevocation(managed_session_id=None, not_before=fence["not_before"])
+
+    def _verify_restore_binding(self, connection, meta, intent, binding, now):
+        same_resource = (meta["binding_id"], meta["resource_generation"], meta["issuer"]) == (
+            binding.binding_id,
+            binding.resource_generation,
+            binding.issuer,
+        )
+        if (
+            not same_resource
+            or intent.access_epoch <= meta["access_epoch"]
+            or meta["maintenance_operation_id"] != intent.payload.restore_operation_id
+        ):
+            raise ProviderDenied()
+        self._revoke_live_sessions(connection, meta, now)
+        fence = self._fence(meta, now, intent.access_epoch)
+        mutation = fence | {
+            "restore_generation": meta["restore_generation"] + 1,
+            "maintenance_operation_id": None,
+        }
+        return mutation, SourceRevocation(managed_session_id=None, not_before=fence["not_before"])
+
     def _revoke(self, connection, meta, change, now):
         if change.all_devices:
-            connection.execute(
-                text("""
-                UPDATE main.access_sessions SET revoked_at=:now
-                WHERE generation=:generation AND access_epoch=:epoch
-                    AND revoked_at IS NULL AND issued_at<=:now AND expires_at>:now
-            """),
-                {
-                    "now": now,
-                    "generation": meta["session_generation"],
-                    "epoch": meta["access_epoch"],
-                },
-            )
+            self._revoke_live_sessions(connection, meta, now)
             fence = self._fence(meta, now, meta["access_epoch"])
             return fence, SourceRevocation(managed_session_id=None, not_before=fence["not_before"])
         session_id = TypeAdapter(CanonicalId).validate_python(change.session_reference)

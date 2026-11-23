@@ -30,6 +30,10 @@ export function admitHostedSession(token: string) {
   blocked = false;
 }
 
+export function hostedCsrfToken(): string | undefined {
+  return csrf;
+}
+
 export async function checkHostedResponse(response: Response) {
   if (!hostedMode() || ![401, 403, 503].includes(response.status)) return;
   const problem: unknown = await response

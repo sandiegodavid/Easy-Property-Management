@@ -115,7 +115,7 @@ as proof that the Operator service applied the change.
 | `recorded_at` | `TIME` | No | — | Time the record or event was persisted. |
 
 CHECK kind IN (`initialize_binding`, `enable`, `disable`, `revoke_sessions`,
-`rebind`, `claim`, `maintenance_fence`, `restore_binding`, `apply_policy`,
+`rebind`, `claim`, `maintenance_fence`, `drain`, `restore_binding`, `apply_policy`,
 `issue_session`, `refresh_session`, `revoke_session`).
 Persist result/audit and owning access mutation atomically; use the receipt for retry
 without returning a raw session token. Expired authority cannot be extended by replay.

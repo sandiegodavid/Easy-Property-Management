@@ -170,7 +170,7 @@ class EffectObservation(SemanticRequest):
     status: Literal["applied", "rejected", "unknown"]
     evidence_ref: Reference | None = None
     resource_state: Literal["prepared", "running", "stopped", "retired"] | None = None
-    ingress_state: Literal["held", "blocked"] | None = None
+    ingress_state: Literal["held", "blocked", "eligible"] | None = None
     ingress_revision: Revision | None = None
     container_ref: Reference | None = None
     image_digest: RequestHash | None = None

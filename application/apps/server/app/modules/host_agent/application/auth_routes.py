@@ -50,6 +50,27 @@ ADMIN_LITE_ROUTES = (
     ("POST", "/api/admin/operators/{operator_id}/invitations/{invitation_id}/delivered"),
     ("POST", "/api/admin/operators/{operator_id}/refresh"),
 )
+ADMIN_H05_ROUTES = (
+    *ADMIN_LITE_ROUTES,
+    ("POST", "/api/admin/operators/{operator_id}/repair-runtime"),
+    ("GET", "/api/admin/operations/{operation_id}"),
+    ("GET", "/api/admin/recovery/status"),
+    ("GET", "/api/admin/recovery/points"),
+    ("POST", "/api/admin/recovery/preview"),
+    ("POST", "/api/admin/recovery/confirm"),
+    ("POST", "/api/admin/recovery/accept"),
+    ("POST", "/api/admin/recovery/reconstruct"),
+)
+WORKSPACE_FORBIDDEN_PREFIXES = (
+    "/admin",
+    "/__/auth",
+    "/__/firebase",
+    "/internal",
+    "/debug",
+    "/.well-known",
+    "/metrics",
+)
+WORKSPACE_ALLOWED_METHODS = ("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE")
 Route = tuple[Literal["GET", "POST"], Annotated[str, Field(strict=True, max_length=100)]]
 
 
@@ -93,21 +114,22 @@ class SharedIdentityManifest(SemanticRequest):
     route_policy: Literal[
         "separate_exact_host_method_allowlists_v1",
         "separate_exact_host_method_allowlists_v2",
+        "separate_exact_host_method_allowlists_v3",
     ] = "separate_exact_host_method_allowlists_v1"
     cookie_policy: Literal["distinct_secure_httponly_host_path_lax_v1"] = (
         "distinct_secure_httponly_host_path_lax_v1"
     )
     cookies: IdentityCookiePolicy = IdentityCookiePolicy()
     central_routes: Annotated[tuple[Route, ...], Field(max_length=11)] = CENTRAL_IDENTITY_ROUTES
-    admin_routes: Annotated[tuple[Route, ...], Field(max_length=11)] = ADMIN_IDENTITY_ROUTES
+    admin_routes: Annotated[tuple[Route, ...], Field(max_length=24)] = ADMIN_IDENTITY_ROUTES
 
     @model_validator(mode="after")
     def owning_origins(self):
-        expected_admin_routes = (
-            ADMIN_LITE_ROUTES
-            if self.route_policy == "separate_exact_host_method_allowlists_v2"
-            else ADMIN_IDENTITY_ROUTES
-        )
+        expected_admin_routes = {
+            "separate_exact_host_method_allowlists_v1": ADMIN_IDENTITY_ROUTES,
+            "separate_exact_host_method_allowlists_v2": ADMIN_LITE_ROUTES,
+            "separate_exact_host_method_allowlists_v3": ADMIN_H05_ROUTES,
+        }[self.route_policy]
         if (
             self.central_routes != CENTRAL_IDENTITY_ROUTES
             or self.admin_routes != expected_admin_routes
@@ -176,3 +198,46 @@ class AuthRouteObservation(SemanticRequest):
                 "Ready auth routes require complete current non-blocked host evidence."
             )
         return self
+
+
+class WorkspaceRouteManifest(SemanticRequest):
+    """H05.7 positive Operator workspace route manifest (D9), gated by verified recovery proof."""
+
+    version: Literal[1] = 1
+    component_id: CanonicalId
+    artifact_sha256: RequestHash
+    private_endpoint_id: CanonicalId
+    route_policy: Literal["operator_workspace_exact_host_v1"] = "operator_workspace_exact_host_v1"
+    allowed_methods: tuple[
+        Literal["GET"],
+        Literal["HEAD"],
+        Literal["POST"],
+        Literal["PUT"],
+        Literal["PATCH"],
+        Literal["DELETE"],
+    ] = WORKSPACE_ALLOWED_METHODS
+    forbidden_prefixes: tuple[str, ...] = WORKSPACE_FORBIDDEN_PREFIXES
+    websocket_allowed: Literal[False] = False
+    recovery_proof_ref: Reference
+
+    @model_validator(mode="after")
+    def require_forbidden_prefixes(self):
+        if self.forbidden_prefixes != WORKSPACE_FORBIDDEN_PREFIXES:
+            raise ValueError("WorkspaceRouteManifest must retain exact forbidden prefix list.")
+        return self
+
+
+class WorkspaceRouteObservation(SemanticRequest):
+    """Host-verified positive workspace routing evidence bound to verified H05 protection."""
+
+    version: Literal[1] = 1
+    binding_id: CanonicalId
+    resource_generation: Revision
+    access_epoch: Revision
+    desired_state: Literal["eligible"] = "eligible"
+    workspace_route_state: Literal["ready", "closed"]
+    workspace_manifest_sha256: RequestHash
+    source_identity_proof_ref: Reference
+    resource_readiness_proof_ref: Reference
+    verified_recovery_point_id: CanonicalId
+    observed_at: EpochMillis

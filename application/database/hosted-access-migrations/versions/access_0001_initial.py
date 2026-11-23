@@ -153,7 +153,7 @@ def _receipts():
         c(
             "kind",
             "initialize_binding enable disable revoke_sessions rebind claim "
-            "maintenance_fence restore_binding apply_policy "
+            "maintenance_fence drain restore_binding apply_policy "
             "issue_session refresh_session revoke_session",
         ),
     )

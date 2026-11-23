@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { HostedRecovery } from "./hosted-recovery";
 import { managedHostedMode } from "./hosted-session-state";
 
 type SectionFreshness = {
@@ -250,6 +251,7 @@ export function HostedSettings() {
           </button>
         </div>
       )}
+      <HostedRecovery embedded />
     </section>
   );
 }

@@ -14,6 +14,7 @@ from app.modules.hosted_access.application.managed_provider import (
 )
 from app.modules.hosted_access.api.start_rate import StartRateLimiter
 from app.modules.hosted_access.infrastructure.admin_sessions import AdminSessions
+from app.modules.hosted_admin.api.recovery_router import build_admin_recovery_router
 from app.modules.hosted_admin.api.router import build_admin_lite_router
 
 MAX_BODY = 20000
@@ -26,6 +27,8 @@ def build_admin_identity_app(
     ui_directory: Path | None = None,
     start_limiter: StartRateLimiter | None = None,
     admin_control=None,
+    admin_recovery=None,
+    authenticate_recovery=None,
 ) -> FastAPI:
     app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
     app.router.redirect_slashes = False
@@ -189,6 +192,15 @@ def build_admin_identity_app(
                 admin_control,
                 sessions,
                 read_cookie=cookie,
+                read_body=body,
+            )
+        )
+
+    if admin_recovery is not None and authenticate_recovery is not None:
+        app.include_router(
+            build_admin_recovery_router(
+                admin_recovery,
+                authenticate_recovery=authenticate_recovery,
                 read_body=body,
             )
         )

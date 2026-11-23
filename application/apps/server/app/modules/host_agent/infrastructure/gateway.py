@@ -159,7 +159,16 @@ class CaddyAdmin:
 
 
 class Gateway:
-    def __init__(self, inventory, admin, settings, contain, *, auth_endpoints=None):
+    def __init__(
+        self,
+        inventory,
+        admin,
+        settings,
+        contain,
+        *,
+        auth_endpoints=None,
+        eligible_proof_verifier=None,
+    ):
         self.inventory, self.admin, self.settings, self.contain = (
             inventory,
             admin,
@@ -168,6 +177,7 @@ class Gateway:
         )
 
         self.auth_endpoints = auth_endpoints
+        self.eligible_proof_verifier = eligible_proof_verifier
 
     def _snapshot(self, proposed=None):
         snapshot = self.inventory.ingress_projection()
@@ -187,9 +197,24 @@ class Gateway:
             for row in sorted(ready, key=lambda item: item.binding_id)
             if row.desired_state == "held"
         )
+        eligible = ()
+        if hasattr(self.auth_endpoints, "resolve_eligible"):
+            eligible_rows = (
+                self.inventory.eligible_ready() if hasattr(self.inventory, "eligible_ready") else ()
+            )
+            eligible = tuple(
+                (row, self.auth_endpoints.resolve_eligible(row))
+                for row in sorted(eligible_rows, key=lambda item: item.binding_id)
+                if row.desired_state == "eligible"
+            )
         shared, login_origin = self.auth_endpoints.resolve_shared()
         return snapshot, auth_config(
-            snapshot, self.settings, held=held, shared=shared, login_origin=login_origin
+            snapshot,
+            self.settings,
+            held=held,
+            eligible=eligible,
+            shared=shared,
+            login_origin=login_origin,
         )
 
     def auth_effect(self, command, allocation, *, inspect_only=False):
@@ -257,6 +282,14 @@ class Gateway:
             raise HostAgentUnavailable()
         return "gateway-deny-v1:" + sha256(encoded(config)).hexdigest()
 
+    def _eligible_verified(self, command) -> bool:
+        return (
+            self.eligible_proof_verifier is not None
+            and bool(getattr(command.payload, "source_identity_proof_ref", None))
+            and bool(getattr(command.payload, "resource_readiness_proof_ref", None))
+            and self.eligible_proof_verifier(command) is True
+        )
+
     def _record(self, command, allocation):
         snapshot, config = self._snapshot()
         rows = [row for row in snapshot.records if row.binding_id == allocation.binding_id]
@@ -264,6 +297,9 @@ class Gateway:
             raise HostAgentDenied()
         row = rows[0]
         scope = command.effect.parent.scope
+        allowed_states = {"held", "blocked"}
+        if row.desired_state == "eligible" and self._eligible_verified(command):
+            allowed_states.add("eligible")
         if (
             command.effect.binding_id != allocation.binding_id
             or command.effect.resource_generation != allocation.resource_generation
@@ -271,7 +307,7 @@ class Gateway:
             or row.workspace_id != scope.workspace_id
             or row.resource_generation != allocation.resource_generation
             or row.access_epoch != command.access_epoch
-            or row.desired_state not in {"held", "blocked"}
+            or row.desired_state not in allowed_states
         ):
             raise HostAgentDenied()
         return row, config
@@ -282,11 +318,30 @@ class Gateway:
             raise HostAgentUnavailable()
 
     def apply(self, command, allocation):
-        if (
-            command.effect.kind != "apply_ingress_policy"
-            or command.payload.desired_state == "eligible"
-        ):
+        if command.effect.kind != "apply_ingress_policy":
             raise HostAgentUnavailable()
+        if command.payload.desired_state == "eligible":
+            if not self._eligible_verified(command):
+                raise HostAgentUnavailable()
+            row, config = self._record(command, allocation)
+            if (
+                row.operation_id != command.effect.child_id()
+                or row.desired_state != "eligible"
+                or allocation.ingress_projection_revision is None
+            ):
+                raise HostAgentDenied()
+            self.admin.load(config)
+            if self.admin.inspect() != config:
+                raise HostAgentUnavailable()
+            return EffectObservation(
+                request_hash=semantic_hash(command),
+                binding_id=allocation.binding_id,
+                resource_generation=allocation.resource_generation,
+                status="applied",
+                evidence_ref="gateway-eligible-v1:" + sha256(encoded(config)).hexdigest(),
+                ingress_state="eligible",
+                ingress_revision=allocation.ingress_projection_revision,
+            )
 
         def apply_closed():
             row, _ = self._record(command, allocation)
@@ -318,6 +373,27 @@ class Gateway:
         return result
 
     def inspect(self, command, allocation):
+        if command.payload.desired_state == "eligible":
+            if not self._eligible_verified(command):
+                raise HostAgentUnavailable()
+            row, config = self._record(command, allocation)
+            if (
+                row.operation_id != command.effect.child_id()
+                or row.desired_state != "eligible"
+                or allocation.ingress_projection_revision is None
+                or self.admin.inspect() != config
+            ):
+                raise HostAgentUnavailable()
+            return EffectObservation(
+                request_hash=semantic_hash(command),
+                binding_id=allocation.binding_id,
+                resource_generation=allocation.resource_generation,
+                status="applied",
+                evidence_ref="gateway-eligible-v1:" + sha256(encoded(config)).hexdigest(),
+                ingress_state="eligible",
+                ingress_revision=allocation.ingress_projection_revision,
+            )
+
         def inspect_closed():
             row, config = self._record(command, allocation)
             if (

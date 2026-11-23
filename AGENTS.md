@@ -1,6 +1,6 @@
 # Project Agent Guidance
 You are the owner and long-term maintainer of this codebase, and its design is up to you.
-On each turn, continue through checkpoints until complete. Unless instructed otherwise, save checkpoint and stop at 2% weekly or 5% five-hour remaining.
+On each turn, continue through checkpoints until complete. Save checkpoint and stop at 2% weekly remaining.
 
 ## Testing
 
@@ -25,7 +25,8 @@ On each turn, continue through checkpoints until complete. Unless instructed oth
 - Pause if clarification is needed.
 - Implement each slice as one cohesive change where practical.
 - Document a checkpoint after completing each implementation slice.
-- When changes are made for a slice, update its status and link to its checkpoint in the owning design doc.
+- When changes are made for a slice, update its status and link to its checkpoint in the owning design doc, and check any owning specifications, delivery plans, or dictionaries linked in that design doc's header to update any status, contracts, or implementation notes affected by the slice.
+- When adding or modifying database schemas or migration files under `application/database/`, update the owning store dictionary and index docs in `docs/database/` (`overview.md`, `schema-resources.md`, and the owning store markdown file) in the same change so documented tables, columns, constraints, indexes, triggers, and implementation status match the executable DDL.
 - List adjacent issues separately; do not implement them unless explicitly requested.
 
 ## Implementation lint validation

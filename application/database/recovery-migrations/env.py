@@ -1,5 +1,6 @@
-"""Unavailable recovery scaffold: no baseline, connection or stamp."""
+"""Owning current-schema runner; no URL/default-engine or stamp fallback."""
 
-from app.platform.schema_resources import HostedStore, reject_schema_scaffold
+from app.platform.hosted_schema import run_resource_environment
+from app.platform.schema_resources import HostedStore
 
-reject_schema_scaffold(HostedStore.RECOVERY)
+run_resource_environment(HostedStore.RECOVERY)

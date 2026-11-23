@@ -3,8 +3,9 @@
 [Schema master](overview.md) · [Lifecycle and retention](lifecycle-and-validation.md) · [Executable resources](../../application/database/)
 
 H02.2 implements main Admin and host inventory. H03.2 extends the current Admin
-identity baseline and implements hosted access. Only the two recovery resource sets
-remain **unimplemented scaffolds**, not initialized databases.
+identity baseline and implements hosted access. H05.1 implements both recovery
+resource sets (`admin_recovery_0001_initial` and `recovery_0001_initial`), completing
+structural baselines for all five hosted stores (`unavailableSchemas = []`).
 The [schema master](overview.md) owns table/column design;
 [H01](../hosting/design/HOSTED_MVP_H01_DESIGN.md#h012--establish-independent-schema-resource-scaffolding)
 owns this handoff. The business baseline and local launcher remain unchanged; the obsolete hosted-demo
@@ -29,22 +30,22 @@ or open a damaged business/main-Admin DB merely to initialize its recovery store
 ## Discovery and runner handoff
 
 `app.platform.schema_resources.resource_config(HostedStore, application_directory=...)`
-loads implemented Admin/inventory/access sets; `scaffold_config` discovers only the two
-remaining unavailable sets. Both load exactly one configuration from a trusted installed application root, independent
+loads all five implemented hosted store sets (`ADMIN`, `ADMIN_RECOVERY`, `HOST_INVENTORY`,
+`HOSTED_ACCESS`, `RECOVERY`); `scaffold_config` remains available only for unimplemented
+scaffolds (currently none). Both load exactly one configuration from a trusted installed application root, independent
 of the current working directory. It returns configuration **only**; it does not
 validate a database or report readiness. Missing/mismatched resource sets fail with
 `SchemaResourcesUnavailable`, stable code `schema_resources_unavailable`, without
 paths, credentials or connection URLs in the safe message. Unknown store IDs fail
 before resource dispatch. No default URL or database path is included in an INI.
 
-The two scaffold `env.py` entry points reject execution with the same unavailable
-outcome. The three implemented environments also reject direct Alembic commands; only
+All five implemented `env.py` environments reject direct Alembic commands; only
 the owning runner may supply an explicit connection/transaction. This includes raw
 `upgrade`, `stamp`, `ensure_version` and offline SQL generation.
 A supplied connection is not used; even an empty or version-looking destination
 cannot be treated as matching. No scaffold delivers an empty revision, revision stamp or usable baseline. Alembic `heads` showing no heads is not successful initialization.
 
-H02–H05 must replace each owning scaffold environment with a real runner/baseline,
+H02–H05 replace each owning scaffold environment with a real runner/baseline,
 resource-derived structural validation and initializer **together**, including focused
 fresh/existing/failure tests. Remove superseded scaffold-only guards when their final
 consumer is replaced; do not keep an unused alternate creator or compatibility path.
@@ -53,9 +54,9 @@ No placeholder production route/CLI or startup initializer is registered by H01.
 
 ## Initialization contract
 
-These requirements are implemented for main Admin, host inventory and hosted access by
-`app.platform.hosted_schema`; the remaining stores fail unavailable before inspecting
-or creating a destination. Fixture version rows are not proof of matching.
+These requirements are implemented for all five hosted stores (`ADMIN`, `ADMIN_RECOVERY`,
+`HOST_INVENTORY`, `HOSTED_ACCESS`, `RECOVERY`) by `app.platform.hosted_schema`.
+Fixture version rows are not proof of matching.
 
 | Input / condition | Required implemented behavior |
 | --- | --- |
@@ -105,8 +106,8 @@ commits nor closes it; SQLAlchemy autobegin alone is insufficient for transactio
 `validate_schema` requires an actual caller-owned SQLite snapshot and checks the
 current resource-derived sqlite_schema inventory, owning revision, foreign keys and
 quick-check without mutation. Attached stores and temporary
-objects reject. The current resource sets define 17 Admin, six inventory and eight hosted-access
-tables. Structural validation alone grants no identity or resource authority; use
+objects reject. The current resource sets define 17 Admin, six Admin recovery, six
+inventory, eight hosted-access and six Operator recovery tables. Structural validation alone grants no identity or resource authority; use
 the owning service/host contracts and their separate qualification evidence.
 
 After schema creation, the explicit protected `DeploymentMetadata`/`HostMetadata`
@@ -195,20 +196,27 @@ remain owning-service validation.
 
 [Resources](../../application/database/admin-recovery-migrations/) · [Dictionary](admin-recovery.md)
 
-Unavailable scaffold; delivery owner H05. It owns private Admin recovery authority
-independent of the main Admin store, in the `admin_recovery_` revision namespace.
-No executable revision, destination, identity, policy, release assignment or session
-is supplied. Do not add an empty baseline or stamp a pretend initialized version.
-The existing business and obsolete hosted-demo consumers are not wired to it.
-H05 must deliver the complete baseline, validation and initializer together.
+`admin_recovery_0001_initial` (implemented in H05.1) contains six initially empty tables
+in the `admin_recovery_` revision namespace: `admin_recovery_meta`,
+`control_recovery_operations`, `control_recovery_points`, `control_restore_operations`,
+`control_backup_state` and `control_recovery_audit`. The owning revision and
+[shared column helper](../../application/database/hosted_ddl.py) define all DDL, with
+no cross-database foreign keys to `admin.sqlite`. Schema creation seeds no deployment
+binding, authority policy, recovery points or sessions. Triggers enforce immutability,
+retention, monotonic generations/revisions, terminal operation/restore locks and
+append-only audit; `schema_validation.py` enforces constant-query cross-table consistency
+and duplicate-key-free JSON validation.
 
 ### Operator recovery
 
 [Resources](../../application/database/recovery-migrations/) · [Dictionary](operator-recovery.md)
 
-Unavailable scaffold; delivery owner H05. It owns the per-operator recovery catalog
-and operations separately from business/access data, using the `recovery_` namespace.
-No executable revision, destination, identity, policy, release assignment or session
-is supplied. Do not add an empty baseline or stamp a pretend initialized version.
-The existing business and obsolete hosted-demo consumers are not wired to it.
-H05 must deliver the complete baseline, validation and initializer together.
+`recovery_0001_initial` (implemented in H05.1) contains six initially empty tables in
+the `recovery_` revision namespace: `recovery_meta`, `recovery_operations`,
+`recovery_points`, `backup_state`, `restore_operations` and `recovery_audit`. The owning
+revision and [shared column helper](../../application/database/hosted_ddl.py) define all
+DDL separately from business and hosted-access data. Schema creation seeds no workspace
+binding, encryption key reference, recovery points or operations. Triggers enforce
+immutability, retention, monotonic generations/revisions, terminal operation/restore
+locks and append-only audit; `schema_validation.py` enforces constant-query cross-table
+consistency and duplicate-key-free JSON validation.

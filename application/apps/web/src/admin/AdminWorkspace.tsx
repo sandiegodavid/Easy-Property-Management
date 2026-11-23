@@ -1,18 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AdminRecovery } from "./AdminRecovery";
 import {
   AdminApiError,
   adminFetch,
   formatMegabytes,
+  formatProtectionLabel,
   formatTimestamp,
   type AdminBootstrapResponse,
   type AdminDetailResponse,
   type AdminListResponse,
   type AdminSession,
   type IssuedInvitationResponse,
+  type OperationOutcome,
   type OperatorSummary,
 } from "./admin-api";
 
-type ViewState = { kind: "list" } | { kind: "add" } | { kind: "detail"; operatorId: string };
+type ViewState =
+  | { kind: "list" }
+  | { kind: "add" }
+  | { kind: "detail"; operatorId: string }
+  | { kind: "recovery" };
 
 interface AddFormDraft {
   displayName: string;
@@ -63,6 +70,9 @@ export function AdminWorkspace({ session }: { session: AdminSession }) {
   const [detailStatus, setDetailStatus] = useState("");
   const [issuedInvite, setIssuedInvite] = useState<IssuedInvitationResponse | null>(null);
   const [inviteDelivered, setInviteDelivered] = useState(false);
+  const [repairConfirmChecked, setRepairConfirmChecked] = useState(false);
+  const [repairKey, setRepairKey] = useState(() => createKey("repair-runtime"));
+  const [repairOperation, setRepairOperation] = useState<OperationOutcome | null>(null);
   const sectionHeading = useRef<HTMLHeadingElement>(null);
 
   const loadBootstrap = useCallback(async () => {
@@ -337,6 +347,71 @@ export function AdminWorkspace({ session }: { session: AdminSession }) {
     }
   }
 
+  async function handleRepairRuntime() {
+    if (!detail || !repairConfirmChecked) return;
+    const op = detail.operator;
+    setDetailBusy(true);
+    setDetailStatus("");
+    try {
+      const outcome = await adminFetch<OperationOutcome>(
+        `/api/admin/operators/${op.operator_id}/repair-runtime`,
+        {
+          method: "POST",
+          csrf: session.csrfToken,
+          body: {
+            idempotencyKey: repairKey,
+            expectedRevision: detail.operatorRevision ?? op.operation?.revision ?? 1,
+            bindingId: op.binding_id ?? op.workspace_id,
+            releaseId: op.release_id,
+            expectedResourceGeneration: op.resource_generation ?? 1,
+          },
+        },
+      );
+      setRepairOperation(outcome);
+      setRepairConfirmChecked(false);
+      setRepairKey(createKey("repair-runtime"));
+      setDetailStatus(
+        `Runtime repair operation ${outcome.operation.operation_id} recorded (${outcome.state}).`,
+      );
+      await loadDetail(op.operator_id);
+    } catch (error) {
+      setDetailStatus(
+        error instanceof Error
+          ? error.message
+          : "Runtime repair outcome is uncertain. Check operation status before retrying.",
+      );
+    } finally {
+      setDetailBusy(false);
+    }
+  }
+
+  async function handleCheckOperationStatus(operationId: string) {
+    setDetailBusy(true);
+    setDetailStatus("");
+    try {
+      const outcome = await adminFetch<OperationOutcome>(`/api/admin/operations/${operationId}`);
+      setRepairOperation(outcome);
+      setDetailStatus(
+        `Operation ${outcome.operation.operation_id} (${outcome.operation.kind}): ${outcome.state}${outcome.error_code ? ` (${outcome.error_code})` : ""}.`,
+      );
+    } catch (error) {
+      setDetailStatus(error instanceof Error ? error.message : "Could not look up operation.");
+    } finally {
+      setDetailBusy(false);
+    }
+  }
+
+  if (view.kind === "recovery") {
+    return (
+      <AdminRecovery
+        session={session}
+        onBack={() => {
+          setView({ kind: "list" });
+        }}
+      />
+    );
+  }
+
   if (view.kind === "add") {
     return (
       <div className="admin-panel">
@@ -544,7 +619,16 @@ export function AdminWorkspace({ session }: { session: AdminSession }) {
               </p>
               <p>
                 <strong>Backup protection:</strong>{" "}
-                {op.protection.data ? op.protection.data.status : "Unavailable (H05 pending)"}
+                {(() => {
+                  const prot = formatProtectionLabel(op.protection);
+                  return (
+                    <>
+                      <span aria-hidden="true">{prot.icon} </span>
+                      {prot.label}
+                      {prot.detail ? ` (${prot.detail})` : ""}
+                    </>
+                  );
+                })()}
               </p>
               <button
                 type="button"
@@ -555,6 +639,56 @@ export function AdminWorkspace({ session }: { session: AdminSession }) {
               >
                 Refresh source
               </button>
+            </article>
+
+            <article className="card">
+              <h3>Runtime repair</h3>
+              <p className="muted">
+                Replaces only the Operator container from a qualified image while retaining IDs,
+                workspace files, access/recovery stores, and encryption key references. Does not
+                create an empty database or restore customer data.
+              </p>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={repairConfirmChecked}
+                  onChange={(event) => setRepairConfirmChecked(event.target.checked)}
+                />{" "}
+                I understand this stops and replaces the Operator runtime container only.
+              </label>
+              <div className="action-row">
+                <button
+                  type="button"
+                  disabled={detailBusy || !repairConfirmChecked || !session.csrfToken}
+                  onClick={() => {
+                    void handleRepairRuntime();
+                  }}
+                >
+                  Repair runtime
+                </button>
+                {(repairOperation?.operation.operation_id ??
+                  op.operation?.operation.operation_id) && (
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={detailBusy}
+                    onClick={() => {
+                      const targetId =
+                        repairOperation?.operation.operation_id ??
+                        op.operation?.operation.operation_id;
+                      if (targetId) void handleCheckOperationStatus(targetId);
+                    }}
+                  >
+                    Check operation status
+                  </button>
+                )}
+              </div>
+              {repairOperation && (
+                <p>
+                  <strong>Tracked operation:</strong> {repairOperation.operation.kind} —{" "}
+                  {repairOperation.state} (<code>{repairOperation.operation.operation_id}</code>)
+                </p>
+              )}
             </article>
 
             <article className="card">
@@ -624,6 +758,15 @@ export function AdminWorkspace({ session }: { session: AdminSession }) {
             }}
           >
             Add operator
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              setView({ kind: "recovery" });
+            }}
+          >
+            Control recovery
           </button>
           <button
             type="button"
@@ -731,7 +874,18 @@ export function AdminWorkspace({ session }: { session: AdminSession }) {
                       ? `${formatMegabytes(item.usage.data.used_bytes)} / 50.00 MB`
                       : "Unavailable"}
                   </td>
-                  <td>{item.protection.data ? item.protection.data.status : "Unavailable"}</td>
+                  <td>
+                    {(() => {
+                      const prot = formatProtectionLabel(item.protection);
+                      return (
+                        <>
+                          <span aria-hidden="true">{prot.icon} </span>
+                          {prot.label}
+                          {prot.detail && <div className="muted">{prot.detail}</div>}
+                        </>
+                      );
+                    })()}
+                  </td>
                   <td>
                     <button
                       type="button"

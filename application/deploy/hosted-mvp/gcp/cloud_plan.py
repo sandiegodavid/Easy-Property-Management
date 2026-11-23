@@ -147,6 +147,72 @@ def plan(target, startup):
     ]
 
 
+def kms_plan(
+    target: Target,
+    *,
+    keyring: str = "epm-h05-recovery",
+    operator_key: str = "operator-workspace-kek",
+    control_key: str = "admin-control-kek",
+) -> list[list[str]]:
+    """Explicit reviewed Cloud KMS provisioning commands for H05 off-host recovery."""
+    for name in (keyring, operator_key, control_key):
+        if not re.fullmatch(r"[a-z][a-z0-9-]{0,61}[a-z0-9]", name):
+            raise ValueError("Canonical Cloud KMS resource names are required")
+    p = "--project=" + target.project
+    loc = "--location=" + target.region
+    sa = target.service_account + "@" + target.project + ".iam.gserviceaccount.com"
+    return [
+        ["services", "enable", "cloudkms.googleapis.com", p],
+        ["kms", "keyrings", "create", keyring, loc, p],
+        [
+            "kms",
+            "keys",
+            "create",
+            operator_key,
+            loc,
+            "--keyring=" + keyring,
+            "--purpose=encryption",
+            "--protection-level=software",
+            "--rotation-period=90d",
+            p,
+        ],
+        [
+            "kms",
+            "keys",
+            "create",
+            control_key,
+            loc,
+            "--keyring=" + keyring,
+            "--purpose=encryption",
+            "--protection-level=software",
+            "--rotation-period=90d",
+            p,
+        ],
+        [
+            "kms",
+            "keys",
+            "add-iam-policy-binding",
+            operator_key,
+            loc,
+            "--keyring=" + keyring,
+            "--member=serviceAccount:" + sa,
+            "--role=roles/cloudkms.cryptoKeyEncrypterDecrypter",
+            p,
+        ],
+        [
+            "kms",
+            "keys",
+            "add-iam-policy-binding",
+            control_key,
+            loc,
+            "--keyring=" + keyring,
+            "--member=serviceAccount:" + sa,
+            "--role=roles/cloudkms.cryptoKeyEncrypterDecrypter",
+            p,
+        ],
+    ]
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", type=Path, required=True)

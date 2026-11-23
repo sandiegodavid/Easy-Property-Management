@@ -24,6 +24,7 @@ from app.modules.hosted_admin.application.pilot_contracts import (
     CreateAssignment,
     RefreshSource,
     ReissueInvitation,
+    RepairRuntime,
     ResourceCeiling,
 )
 from app.modules.hosted_admin.application.ui_contracts import AdminFilters
@@ -466,6 +467,88 @@ class _AdminLiteHandlers:
         except (AdminControlError, SemanticConflict, ValidationError) as error:
             return _error_response(error)
 
+    async def repair_operator_runtime(self, operator_id: str, request: Request) -> JSONResponse:
+        try:
+            canonical_id = _canonical_uuid(operator_id)
+            actor = await run_in_threadpool(self._authenticate, request, write=True, sensitive=True)
+            data = await self.read_body(request)
+            idempotency_key = data.get("idempotencyKey")
+            expected_revision = data.get("expectedRevision")
+            binding_id = data.get("bindingId")
+            release_id = data.get("releaseId")
+            expected_gen = data.get("expectedResourceGeneration")
+            if (
+                not isinstance(idempotency_key, str)
+                or type(expected_revision) is not int
+                or not isinstance(binding_id, str)
+                or not isinstance(release_id, str)
+                or type(expected_gen) is not int
+            ):
+                raise AdminControlError(
+                    "invalid_request",
+                    "idempotencyKey, expectedRevision, bindingId, releaseId, and "
+                    "expectedResourceGeneration are required.",
+                    status=400,
+                )
+            with self.control.engine.connect() as conn:
+                op_row = (
+                    conn.execute(
+                        text(
+                            "SELECT workspace_id, access_epoch FROM main.operators "
+                            "WHERE operator_id = :op_id"
+                        ),
+                        {"op_id": canonical_id},
+                    )
+                    .mappings()
+                    .one_or_none()
+                )
+            if op_row is None:
+                raise AdminControlError(
+                    "operator_not_found", "Operator assignment not found.", status=404
+                )
+            workspace_id = op_row["workspace_id"]
+            access_epoch = int(op_row["access_epoch"])
+            intent = CommandIntent[RepairRuntime](
+                deployment_id=actor.deployment_id,
+                scope=WorkspaceScope(operator_id=canonical_id, workspace_id=workspace_id),
+                kind="repair_runtime",
+                expected_revision=expected_revision,
+                access_epoch=data.get("accessEpoch", access_epoch),
+                payload=RepairRuntime(
+                    binding_id=_canonical_uuid(binding_id),
+                    release_id=_canonical_uuid(release_id),
+                    expected_resource_generation=expected_gen,
+                ),
+            )
+            command = AdminCommand(
+                operation_id=data.get("operationId") or str(uuid4()),
+                idempotency_key=idempotency_key,
+                intent=intent,
+                request_hash=semantic_hash(intent),
+            )
+            outcome = await run_in_threadpool(self.control.execute, actor, command)
+            return JSONResponse(outcome.model_dump(mode="json"), status_code=202)
+        except (AdminControlError, SemanticConflict, ValidationError) as error:
+            return _error_response(error)
+
+    async def get_operation(self, operation_id: str, request: Request) -> JSONResponse:
+        try:
+            canonical_op = _canonical_uuid(operation_id)
+            actor = await run_in_threadpool(
+                self._authenticate, request, write=False, sensitive=False
+            )
+            outcome = await run_in_threadpool(
+                self.control.get_operation_outcome, actor, canonical_op
+            )
+            if outcome is None:
+                return JSONResponse(
+                    {"code": "operation_not_found", "message": "Operation not found."},
+                    status_code=404,
+                )
+            return JSONResponse(outcome.model_dump(mode="json"))
+        except (AdminControlError, SemanticConflict, ValidationError) as error:
+            return _error_response(error)
+
 
 def build_admin_lite_router(
     control: AdminControlService,
@@ -497,5 +580,15 @@ def build_admin_lite_router(
         "/api/admin/operators/{operator_id}/refresh",
         handlers.refresh_operator_source,
         methods=["POST"],
+    )
+    router.add_api_route(
+        "/api/admin/operators/{operator_id}/repair-runtime",
+        handlers.repair_operator_runtime,
+        methods=["POST"],
+    )
+    router.add_api_route(
+        "/api/admin/operations/{operation_id}",
+        handlers.get_operation,
+        methods=["GET"],
     )
     return router

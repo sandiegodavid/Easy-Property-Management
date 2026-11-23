@@ -15,6 +15,7 @@ from starlette.responses import Response
 
 from app.bootstrap.api import create_app
 from app.hosted_candidates.runtime import inspect
+from app.modules.host_agent.infrastructure.backup_proxy import UnixBackupProxyClient
 from app.modules.hosted_access.api.managed_business import ManagedBusinessInputs
 from app.modules.hosted_access.application.identity_evidence import IdentityBinding
 from app.modules.hosted_access.application.identity_setup import HttpsOrigin
@@ -27,9 +28,12 @@ from app.modules.hosted_access.infrastructure.handoff_channel import CentralHand
 from app.modules.hosted_access.infrastructure.handoff_signing import IdentitySigner
 from app.modules.hosted_access.infrastructure.operator_identity_runtime import (
     OperatorIdentityInputs,
+    create_minimal_recovery_app,
 )
 from app.modules.hosted_access.infrastructure.usage_accounting import UsageAccountingStore
+from app.modules.hosted_recovery.infrastructure.engine import ChunkedAeadBackupEngine
 from app.modules.workspace.application.service import WorkspacePaths
+from app.modules.workspace.infrastructure.hosted_recovery import HostedWorkspaceRecoveryService
 from app.modules.hosted_access.infrastructure.shared_identity_entry import (
     Uid,
     owned_identity_socket,
@@ -63,6 +67,12 @@ class OperatorDeployment(Contract):
     listen_address: IPv4Address
     scratch_directory: Path | None = None
     support_contact: EmailAddress | None = None
+    recovery_database: Path | None = None
+    backup_proxy_socket: Path | None = None
+    backup_proxy_uid: Uid | None = None
+    release_ref: Reference = "rel-hosted-mvp"
+    business_schema_revision: Reference = "20260401_0001"
+    access_schema_revision: Reference = "access_0001_initial"
 
     def check_private_network(self):
         if any(
@@ -91,6 +101,35 @@ class TrustedSourceHTTP:
             await Response(status_code=421)(scope, receive, send)
         else:
             await self.app(scope, receive, send)
+
+
+def _live_business_readiness(access_engine, recovery_service) -> bool:
+    """Section 6 H05.7 live readiness check; fails closed on any missing proof or error."""
+    if recovery_service is None:
+        return False
+    try:
+        with access_engine.connect() as conn:
+            row = (
+                conn.execute(
+                    text("SELECT effective_access, maintenance_operation_id FROM access_meta")
+                )
+                .mappings()
+                .one_or_none()
+            )
+        if row is None or row["effective_access"] != "enabled":
+            return False
+        if row["maintenance_operation_id"] is not None:
+            return False
+        if recovery_service.detect_startup_mode().mode != "normal":
+            return False
+        protection = recovery_service.read_protection_status()
+        return (
+            protection.last_point_id is not None
+            and protection.last_verified_at is not None
+            and protection.protection_state in {"healthy", "unchanged"}
+        )
+    except Exception:
+        return False
 
 
 def _read_physical_headroom(workspace: Path, control: Path, scratch: Path) -> PhysicalQuotaHeadroom:
@@ -154,56 +193,149 @@ def candidate(configuration):
         def current_binding():
             return binding
 
-        clock = lambda: time_ns() // 1_000_000
-        business_engine = create_sqlite_engine(WorkspacePaths(root=workspace).database)
+        def clock():
+            return time_ns() // 1_000_000
+
+        scratch = (
+            configuration.scratch_directory
+            if configuration.scratch_directory is not None
+            else (Path("/scratch") if Path("/scratch").is_dir() else control)
+        )
+        recovery_engine = None
+        recovery_service = None
+        startup_recovery_mode = os.environ.get("EPM_RECOVERY_MODE_REQUIRED") == "1"
+        if configuration.recovery_database is not None:
+            private_file(configuration.recovery_database)
+            recovery_engine = create_sqlite_engine(configuration.recovery_database)
+            with recovery_engine.connect() as rec_conn:
+                validate_schema(
+                    rec_conn, HostedStore.RECOVERY, application_directory=application_root()
+                )
+            if (
+                configuration.backup_proxy_socket is not None
+                and configuration.backup_proxy_uid is not None
+            ):
+                transport = UnixBackupProxyClient(
+                    configuration.backup_proxy_socket,
+                    expected_proxy_uid=configuration.backup_proxy_uid,
+                )
+                backup_engine = ChunkedAeadBackupEngine(transport)
+                recovery_service = HostedWorkspaceRecoveryService(
+                    recovery_engine=recovery_engine,
+                    access_engine=engine,
+                    backup_engine=backup_engine,
+                    operator_id=binding.scope.operator_id,
+                    workspace_id=binding.scope.workspace_id,
+                    deployment_id=binding.deployment_id,
+                    workspace_root=workspace,
+                    scratch_root=scratch,
+                    release_ref=configuration.release_ref,
+                    business_schema_revision=configuration.business_schema_revision,
+                    access_schema_revision=configuration.access_schema_revision,
+                    clock=clock,
+                )
+                startup = recovery_service.detect_startup_mode(
+                    force_recovery_mode=startup_recovery_mode
+                )
+                startup_recovery_mode = startup.mode == "recovery"
+
         try:
-            scratch = (
-                configuration.scratch_directory
-                if configuration.scratch_directory is not None
-                else (Path("/scratch") if Path("/scratch").is_dir() else control)
-            )
-            usage_store = UsageAccountingStore(engine, business_engine, clock=clock)
-            storage_admission = FreeStorageAdmission(
-                usage_store,
-                physical_headroom=lambda: _read_physical_headroom(workspace, control, scratch),
-            )
             with owned_identity_socket(
                 configuration.socket_directory, binding.scope.operator_id
             ) as listener:
-                app = create_app(
-                    configuration.workspace_configuration,
-                    operator_identity_inputs=OperatorIdentityInputs(
-                        engine=engine,
-                        binding=current_binding,
-                        signer=signer,
-                        central_key=lambda scope, issuer, kid: (
-                            central_key
-                            if (scope, issuer, kid)
-                            == (binding, "central_identity", configuration.central_key_id)
-                            else None
-                        ),
-                        central=CentralHandoffClient(
-                            configuration.central_relay, configuration.relay_uid, current_binding
-                        ),
-                        clock=clock,
-                        listener=listener,
-                        relay_uid=configuration.relay_uid,
-                        source_origin=binding.target_origin,
-                        central_origin=configuration.central_origin,
-                        support_contact=configuration.support_contact,
-                        business=ManagedBusinessInputs(
-                            # Real deployments hold business ingress closed until H05 protection passes.
-                            readiness=lambda: False,
-                            storage=storage_admission,
-                            files=True,
-                        ),
-                        writer_lock=HostedWriterLock(configuration.writer_lock),
-                        usage_reader=usage_store.read_usage,
-                    ),
-                )
-                yield TrustedSourceHTTP(app, configuration.gateway_address)
+                if startup_recovery_mode:
+                    app = create_minimal_recovery_app(
+                        OperatorIdentityInputs(
+                            engine=engine,
+                            binding=current_binding,
+                            signer=signer,
+                            central_key=lambda scope, issuer, kid: (
+                                central_key
+                                if (scope, issuer, kid)
+                                == (binding, "central_identity", configuration.central_key_id)
+                                else None
+                            ),
+                            central=CentralHandoffClient(
+                                configuration.central_relay,
+                                configuration.relay_uid,
+                                current_binding,
+                            ),
+                            clock=clock,
+                            listener=listener,
+                            relay_uid=configuration.relay_uid,
+                            source_origin=binding.target_origin,
+                            central_origin=configuration.central_origin,
+                            support_contact=configuration.support_contact,
+                            business=None,
+                            writer_lock=None,
+                            usage_reader=lambda: None,
+                            protection_reader=(
+                                recovery_service.protection_section
+                                if recovery_service is not None
+                                else None
+                            ),
+                            recovery_service=recovery_service,
+                            recovery_mode=True,
+                        )
+                    )
+                    yield TrustedSourceHTTP(app, configuration.gateway_address)
+                else:
+                    business_engine = create_sqlite_engine(WorkspacePaths(root=workspace).database)
+                    try:
+                        usage_store = UsageAccountingStore(engine, business_engine, clock=clock)
+                        storage_admission = FreeStorageAdmission(
+                            usage_store,
+                            physical_headroom=lambda: _read_physical_headroom(
+                                workspace, control, scratch
+                            ),
+                        )
+                        app = create_app(
+                            configuration.workspace_configuration,
+                            operator_identity_inputs=OperatorIdentityInputs(
+                                engine=engine,
+                                binding=current_binding,
+                                signer=signer,
+                                central_key=lambda scope, issuer, kid: (
+                                    central_key
+                                    if (scope, issuer, kid)
+                                    == (binding, "central_identity", configuration.central_key_id)
+                                    else None
+                                ),
+                                central=CentralHandoffClient(
+                                    configuration.central_relay,
+                                    configuration.relay_uid,
+                                    current_binding,
+                                ),
+                                clock=clock,
+                                listener=listener,
+                                relay_uid=configuration.relay_uid,
+                                source_origin=binding.target_origin,
+                                central_origin=configuration.central_origin,
+                                support_contact=configuration.support_contact,
+                                business=ManagedBusinessInputs(
+                                    readiness=lambda: _live_business_readiness(
+                                        engine, recovery_service
+                                    ),
+                                    storage=storage_admission,
+                                    files=True,
+                                ),
+                                writer_lock=HostedWriterLock(configuration.writer_lock),
+                                usage_reader=usage_store.read_usage,
+                                protection_reader=(
+                                    recovery_service.protection_section
+                                    if recovery_service is not None
+                                    else None
+                                ),
+                                recovery_service=recovery_service,
+                                recovery_mode=False,
+                            ),
+                        )
+                        yield TrustedSourceHTTP(app, configuration.gateway_address)
+                    finally:
+                        business_engine.dispose()
         finally:
-            business_engine.dispose()
+            if recovery_engine is not None:
+                recovery_engine.dispose()
     finally:
         engine.dispose()
 

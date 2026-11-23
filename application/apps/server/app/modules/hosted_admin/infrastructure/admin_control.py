@@ -27,6 +27,7 @@ from app.modules.hosted_admin.application.pilot_contracts import (
     CreateAssignment,
     RefreshSource,
     ReissueInvitation,
+    RepairRuntime,
     require_invocation,
 )
 from app.modules.hosted_admin.application.ui_contracts import (
@@ -426,9 +427,195 @@ class AdminControlService:
             return self._reissue_invitation(actor, command).outcome
         if isinstance(payload, RefreshSource):
             return self._refresh_source(actor, command)
+        if isinstance(payload, RepairRuntime):
+            return self._repair_runtime(actor, command)
         raise AdminDeniedError(
-            "admin_action_not_supported", f"Action {payload.action} is not enabled in H04."
+            "admin_action_not_supported", f"Action {payload.action} is not enabled."
         )
+
+    def get_operation_outcome(
+        self, actor: AdminAuthority, operation_id: str
+    ) -> OperationOutcome[AdminResult] | None:
+        """Read an admitted operation's original outcome by operation_id."""
+        with self.engine.connect() as connection:
+            now = self.clock()
+            self._verify_actor(connection, actor, now=now, sensitive=False)
+            row = (
+                connection.execute(
+                    text(
+                        "SELECT o.*, op.workspace_id "
+                        "FROM main.operations o "
+                        "LEFT JOIN main.operators op ON op.operator_id = o.operator_id "
+                        "WHERE o.operation_id = :op_id"
+                    ),
+                    {"op_id": operation_id},
+                )
+                .mappings()
+                .one_or_none()
+            )
+            if row is None:
+                return None
+            return _outcome_from_row(row, deployment_id=actor.deployment_id)
+
+    def _repair_runtime(
+        self, actor: AdminAuthority, command: AdminCommand
+    ) -> OperationOutcome[AdminResult]:
+        payload = command.intent.payload
+        assert isinstance(payload, RepairRuntime)
+        scope = command.intent.scope
+        assert isinstance(scope, WorkspaceScope)
+        with immediate_transaction(self.engine) as connection:
+            now = self.clock()
+            self._verify_actor(connection, actor, now=now, sensitive=True)
+            retained = self._lookup_operation(connection, command.reference())
+            if retained is not None:
+                return retained
+            operator = (
+                connection.execute(
+                    text(
+                        "SELECT operator_id, workspace_id, setup_state, desired_access, "
+                        "access_epoch, revision "
+                        "FROM main.operators WHERE operator_id = :op_id"
+                    ),
+                    {"op_id": scope.operator_id},
+                )
+                .mappings()
+                .one_or_none()
+            )
+            if operator is None or operator["workspace_id"] != scope.workspace_id:
+                raise AdminNotFoundError("operator_not_found", "Operator assignment not found.")
+            if operator["setup_state"] == "retired" or operator["desired_access"] == "retired":
+                raise AdminConflictError(
+                    "operator_retired", "Retired operators cannot be repaired."
+                )
+            if int(operator["revision"]) != command.intent.expected_revision:
+                raise AdminConflictError(
+                    "operator_revision_conflict", "Operator revision changed; reload before retry."
+                )
+            if int(operator["access_epoch"]) != command.intent.access_epoch:
+                raise AdminConflictError(
+                    "operator_epoch_conflict", "Operator access epoch changed; reload before retry."
+                )
+            release = (
+                connection.execute(
+                    text(
+                        "SELECT release_id FROM main.qualified_releases "
+                        "WHERE release_id = :rel_id AND component = 'operator' "
+                        "AND state = 'qualified'"
+                    ),
+                    {"rel_id": payload.release_id},
+                )
+                .mappings()
+                .one_or_none()
+            )
+            if release is None:
+                raise AdminConflictError(
+                    "release_not_qualified",
+                    "Requested operator release is not in qualified_releases.",
+                )
+            active_conflict = (
+                connection.execute(
+                    text(
+                        "SELECT operation_id FROM main.operations "
+                        "WHERE operator_id = :op_id "
+                        "AND kind IN ('provision', 'repair_runtime', 'retire') "
+                        "AND state IN ('pending', 'running', 'unknown') "
+                        "LIMIT 1"
+                    ),
+                    {"op_id": scope.operator_id},
+                )
+                .scalars()
+                .first()
+            )
+            if active_conflict is not None:
+                raise AdminConflictError(
+                    "operation_in_progress",
+                    "Another lifecycle operation is already active for this operator.",
+                )
+            cd_row = (
+                connection.execute(
+                    text(
+                        "SELECT component_deployment_id FROM main.component_deployments "
+                        "WHERE operator_id = :op_id ORDER BY revision DESC, component_deployment_id DESC LIMIT 1"
+                    ),
+                    {"op_id": scope.operator_id},
+                )
+                .mappings()
+                .first()
+            )
+            cd_id = cd_row["component_deployment_id"] if cd_row is not None else None
+            request_json = json.dumps(
+                command.intent.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO main.operations ("
+                    "operation_id, operator_id, component_deployment_id, kind, idempotency_key, "
+                    "request_hash, request_json, actor_principal_id, system_actor, "
+                    "expected_revision, access_epoch, state, effect_reference, result_json, "
+                    "error_code, created_at, updated_at, revision"
+                    ") VALUES ("
+                    ":op_id, :operator_id, :cd_id, 'repair_runtime', :key, "
+                    ":request_hash, :request_json, :principal_id, NULL, "
+                    ":expected_revision, :epoch, 'pending', NULL, NULL, "
+                    "NULL, :now, :now, 1"
+                    ")"
+                ),
+                {
+                    "op_id": command.operation_id,
+                    "operator_id": scope.operator_id,
+                    "cd_id": cd_id,
+                    "key": command.idempotency_key,
+                    "request_hash": command.request_hash,
+                    "request_json": request_json,
+                    "principal_id": actor.principal_id,
+                    "expected_revision": command.intent.expected_revision,
+                    "epoch": command.intent.access_epoch,
+                    "now": now,
+                },
+            )
+            connection.execute(
+                text(
+                    "UPDATE main.operators SET revision = revision + 1, updated_at = :now "
+                    "WHERE operator_id = :op_id"
+                ),
+                {"now": now, "op_id": scope.operator_id},
+            )
+            _event(
+                connection,
+                _EventEntry(
+                    operation_id=command.operation_id,
+                    sequence=1,
+                    event_code="repair_runtime_admitted",
+                    safe_summary=(
+                        "Admitted clean runtime repair preserving operator IDs, data, and stores."
+                    ),
+                    recorded_at=now,
+                ),
+            )
+            _audit(
+                connection,
+                _AuditEntry(
+                    actor_ref=f"admin:{actor.principal_id}",
+                    action="repair_runtime_admitted",
+                    operator_id=scope.operator_id,
+                    operation_id=command.operation_id,
+                    recorded_at=now,
+                    safe_facts={
+                        "binding_id": payload.binding_id,
+                        "release_id": payload.release_id,
+                        "expected_resource_generation": payload.expected_resource_generation,
+                    },
+                ),
+            )
+            return OperationOutcome[AdminResult](
+                operation=command.reference(),
+                state=OperationState.PENDING,
+                revision=1,
+                observed_at=now,
+                result=None,
+                error_code=None,
+            )
 
     def issue_invitation_with_token(
         self, actor: AdminAuthority, command: AdminCommand
@@ -1442,7 +1629,7 @@ class AdminControlService:
             usage_section = Section[FreeUsage](state="unavailable", freshness=unavail)
 
         if (
-            row["rec_state"] is not None
+            row["rec_state"] in {"healthy", "unchanged", "overdue"}
             and row["rec_verified_at"] is not None
             and row["rec_point_ref"]
         ):
@@ -1454,7 +1641,9 @@ class AdminControlService:
             protection_section = Section[Protection](
                 state="ready",
                 data=Protection(
-                    status="protected" if row["rec_state"] == "healthy" else "degraded",
+                    status=(
+                        "protected" if row["rec_state"] in {"healthy", "unchanged"} else "degraded"
+                    ),
                     last_verified_at=row["rec_verified_at"],
                     point_age_ms=max(0, now - row["rec_verified_at"]),
                     proof_ref=row["rec_point_ref"],
@@ -1510,7 +1699,7 @@ class AdminControlService:
         ref = row["observation_ref"] if applied else None
         binding_passed = applied and row["setup_state"] in {"ready_for_claim", "active"}
         protection_passed = (
-            row["rec_state"] == "healthy"
+            row["rec_state"] in {"healthy", "unchanged"}
             and row["rec_verified_at"] is not None
             and row["rec_point_ref"] is not None
         )

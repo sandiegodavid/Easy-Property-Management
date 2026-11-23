@@ -46,11 +46,16 @@ export interface OperatorSummary {
   usage: Section<{ plan: "free"; usable_bytes: number; used_bytes: number }>;
   protection: Section<{
     status: "protected" | "degraded";
+    state?: string;
     last_verified_at?: number | null;
+    last_captured_at?: number | null;
+    last_checked_at?: number | null;
     point_age_ms?: number | null;
     proof_ref?: string | null;
   }>;
   release_id: string;
+  binding_id?: string | null;
+  resource_generation?: number | null;
   operation?: OperationOutcome | null;
   actions: ActionState[];
 }
@@ -163,6 +168,82 @@ export async function adminFetch<T>(
 
 export function formatMegabytes(bytes: number): string {
   return `${(bytes / 1_000_000).toFixed(2)} MB`;
+}
+
+export interface AdminControlPoint {
+  resource_id: string;
+  revision?: number;
+  state?: string;
+  captured_at?: number | null;
+  verified_at?: number | null;
+  summary?: {
+    captured_at?: number | null;
+    verified_at?: number | null;
+    admin_schema_revision?: string | null;
+  } | null;
+}
+
+export interface AdminControlRecoveryStatus {
+  mode: "normal" | "recovery";
+  reason: string | null;
+  activeAdminResourceRef: string | null;
+  catalog: {
+    items: AdminControlPoint[];
+    freshness?: Freshness | null;
+  };
+}
+
+export interface AdminControlPreview {
+  previewId: string;
+  pointId: string;
+  deploymentId: string;
+  sourceGeneration: number;
+  selectedCapturedAt: number;
+  selectedVerifiedAt: number;
+  exactRequestHash: string;
+  expiresAt: number;
+}
+
+export function formatProtectionLabel(protection: OperatorSummary["protection"]): {
+  icon: string;
+  label: string;
+  detail: string | null;
+} {
+  const data = protection.data;
+  if (!data) {
+    return {
+      icon: "!",
+      label: protection.state === "unavailable" ? "Unavailable" : "Unknown",
+      detail: protection.freshness?.error_code ?? null,
+    };
+  }
+  const rawState = data.state ?? (data.status === "protected" ? "healthy" : "overdue");
+  const asOf = data.last_verified_at ?? protection.freshness?.as_of ?? null;
+  switch (rawState) {
+    case "healthy":
+      return {
+        icon: "✓",
+        label: "Protected",
+        detail: asOf ? `Verified ${formatTimestamp(asOf)}` : null,
+      };
+    case "unchanged":
+      return {
+        icon: "✓",
+        label: "Protected — unchanged",
+        detail: asOf ? `Verified ${formatTimestamp(asOf)}` : null,
+      };
+    case "overdue":
+    case "degraded":
+      return {
+        icon: "⚠",
+        label: "Degraded",
+        detail: asOf ? `Last verified ${formatTimestamp(asOf)}` : "Verification overdue",
+      };
+    case "unknown":
+      return { icon: "?", label: "Unknown", detail: null };
+    default:
+      return { icon: "!", label: "Unavailable", detail: null };
+  }
 }
 
 export function formatTimestamp(ms: number | null | undefined): string {

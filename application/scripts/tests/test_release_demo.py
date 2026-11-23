@@ -9,7 +9,7 @@ import sqlite3
 import subprocess
 import sys
 from types import SimpleNamespace
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 
@@ -273,35 +273,6 @@ def test_capacity_failure_does_not_change_workspace_or_binding(reset_host, monke
         )
     assert tool.instance_paths("a")[1].read_bytes() == before
     assert not Path(plan["workspace"]).exists()
-
-
-def test_recovery_ledger_is_separate_and_rollback_restores_binding(reset_host, monkeypatch):
-    ledger = reset_host / "recovery/ledger.json"
-    ledger.parent.mkdir(mode=0o700)
-    ledger.write_text("old verified recovery points")
-    original = {
-        "workspace_id": tool.read_json(tool.instance_paths("a")[2])["workspace_id"],
-        "ledger_path": str(ledger),
-        "access_key_id": "private-key",
-        "secret_access_key": "private-secret",
-    }
-    path = tool.CONFIGS / "recovery-a.json"
-    write_json(path, original)
-    monkeypatch.setattr(
-        tool,
-        "load_recovery_configuration",
-        lambda _: SimpleNamespace(workspace_id=UUID(original["workspace_id"]), ledger_path=ledger),
-    )
-    args, plan = planned(reset_host)
-    restored_plan(args, plan)
-    tool.replace_configs(args.record, plan)
-    fresh = tool.read_json(path)
-    assert fresh["workspace_id"] == plan["workspace_id"]
-    assert fresh["ledger_path"] != str(ledger)
-    assert ledger.read_text() == "old verified recovery points"
-    assert not Path(fresh["ledger_path"]).exists()
-    tool.replace_configs(args.record, plan, rollback=True)
-    assert tool.read_json(path) == original
 
 
 def test_reset_cannot_initialize_retired_cloudflare_store(reset_host):

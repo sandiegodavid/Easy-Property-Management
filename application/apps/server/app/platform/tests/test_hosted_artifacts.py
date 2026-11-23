@@ -84,8 +84,8 @@ def test_owned_resources_and_unavailable_runtime_are_explicit(payload, component
     assert report["acceptance"] == "infrastructure_candidate"
     assert report["runtime"] == "unavailable"
     expected = {
-        "admin": ["admin-recovery"],
-        "operator": ["recovery"],
+        "admin": [],
+        "operator": [],
         "host_agent": [],
     }
     assert report["unavailableSchemas"] == expected[component]

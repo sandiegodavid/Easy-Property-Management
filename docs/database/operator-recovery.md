@@ -2,7 +2,7 @@
 
 [Database schema master](overview.md) · [Shared conventions](overview.md)
 
-Part of the schema master. Proposed hosted tables are design contracts, not claims of implemented schema. Executable definitions belong exclusively under `application/database/`; see [resource ownership](overview.md#required-schema-definition-location).
+Part of the schema master. Executable baseline: [`recovery_0001_initial.py`](../../application/database/recovery-migrations/versions/recovery_0001_initial.py) (implemented in H05.1). Executable definitions belong exclusively under `application/database/`; see [resource ownership](overview.md#required-schema-definition-location).
 
 In this guide: [Per-operator recovery store — H05, normal and recovery modes](#per-operator-recovery-store--h05-normal-and-recovery-modes) · [`recovery_meta` — H05](#recovery_meta--h05) · [`recovery_operations` — H05](#recovery_operations--h05) · [`recovery_points` — H05](#recovery_points--h05) · [`backup_state` — H05](#backup_state--h05) · [`restore_operations` — H05](#restore_operations--h05) · [`recovery_audit` — H05](#recovery_audit--h05)
 
@@ -10,7 +10,8 @@ In this guide: [Per-operator recovery store — H05, normal and recovery modes](
 
 This file is in private persistent control storage, outside the replaceable business
 DB/files and excluded from the advertised usable-workspace allowance. It has its own
-bounded reserve and schema resources under `application/database/recovery-migrations/`.
+bounded reserve and schema resources under `application/database/recovery-migrations/`
+(revision `recovery_0001_initial`, six tables, greenfield no-downgrade).
 The operator service owns it in normal and authenticated minimal recovery mode. No
 offline customer restore/decrypt tool or alternate executor is included; never run a
 second recovery executor against the same workspace. Local production uses
@@ -23,23 +24,31 @@ erDiagram
     RECOVERY_OPERATIONS ||--o| RESTORE_OPERATIONS : specializes
     RECOVERY_POINTS ||--o{ RESTORE_OPERATIONS : selected_point
     RECOVERY_POINTS o|--o| BACKUP_STATE : last_verified
+    RECOVERY_OPERATIONS o|--o{ RECOVERY_AUDIT : attributes
 ```
 
 ### `recovery_meta` — H05
 
 Binds the operator’s recovery store to its workspace and identifies the active business
-tree and recovery generation. It lets recovery mode find and safely switch business
-data without opening a damaged business database to discover its own identity.
+tree, recovery/restore generations, encryption key reference and off-host namespace prefix.
+It lets recovery mode find and safely switch business data without opening a damaged
+business database to discover its own identity.
 
 | Column | Type | Nullable | Default | Description / column rules |
 | --- | --- | --- | --- | --- |
-| `id` | `INTEGER` | No | — | PK CHECK = 1; singleton. |
+| `id` | `INTEGER` | No | — | PK CHECK = 1 (`ck_singleton`); singleton. |
 | `workspace_id` | `ID` | No | — | UNIQUE owning workspace identity. |
 | `deployment_ref` | `REF` | No | — | Protected hosted deployment or local-installation identity. |
 | `source_generation` | `REV` | No | — | Monotonic recovery incarnation; changes on binding/restore. |
+| `restore_generation` | `REV` | No | `1` | Monotonic restore incarnation counter. |
 | `active_business_ref` | `REF` | No | — | Validated active business location under the protected workspace root. |
+| `encryption_key_ref` | `REF` | No | — | Protected platform/KMS key reference; not key material. |
+| `namespace_prefix` | `TEXT` | No | — | Off-host backup namespace prefix (`ck_namespace_prefix`: 1–256 chars, starts with `[A-Za-z0-9]`, allowed `[A-Za-z0-9._:/-]`, no `..`). |
 | `revision` | `REV` | No | — | Current recovery-store revision. |
 
+Triggers enforce immutability and retention (`BEFORE DELETE` abort) on `id`,
+`workspace_id`, `deployment_ref` and `namespace_prefix`, and monotonicity
+(`recovery_meta_monotonic`) on `source_generation`, `restore_generation` and `revision`.
 Startup must validate private ownership, exact schema and workspace identity before
 serving recovery routes. Stable configuration locates this store, not the damaged business
 manifest alone. Auth keys/cookies and live provider credentials are not stored here.
@@ -53,22 +62,27 @@ the internal executor carries out that exact admitted request.
 | Column | Type | Nullable | Default | Description / column rules |
 | --- | --- | --- | --- | --- |
 | `operation_id` | `ID` | No | — | PK; backup or workspace restore command identity. |
-| `kind` | `TEXT` | No | — | CHECK backup or restore. |
-| `idempotency_key` | `TEXT` | No | — | UNIQUE with kind within this workspace. |
+| `kind` | `TEXT` | No | — | CHECK `backup` or `restore`. |
+| `idempotency_key` | `KEY` | No | — | UNIQUE with `kind` within this workspace. |
 | `request_hash` | `HASH` | No | — | Canonical semantic request hash. |
 | `request_json` | `TEXT` | No | — | Typed non-secret request, <=16 KiB. |
-| `actor_kind` | `TEXT` | No | — | CHECK operator or system; restore requires operator authorization. |
+| `actor_kind` | `TEXT` | No | — | CHECK `operator` or `system`; `ck_restore_requires_operator` enforces `kind!='restore' OR actor_kind='operator'`. |
 | `actor_ref` | `REF` | No | — | Verified operator subject/local owner or scheduler; never caller-supplied impersonation. |
-| `state` | `TEXT` | No | — | CHECK pending, running, needs_attention, unknown, succeeded or failed. |
+| `state` | `TEXT` | No | — | CHECK `pending`, `running`, `needs_attention`, `unknown`, `succeeded` or `failed`. |
 | `source_generation` | `REV` | No | — | Admitted recovery/source generation. |
 | `result_json` | `TEXT` | Yes | — | Immutable original terminal result, typed <=16 KiB. |
 | `error_code` | `TEXT` | Yes | — | Safe classified failure. |
 | `created_at` | `TIME` | No | — | Admission time. |
-| `updated_at` | `TIME` | No | — | Most recent result/progress time. |
+| `updated_at` | `TIME` | No | — | Most recent result/progress time (`ck_operation_time`: `updated_at>=created_at`). |
 | `revision` | `REV` | No | — | Optimistic concurrency revision. |
 
-UNIQUE `(kind, idempotency_key)`; indexes `(state, updated_at, operation_id)` and
-`(created_at, operation_id)`. Matching replay returns original identity/result; changed
+UNIQUE `(kind, idempotency_key)`; indexes `recovery_operations_state (state, updated_at, operation_id)` and
+`recovery_operations_created (created_at, operation_id)`. Check `ck_terminal_result` requires
+`result_json IS NULL` for non-terminal states, `result_json IS NOT NULL AND error_code IS NULL`
+for `succeeded`, and `error_code IS NOT NULL` for `failed`. Triggers enforce retention and
+immutability of `operation_id`, `kind`, `idempotency_key`, `request_hash`, `request_json`,
+`actor_kind`, `actor_ref`, `source_generation` and `created_at`, and `recovery_operations_terminal`
+blocks updates once `state IN ('succeeded','failed')`. Matching replay returns original identity/result; changed
 intent conflicts. Persist intent/audit before side effects; local record commits and
 business/file/object effects are coordinated through receipts and inspection, never
 claimed cross-store atomic. Exactly one mutating recovery executor per workspace; a
@@ -88,8 +102,8 @@ recovery points; they do not contain the backed-up business records themselves.
 | Column | Type | Nullable | Default | Description / column rules |
 | --- | --- | --- | --- | --- |
 | `point_id` | `ID` | No | — | PK; verified workspace point in this local catalog. |
-| `workspace_id` | `ID` | No | — | Must equal recovery_meta.workspace_id. |
-| `operation_id` | `ID` | No | — | FK recovery_operations; successful backup publication. |
+| `workspace_id` | `ID` | No | — | Must equal `recovery_meta.workspace_id`. |
+| `operation_id` | `ID` | No | — | FK `recovery_operations.operation_id`; successful backup publication. |
 | `manifest_ref` | `REF` | No | — | UNIQUE immutable object/archive manifest reference. |
 | `manifest_sha256` | `HASH` | No | — | Verified manifest digest. |
 | `manifest_format` | `REF` | No | — | Format version. |
@@ -98,17 +112,23 @@ recovery points; they do not contain the backed-up business records themselves.
 | `source_generation` | `REV` | No | — | Recovery/source incarnation at capture. |
 | `release_ref` | `REF` | No | — | Qualified source release reference; logical, not Admin FK. |
 | `schema_revision` | `REF` | No | — | Captured owning business schema revision. |
+| `access_schema_revision` | `REF` | No | — | Captured owning hosted-access schema revision. |
 | `captured_at` | `TIME` | No | — | Actual consistent database/file capture time. |
 | `verified_at` | `TIME` | No | — | Actual completed destination verification time. |
 | `retain_until` | `TIME` | No | — | Promised retention deadline. |
 | `key_ref` | `REF` | No | — | Protected key reference; not key material. |
-| `stored_bytes` | `BYTES` | No | — | Observed stored bytes. |
-| `state` | `TEXT` | No | — | CHECK verified, unavailable or expired. |
+| `stored_bytes` | `COUNT` | No | — | Observed stored bytes. |
+| `state` | `TEXT` | No | — | CHECK `verified`, `unavailable`, `expired` or `pruned`. |
 | `last_checked_at` | `TIME` | No | — | Most recent point availability/integrity check. |
 | `revision` | `REV` | No | — | Catalog observation revision. |
 
-Indexes `(state, captured_at, point_id)` and `(state, retain_until)`; verified_at >=
-captured_at and retain_until > captured_at. Insert only after consistent capture and
+Indexes `recovery_points_state_captured (state, captured_at, point_id)`,
+`recovery_points_state_retain (state, retain_until)` and
+`recovery_points_operation (operation_id)`; check `ck_point_times` enforces
+`verified_at>=captured_at`, `retain_until>captured_at` and `last_checked_at>=verified_at`.
+Triggers enforce retention and immutability of all capture/manifest metadata columns
+(`point_id` through `verified_at`, `key_ref`, `stored_bytes`) and monotonicity
+(`recovery_points_monotonic`) on `last_checked_at` and `revision`. Insert only after consistent capture and
 verified off-host publication for hosted use (supported destination for local mode).
 The immutable manifest contains complete object membership/digests/schema and ownership
 pins. A lost catalog may be reconstructed in the authenticated recovery-mode service
@@ -129,18 +149,25 @@ pretending that each successful scheduler check created a new backup.
 
 | Column | Type | Nullable | Default | Description / column rules |
 | --- | --- | --- | --- | --- |
-| `id` | `INTEGER` | No | — | PK CHECK = 1; singleton checkpoint. |
-| `last_point_id` | `ID` | Yes | — | FK recovery_points; latest verified protected state. |
-| `protected_business_revision` | `REF` | Yes | — | Business revision protected by last_point_id. |
-| `protected_files_generation` | `REF` | Yes | — | Retained-file generation protected by last_point_id. |
+| `id` | `INTEGER` | No | — | PK CHECK = 1 (`ck_singleton`); singleton checkpoint. |
+| `last_point_id` | `ID` | Yes | — | FK `recovery_points.point_id`; latest verified protected state. |
+| `protected_business_revision` | `REF` | Yes | — | Business revision protected by `last_point_id`. |
+| `protected_files_generation` | `REF` | Yes | — | Retained-file generation protected by `last_point_id`. |
 | `protected_source_generation` | `REV` | Yes | — | Protected source incarnation. |
+| `protection_state` | `TEXT` | No | `'unknown'` | CHECK `healthy`, `unchanged`, `overdue`, `unavailable` or `unknown`. |
 | `dirty_since` | `TIME` | Yes | — | Earliest known unprotected committed change. |
 | `last_checked_at` | `TIME` | Yes | — | Latest consistent current-versus-protected comparison. |
 | `last_backup_attempt_at` | `TIME` | Yes | — | Last attempted backup; not success proof. |
+| `consecutive_failures` | `COUNT` | No | `0` | Consecutive failed backup attempts since last success/unchanged check. |
 | `last_error_code` | `TEXT` | Yes | — | Safe last protection failure. |
 | `revision` | `REV` | No | — | Checkpoint revision. |
 
-Point identity and protected tuple are all null initially or all present. Publish them
+Index `backup_state_last_point (last_point_id)`. Check `ck_protected_tuple` requires
+`last_point_id`, `protected_business_revision`, `protected_files_generation` and
+`protected_source_generation` to be all null initially or all present;
+`ck_protection_requires_point` requires `last_point_id IS NOT NULL` whenever
+`protection_state IN ('healthy','unchanged')`. Triggers enforce retention
+(`backup_state_retained`) and monotonic `revision` (`backup_state_monotonic`). Publish them
 only after verified point insertion, in the same recovery-store transaction. Compare
 business revision AND retained-file generation AND source incarnation under consistent
 source coordination; an in-memory dirty boolean is insufficient. Reconcile on startup
@@ -159,23 +186,32 @@ and continued safely.
 
 | Column | Type | Nullable | Default | Description / column rules |
 | --- | --- | --- | --- | --- |
-| `operation_id` | `ID` | No | — | PK/FK recovery_operations; authorized workspace restore. |
-| `point_id` | `ID` | No | — | FK recovery_points; immutable selected point. |
+| `operation_id` | `ID` | No | — | PK/FK `recovery_operations.operation_id`; authorized workspace restore. |
+| `point_id` | `ID` | No | — | FK `recovery_points.point_id`; immutable selected point. |
+| `preview_id` | `ID` | No | — | Single-use restore preview identity bound to the operator confirmation. |
 | `prior_business_ref` | `REF` | No | — | Original business tree kept intact until acceptance. |
-| `target_business_ref` | `REF` | No | — | Separate registered restore directory within allowed roots. |
+| `prior_tree_kind` | `TEXT` | No | — | CHECK `healthy_pre_state` or `forensic_damaged`. |
+| `target_business_ref` | `REF` | No | — | Separate registered restore directory within allowed roots (`ck_restore_targets`: `prior_business_ref!=target_business_ref`). |
 | `new_source_generation` | `REV` | No | — | New recovery incarnation for switchover. |
 | `new_access_epoch` | `REV` | Yes | — | Required hosted access fence; null for no-login local mode. |
-| `authorized_subject` | `REF` | No | — | Verified hosted operator/local OS-owner identity. |
+| `authorized_subject` | `TEXT` | No | — | Verified hosted operator/local OS-owner identity (`ck_authorized_subject`: text 1–1024 chars). |
 | `authorization_ref` | `REF` | No | — | Retained confirmation proof reference, not bearer token. |
 | `authorized_at` | `TIME` | No | — | Explicit consequence confirmation time. |
 | `execution_authorization_expires_at` | `TIME` | No | — | Deadline to begin under this authorization. |
 | `preview_source_revision` | `REF` | Yes | — | Preview revision; null only for unreadable business DB with explicit recovery warning. |
 | `executor_ref` | `REF` | No | — | Owning internal executor only; no Admin impersonation/offline executor or Admin DB FK. |
-| `phase` | `TEXT` | No | — | CHECK prepared, fenced, restored, validated, switched, accepted or needs_attention. |
+| `phase` | `TEXT` | No | — | CHECK `prepared`, `fenced`, `restored`, `validated`, `switched`, `accepted` or `needs_attention`. |
 | `validation_ref` | `REF` | Yes | — | Validation/ownership/schema evidence. |
 | `started_at` | `TIME` | No | — | Execution start time. |
 | `updated_at` | `TIME` | No | — | Latest phase time. |
+| `accepted_at` | `TIME` | Yes | — | Operator acceptance time (`ck_restore_accepted`: non-null and `>=started_at` iff `phase='accepted'`). |
 
+Indexes `restore_operations_point (point_id)` and
+`restore_operations_phase (phase, updated_at, operation_id)`. Check `ck_restore_auth_window`
+enforces `execution_authorization_expires_at>authorized_at`, `started_at>=authorized_at`
+and `updated_at>=started_at`. Triggers enforce retention and immutability of admission
+columns (`operation_id` through `preview_source_revision`, `executor_ref`, `started_at`)
+and `restore_operations_terminal` blocks updates once `phase='accepted'`.
 Validate current identity/authority and point/workspace against recovery_meta; recent
 hosted auth, qualified strong step-up and single-use exact-action confirmation required.
 The proof is bound to workspace/point/source epoch and is neither a browser-chosen
@@ -209,13 +245,14 @@ operator/session/point records from an empty template.
 | Column | Type | Nullable | Default | Description / column rules |
 | --- | --- | --- | --- | --- |
 | `audit_id` | `ID` | No | — | PK; immutable local recovery audit event. |
-| `operation_id` | `ID` | Yes | — | FK recovery_operations when tied to a command. |
+| `operation_id` | `ID` | Yes | — | FK `recovery_operations.operation_id` when tied to a command. |
 | `actor_ref` | `REF` | No | — | Verified original actor or technical executor. |
 | `action` | `TEXT` | No | — | Typed backup/restore/checkpoint action. |
 | `recorded_at` | `TIME` | No | — | Persisted event time. |
 | `safe_facts_json` | `TEXT` | No | — | Allowlisted IDs/generations/status, <=8 KiB; no secrets or business bodies. |
 
-Append-only; indexes `(operation_id)` and `(recorded_at, audit_id)`. Owning local
+Append-only (update/delete triggers abort); indexes `recovery_audit_operation (operation_id)` and
+`recovery_audit_recorded (recorded_at, audit_id)`. Owning local
 mutation/result/checkpoint/audit commit together; audit failure rolls back that local
 transaction. Registry status may lag and never controls the outcome. Control storage
 must have bounded reserved space for required receipts even at the business allowance.

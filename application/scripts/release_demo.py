@@ -16,9 +16,6 @@ from uuid import UUID
 
 from app.modules.hosted_access.application.configuration import HostedDeployment
 from app.modules.hosted_access.infrastructure.configuration import load_hosted_deployment
-from app.modules.hosted_access.infrastructure.recovery_publication import (
-    load_recovery_configuration,
-)
 from app.modules.hosted_access.infrastructure.storage_budget import validate_storage_volume
 from app.modules.workspace.application.service import WorkspaceService
 from app.platform.product_migrations import current_revision
@@ -310,30 +307,12 @@ def prepare_plan(args):
         plan["originals"].append(snapshot(args.record, "dropin.before", dropin))
     else:
         plan["originals"].append({"path": str(dropin), "snapshot": None, "identity": [0, 0, 0o644]})
-    prepare_recovery(args.record, plan, deployment)
     plan["candidate_hashes"] = {
         key: file_hash(plan[key])
-        for key in ("candidate_local", "candidate_hosted", "bootstrap_local", "candidate_recovery")
+        for key in ("candidate_local", "candidate_hosted", "bootstrap_local")
         if key in plan
     }
     event(args.record, plan, "prepared")
-
-
-def prepare_recovery(record, plan, deployment):
-    """Separate new-workspace retention from all retained old recovery points."""
-    path = CONFIGS / f"recovery-{plan['instance']}.json"
-    if not path.exists():
-        return
-    existing = load_recovery_configuration(path)
-    require(existing.workspace_id == deployment.workspace_id, "Old recovery binding differs.")
-    ledger_dir = existing.ledger_path.parent / f"workspace-{plan['workspace_id']}"
-    ledger_dir.mkdir(mode=0o700)
-    raw = read_json(path)
-    raw.update(workspace_id=plan["workspace_id"], ledger_path=str(ledger_dir / "ledger.json"))
-    candidate = record / "recovery.candidate"
-    atomic_write(candidate, json_bytes(raw), (0, 0, 0o600))
-    plan["candidate_recovery"] = str(candidate)
-    plan["originals"].append(snapshot(record, "recovery.before", path))
 
 
 def check_stopped(plan):
@@ -359,14 +338,11 @@ def candidate_replacements(plan):
         f"[Service]\nExecStart=\nExecStart={python} -m app --config "
         f"{local} serve-hosted --deployment {hosted} --port {8001 if instance == 'a' else 8002}\n"
     )
-    replacements = [
+    return [
         Path(plan["candidate_local"]).read_bytes(),
         Path(plan["candidate_hosted"]).read_bytes(),
         command.encode(),
     ]
-    if "candidate_recovery" in plan:
-        replacements.append(Path(plan["candidate_recovery"]).read_bytes())
-    return replacements
 
 
 def verify_candidate(plan):

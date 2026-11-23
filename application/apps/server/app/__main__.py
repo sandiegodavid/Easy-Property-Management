@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 from getpass import getpass
 from importlib import import_module
 from pathlib import Path
@@ -14,19 +13,6 @@ from app.modules.files.infrastructure.content_store import S3ContentStore
 from app.modules.hosted_access.domain.models import HostedAccessError
 from app.modules.hosted_access.infrastructure.admin import administer
 from app.modules.hosted_access.infrastructure.operations import create_hosted_backup
-from app.modules.hosted_access.infrastructure.recovery_publication import (
-    publish_archive,
-    load_recovery_configuration,
-    FileRecoveryLedger,
-)
-from app.modules.hosted_access.application.recovery_publication import (
-    recovery_status,
-    RecoveryPublicationError,
-)
-from app.modules.hosted_access.infrastructure.recovery_bundle import (
-    create_configuration_bundle,
-    unpack_configuration_bundle,
-)
 from app.modules.hosted_access.infrastructure.configuration import (
     HostedConfigurationError,
     load_hosted_deployment,
@@ -69,30 +55,6 @@ def _build_parser() -> argparse.ArgumentParser:
     hosted_backup.add_argument("deployment")
     hosted_backup.add_argument("--output", required=True)
     hosted_backup.add_argument("--staging-directory", required=True)
-    publish = commands.add_parser(
-        "hosted-publish-backup", help="Validate and publish an encrypted archive to private R2."
-    )
-    publish.add_argument("deployment")
-    publish.add_argument("recovery_configuration")
-    publish.add_argument("archive")
-    publish.add_argument("--staging-directory", required=True)
-    recovery_status = commands.add_parser(
-        "hosted-recovery-status",
-        help="Show verified recovery age without loading credentials into a network client.",
-    )
-    recovery_status.add_argument("recovery_configuration")
-    bundle = commands.add_parser(
-        "hosted-recovery-bundle",
-        help="Encrypt configuration and enrollment references without usable sessions.",
-    )
-    bundle.add_argument("deployment")
-    bundle.add_argument("--output", required=True)
-    unpack = commands.add_parser(
-        "hosted-unpack-recovery-bundle",
-        help="Decrypt recovery references into a new private file; never grants access.",
-    )
-    unpack.add_argument("archive")
-    unpack.add_argument("--output", required=True)
     destination = commands.add_parser(
         "configure-backup-destination",
         help="Save a separate external folder for encrypted backup archives.",
@@ -249,19 +211,9 @@ def _run_due_backup(parser: argparse.ArgumentParser, backups: BackupService) -> 
 
 
 def _run_hosted_archive(args, parser, backups) -> bool:
-    if args.command not in {"hosted-backup", "hosted-publish-backup"}:
+    if args.command != "hosted-backup":
         return False
     try:
-        if args.command == "hosted-publish-backup":
-            published = publish_archive(
-                Path(args.deployment),
-                Path(args.recovery_configuration),
-                Path(args.archive),
-                backups,
-                getpass("Backup passphrase: "),
-            )
-            print(json.dumps(published, sort_keys=True))
-            return True
         result = create_hosted_backup(
             Path(args.deployment),
             backups,
@@ -271,32 +223,11 @@ def _run_hosted_archive(args, parser, backups) -> bool:
     except (
         HostedConfigurationError,
         BackupError,
-        RecoveryPublicationError,
         OSError,
         RuntimeError,
     ) as error:
         parser.exit(1, f"Hosted backup failed: {error}\n")
     print(f"Validated encrypted hosted recovery point: {result.archive_path}")
-    return True
-
-
-def _run_hosted_bundle(args, parser) -> bool:
-    if args.command not in {"hosted-recovery-bundle", "hosted-unpack-recovery-bundle"}:
-        return False
-    try:
-        phrase = getpass("Administrator recovery passphrase: ")
-        if args.command == "hosted-recovery-bundle":
-            create_configuration_bundle(Path(args.deployment), Path(args.output), phrase)
-        else:
-            unpack_configuration_bundle(Path(args.archive), Path(args.output), phrase)
-    except (
-        HostedConfigurationError,
-        HostedAccessError,
-        RecoveryPublicationError,
-        OSError,
-    ) as error:
-        parser.exit(1, f"Administrator recovery failed: {error}\n")
-    print("Private recovery file created. Fresh verified enrollment is required after recovery.")
     return True
 
 
@@ -314,15 +245,6 @@ def _run_hosted_configuration(args, parser, service) -> bool:
         except HostedConfigurationError as error:
             parser.exit(1, f"{error}\n")
         print("Hosted deployment identity and existing workspace validated; no server was started.")
-        return True
-    if args.command == "hosted-recovery-status":
-        try:
-            config = load_recovery_configuration(Path(args.recovery_configuration))
-            # Status reads the verification ledger only: no SDK/client or network.
-            status = recovery_status(FileRecoveryLedger(config))
-            print(json.dumps(status, sort_keys=True))
-        except (RecoveryPublicationError, OSError) as error:
-            parser.exit(1, f"{error}\n")
         return True
     return False
 
@@ -348,7 +270,7 @@ def main() -> None:
         parser.error("Server port must be between 1 and 65535.")
     config_path = _config_path(args.config)
     service = WorkspaceService.from_local_config(config_path)
-    if _run_hosted_bundle(args, parser) or _run_hosted_configuration(args, parser, service):
+    if _run_hosted_configuration(args, parser, service):
         return
     if _run_workspace_command(args.command, service):
         return

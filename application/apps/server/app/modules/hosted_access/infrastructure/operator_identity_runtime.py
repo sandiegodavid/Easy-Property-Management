@@ -1,9 +1,11 @@
 """Protected composition of destination HTTP and private dispatch in the Operator process."""
 
+import asyncio
 from collections.abc import Callable
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from functools import partial
+from pathlib import Path
 import socket
 from threading import RLock
 
@@ -24,7 +26,12 @@ from app.modules.hosted_access.api.managed_business import (
 )
 from app.modules.hosted_access.domain.models import HostedAccessError
 from app.modules.hosted_access.infrastructure.managed_draft_leases import ManagedDraftLeases
-from app.platform.web_delivery import browser_route
+from app.platform.web_delivery import PackagedWebMiddleware, browser_route
+from app.modules.hosted_access.api.operator_recovery import (
+    RECOVERY_ROUTE_PREFIX,
+    OperatorRecoveryInputs,
+    operator_recovery_router,
+)
 from app.modules.hosted_access.api.operator_security import (
     SECURITY_ROUTES,
     operator_security_router,
@@ -75,6 +82,9 @@ class OperatorIdentityInputs:
     business: ManagedBusinessInputs | None = None
     writer_lock: HostedWriterLock | None = None
     usage_reader: Callable | None = None
+    protection_reader: Callable | None = None
+    recovery_service: object | None = None
+    recovery_mode: bool = False
 
 
 def managed_entry_metadata(inputs):
@@ -87,9 +97,10 @@ def managed_entry_metadata(inputs):
 
 
 class DestinationHTTP:
-    def __init__(self, app, *, destination, source_origin, business):
+    def __init__(self, app, *, destination, source_origin, business, recovery_mode: bool = False):
         self.app, self.destination = app, destination
         self.business, self.origin = business, source_origin
+        self.recovery_mode = recovery_mode
         self.scheme, self.host = source_origin.split("://", 1)
 
     async def __call__(self, scope, receive, send):
@@ -99,10 +110,16 @@ class DestinationHTTP:
             != [self.host.encode("ascii")]
         ):
             await JSONResponse({"state": "rejected"}, status_code=403)(scope, receive, send)
-        elif scope["type"] == "http" and scope["path"] in AUTH_PATHS | SECURITY_ROUTES | {
-            SETTINGS_ROUTE
-        }:
+        elif scope["type"] == "http" and (
+            scope["path"] in AUTH_PATHS | SECURITY_ROUTES | {SETTINGS_ROUTE}
+            or scope["path"].startswith(RECOVERY_ROUTE_PREFIX)
+        ):
             await self.destination(scope, receive, send)
+        elif self.recovery_mode and scope["type"] == "http" and scope["path"].startswith("/api/"):
+            await JSONResponse(
+                {"code": "recovery_mode_active", "message": "Workspace is in recovery mode."},
+                status_code=503,
+            )(scope, receive, send)
         elif self.business and scope["type"] == "http" and scope["path"].startswith("/api/"):
             await self.business.dispatch(self.app, scope, receive, send, self.origin)
         elif scope["type"] == "http" and not (
@@ -110,7 +127,7 @@ class DestinationHTTP:
             and (
                 scope["path"] == "/sign-in"
                 or scope["path"].startswith("/assets/")
-                or (self.business and browser_route(scope["path"]))
+                or ((self.business or self.recovery_mode) and browser_route(scope["path"]))
             )
         ):
             response = JSONResponse(
@@ -256,11 +273,29 @@ def compose_operator_identity(
                     origin=source_origin,
                     usage_reader=inputs.usage_reader,
                     support_contact=inputs.support_contact,
+                    protection_reader=inputs.protection_reader,
+                ),
+            )
+        )
+    if inputs.recovery_service is not None:
+        if getattr(inputs.recovery_service, "source_lifecycle", None) is None:
+            inputs.recovery_service.source_lifecycle = lifecycle
+        auth.include_router(
+            operator_recovery_router(
+                sessions,
+                OperatorRecoveryInputs(
+                    origin=source_origin,
+                    recovery=inputs.recovery_service,
+                    recovery_mode=inputs.recovery_mode,
                 ),
             )
         )
     app.add_middleware(
-        DestinationHTTP, destination=auth, source_origin=source_origin, business=business
+        DestinationHTTP,
+        destination=auth,
+        source_origin=source_origin,
+        business=business,
+        recovery_mode=inputs.recovery_mode,
     )
     return partial(
         own_identity_listener,
@@ -268,3 +303,70 @@ def compose_operator_identity(
         dispatch,
         peer_uid=inputs.relay_uid,
     )
+
+
+@dataclass
+class _RecoveryModeRuntime:
+    """Minimal runtime stub for recovery mode; never opens or initializes a business DB."""
+
+    workspace_id: str
+    ready: bool = True
+    can_write: bool = True
+
+
+def create_minimal_recovery_app(
+    inputs: OperatorIdentityInputs,
+    *,
+    web_build_path: Path | None = None,
+) -> FastAPI:
+    """Boot authentication + recovery API + Recovery UI without composing business services."""
+    binding = inputs.binding()
+    runtime = _RecoveryModeRuntime(workspace_id=binding.scope.workspace_id)
+    serve_identity = None
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        task: asyncio.Task[None] | None = None
+        if serve_identity is not None:
+            task = asyncio.create_task(serve_identity())
+        try:
+            yield
+        finally:
+            if task is not None:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+    app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None, lifespan=lifespan)
+    default_web_root = Path(__file__).resolve().parents[3] / "web_build"
+    web_root = web_build_path or (default_web_root if default_web_root.is_dir() else None)
+    if web_root is not None and web_root.is_dir():
+        app.add_middleware(
+            PackagedWebMiddleware,
+            root=web_root,
+            entry_metadata=managed_entry_metadata(inputs),
+        )
+    recovery_inputs = OperatorIdentityInputs(
+        engine=inputs.engine,
+        binding=inputs.binding,
+        signer=inputs.signer,
+        central_key=inputs.central_key,
+        central=inputs.central,
+        clock=inputs.clock,
+        listener=inputs.listener,
+        relay_uid=inputs.relay_uid,
+        source_origin=inputs.source_origin,
+        central_origin=inputs.central_origin,
+        lifecycle_proof_owner=inputs.lifecycle_proof_owner,
+        support_contact=inputs.support_contact,
+        business=None,
+        writer_lock=None,
+        usage_reader=inputs.usage_reader,
+        protection_reader=inputs.protection_reader,
+        recovery_service=inputs.recovery_service,
+        recovery_mode=True,
+    )
+    serve_identity = compose_operator_identity(app, runtime, recovery_inputs)
+    return app

@@ -27,20 +27,33 @@ class InventoryPort(Protocol):
 
 class HostAgent:
     def __init__(
-        self, inventory: InventoryPort, admission: AdmissionPort, driver: EffectDriver, *, clock
+        self,
+        inventory: InventoryPort,
+        admission: AdmissionPort,
+        driver: EffectDriver,
+        *,
+        clock,
+        eligible_proof_verifier=None,
     ):
         self.inventory, self.admission, self.driver = inventory, admission, driver
         self.clock = clock
+        self.eligible_proof_verifier = eligible_proof_verifier
 
     def execute(self, command: HostEffect):
-        # H05 restore and H03/H04 enable remain unavailable, even with a typed DTO.
+        # H05 restore uses workspace-internal recovery; switch_binding remains unavailable.
         if command.effect.kind in {"stage_restore", "switch_binding"}:
             raise HostAgentUnavailable()
         if (
             command.effect.kind == "apply_ingress_policy"
             and command.payload.desired_state == "eligible"
         ):
-            raise HostAgentUnavailable()
+            if (
+                self.eligible_proof_verifier is None
+                or not command.payload.source_identity_proof_ref
+                or not command.payload.resource_readiness_proof_ref
+                or self.eligible_proof_verifier(command) is not True
+            ):
+                raise HostAgentUnavailable()
         admitted = self.admission.resolve(command)
         require_admission(command, admitted, self.clock())
         with self.inventory.exclusive():
