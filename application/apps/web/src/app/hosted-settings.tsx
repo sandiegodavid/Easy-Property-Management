@@ -25,8 +25,8 @@ type ProtectionData = {
 
 type MaintenanceData = {
   message?: string | null;
-  starts_at?: string | null;
-  ends_at?: string | null;
+  starts_at?: number | string | null;
+  ends_at?: number | string | null;
 };
 
 type UsageBreakdown = {
@@ -78,6 +78,82 @@ function formatPlanName(plan: string): string {
 
 function formatEpochMs(epochMs: number): string {
   return new Date(epochMs).toISOString();
+}
+
+function formatWindowBoundary(value: number | string | null | undefined): string | null {
+  if (typeof value === "number" && Number.isFinite(value)) return formatEpochMs(value);
+  if (typeof value === "string" && value.trim()) return value;
+  return null;
+}
+
+export function isMaintenanceInProgressRevision(
+  sourceRevision: string | null | undefined,
+): boolean {
+  return (
+    typeof sourceRevision === "string" && sourceRevision.startsWith("maintenance:in_progress:")
+  );
+}
+
+export function HostedMaintenanceBanner() {
+  const hosted = managedHostedMode();
+  const [notice, setNotice] = useState<{
+    inProgress: boolean;
+    message: string;
+    windowLabel: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!hosted) return;
+    const controller = new AbortController();
+    let active = true;
+    fetchHostedSettings(controller.signal)
+      .then((payload) => {
+        if (!active) return;
+        if (payload.maintenance.state === "ready" && payload.maintenance.data?.message) {
+          const start = formatWindowBoundary(payload.maintenance.data.starts_at);
+          const end = formatWindowBoundary(payload.maintenance.data.ends_at);
+          setNotice({
+            inProgress: isMaintenanceInProgressRevision(
+              payload.maintenance.freshness?.source_revision,
+            ),
+            message: payload.maintenance.data.message,
+            windowLabel: start && end ? `${start} – ${end}` : null,
+          });
+        } else {
+          setNotice(null);
+        }
+      })
+      .catch(() => {
+        // Non-blocking banner: never interrupt active workspace editing on background fetch error.
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [hosted]);
+
+  if (!hosted || !notice) return null;
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      data-testid={
+        notice.inProgress ? "hosted-maintenance-in-progress" : "hosted-maintenance-announced"
+      }
+      className="hosted-maintenance-banner"
+    >
+      <strong>
+        {notice.inProgress ? "Updating your workspace" : "Scheduled maintenance window"}
+      </strong>
+      {": "}
+      <span>{notice.message}</span>
+      {notice.inProgress && (
+        <span> Unfinished drafts are preserved; retry explicitly after the update completes.</span>
+      )}
+      {notice.windowLabel && <span> ({notice.windowLabel})</span>}
+    </div>
+  );
 }
 
 async function fetchHostedSettings(signal?: AbortSignal): Promise<HostedSettingsPayload> {
@@ -246,11 +322,34 @@ export function HostedSettings() {
                 <>
                   <dt>Maintenance notice</dt>
                   <dd>
-                    <p>{state.payload.maintenance.data.message}</p>
+                    <p>
+                      <strong>
+                        {isMaintenanceInProgressRevision(
+                          state.payload.maintenance.freshness?.source_revision,
+                        )
+                          ? "Updating your workspace: "
+                          : "Scheduled window: "}
+                      </strong>
+                      {state.payload.maintenance.data.message}
+                    </p>
+                    {(() => {
+                      const start = formatWindowBoundary(state.payload.maintenance.data.starts_at);
+                      const end = formatWindowBoundary(state.payload.maintenance.data.ends_at);
+                      return start && end ? (
+                        <p className="ui-muted">
+                          Window: {start} – {end}
+                        </p>
+                      ) : null;
+                    })()}
                   </dd>
                 </>
               )}
           </dl>
+          <p className="ui-muted" data-testid="pilot0-disclosure">
+            Free invitation-only pilot · Best-effort support · 24-hour nightly backup objective with
+            platform-managed encryption keys (not zero-knowledge) · Shared announced maintenance
+            window · No contractual SLA.
+          </p>
           <button type="button" disabled={refreshing} onClick={() => void refresh()}>
             {refreshing ? "Refreshing…" : "Refresh storage usage"}
           </button>

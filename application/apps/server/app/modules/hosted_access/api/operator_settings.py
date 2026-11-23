@@ -27,11 +27,12 @@ from app.platform.hosted_contracts.ui_states import (
     UIAction,
 )
 from app.platform.hosted_contracts.values import EmailAddress
+from app.platform.hosted_security_headers import API_SECURITY_HEADERS
 
 _EMAIL_ADAPTER = TypeAdapter(EmailAddress)
 
 SETTINGS_ROUTE = "/api/hosted/settings"
-HEADERS = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
+HEADERS = API_SECURITY_HEADERS
 
 
 def _read_session_cookie(request: Request, *, origin: str, cookie_name: str) -> str:

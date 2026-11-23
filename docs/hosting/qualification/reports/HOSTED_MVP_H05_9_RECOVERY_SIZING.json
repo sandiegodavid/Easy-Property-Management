@@ -1,0 +1,58 @@
+{
+  "admission_enabled": true,
+  "derived_trees": {
+    "control": {
+      "byte_ceiling": 17825792,
+      "inode_ceiling": 768
+    },
+    "scratch": {
+      "byte_ceiling": 114294784,
+      "inode_ceiling": 3328
+    },
+    "workspace": {
+      "byte_ceiling": 193986560,
+      "inode_ceiling": 6400
+    }
+  },
+  "h05_backup_restore_reserve": {
+    "control": {
+      "backup_restore_delta_bytes": 0,
+      "backup_restore_delta_inodes": 0,
+      "byte_ceiling": 17825792,
+      "inode_ceiling": 768
+    },
+    "scratch": {
+      "backup_restore_delta_bytes": 79691776,
+      "backup_restore_delta_inodes": 2560,
+      "byte_ceiling": 114294784,
+      "inode_ceiling": 3328
+    },
+    "workspace": {
+      "backup_restore_delta_bytes": 24117248,
+      "backup_restore_delta_inodes": 1024,
+      "byte_ceiling": 193986560,
+      "inode_ceiling": 6400
+    }
+  },
+  "logical_free_bytes": 50000000,
+  "margin_factor": 1.35,
+  "measured_peaks": {
+    "control": {
+      "peak_bytes": 368640,
+      "peak_inodes": 5
+    },
+    "scratch": {
+      "peak_bytes": 46907392,
+      "peak_inodes": 1520
+    },
+    "workspace": {
+      "peak_bytes": 93810688,
+      "peak_inodes": 3037
+    }
+  },
+  "measurement_sha256": "95202a150d7c5ffec3ec7daabd4f45fc1b1ca134ed2f26300a99397be28d1637",
+  "restore_readiness": "qualified",
+  "slice": "H05.9",
+  "source_sha256": "d450c2fe7ee5f4a4d4e122b055f280802b0a2a26462db3ffcc889fdb8134caa5",
+  "version": 1
+}

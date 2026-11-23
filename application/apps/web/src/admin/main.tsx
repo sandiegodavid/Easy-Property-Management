@@ -114,7 +114,7 @@ function Admin() {
       }
     } catch {
       setMessage(
-        "Sign-in could not continue. Allow the Google popup and try again, or contact the platform owner.",
+        `Sign-in could not continue. Allow the Google popup and try again, or contact ${support || "the platform owner"}.`,
       );
     } finally {
       setBusy(false);

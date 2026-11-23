@@ -28,6 +28,21 @@ function isRecoveryModeErrorPayload(errorPayload: unknown): boolean {
   return false;
 }
 
+function isMaintenanceInProgressPayload(errorPayload: unknown): boolean {
+  if (!errorPayload || typeof errorPayload !== "object") return false;
+  const record = errorPayload as { code?: unknown; detail?: unknown };
+  if (record.code === "maintenance_in_progress") return true;
+  if (
+    record.detail &&
+    typeof record.detail === "object" &&
+    "code" in record.detail &&
+    (record.detail as { code?: unknown }).code === "maintenance_in_progress"
+  ) {
+    return true;
+  }
+  return false;
+}
+
 async function checkRecoveryModeStatus(signal: AbortSignal): Promise<boolean> {
   try {
     const response = await fetch("/api/hosted/recovery/status", {
@@ -74,6 +89,12 @@ async function loadBootstrap(signal: AbortSignal): Promise<Bootstrap> {
         (managedHostedMode() && (await checkRecoveryModeStatus(signal))))
     ) {
       throw new RecoveryModeActiveError();
+    }
+    if (result.response.status === 503 && isMaintenanceInProgressPayload(result.error)) {
+      throw new BootstrapFailure(
+        false,
+        "Updating your workspace. Unfinished drafts are preserved on this device; retry explicitly after the maintenance window finishes.",
+      );
     }
     if (hostedMode() && [503, 507].includes(result.response.status)) {
       throw new BootstrapFailure(

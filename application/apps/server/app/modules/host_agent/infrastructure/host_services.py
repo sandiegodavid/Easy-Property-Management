@@ -45,7 +45,7 @@ def service_unit(component, layout=None):
             stops="/var/lib/epm/stops",
             data="/var/lib/epm/data",
         )
-    if component not in {"gateway", "tunnel", "egress", "network", "projection"}:
+    if component not in {"gateway", "tunnel", "egress", "network", "projection", "backup_proxy"}:
         raise HostAgentDenied()
     python = layout.installation + "/bin/python"
     runner = python + " -B -m app.modules.host_agent.infrastructure.service_runtime"
@@ -56,6 +56,60 @@ def service_unit(component, layout=None):
         + layout.stops
         + " --contain-all"
     )
+    if component == "backup_proxy":
+        command = (
+            python
+            + " -B -m app.modules.host_agent.infrastructure.backup_proxy --config "
+            + layout.backup_proxy_config
+        )
+        return f"""[Unit]
+Description=EPM private off-host backup proxy
+After=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=epm-backup-proxy
+Group=epm-backup-proxy
+ExecStart={command}
+LoadCredential=r2.json:{layout.backup_proxy_secret}
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ProcSubset=pid
+ProtectProc=invisible
+ReadWritePaths={layout.backup_proxy_runtime}
+ReadOnlyPaths={path_parent(layout.inventory)}
+InaccessiblePaths={layout.data} {layout.stops} -/run/docker.sock {path_parent(layout.tunnel_secret)} {layout.gateway_runtime} {layout.tunnel_runtime} {layout.proxy_runtime} -/run/credentials/epm-tunnel.service
+LimitNOFILE=1024
+TasksMax=64
+MemoryMax=256M
+CPUQuota=100%
+TimeoutStartSec=30
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
+"""
     if component in {"network", "projection"}:
         action = "network" if component == "network" else "refresh"
         prepare = "ExecStartPre=/usr/sbin/modprobe br_netfilter\n" if component == "network" else ""

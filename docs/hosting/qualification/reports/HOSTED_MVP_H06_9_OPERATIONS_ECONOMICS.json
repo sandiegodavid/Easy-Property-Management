@@ -1,0 +1,71 @@
+{
+  "cases": {
+    "announced_maintenance_restart": {
+      "announced_visible": true,
+      "cleared_cleanly": true,
+      "in_progress_visible": true,
+      "malformed_fails_safe": true,
+      "status": "passed"
+    },
+    "backup_alert_support": {
+      "cleared_only_after_verified_recovery": true,
+      "degraded_alert_sent": true,
+      "duplicate_suppressed": true,
+      "status": "passed"
+    },
+    "gross_spend_admin_minutes": {
+      "currency": "USD",
+      "estimated_monthly_gross_micros": 56210000,
+      "launch_budget_micros": 250000000,
+      "observed_rehearsal_gross_micros": 0,
+      "rehearsal_admin_minutes": 15,
+      "status": "passed",
+      "worksheet_sha256": "13fa102a55ea8ac7a9aa1ffede6ea379646deb6751db601bffd74eb2d2530c44"
+    },
+    "lost_response_retry_original": {
+      "changed_intent_rejected": true,
+      "original_operation_preserved": true,
+      "status": "passed"
+    },
+    "manual_add_claim_disable": {
+      "all_initial_pending": true,
+      "assignments_created": 2,
+      "status": "passed"
+    },
+    "runtime_repair_support": {
+      "no_admin_offline_decrypt_bypass": true,
+      "repair_module_verified": true,
+      "runbook_sha256": "234918156572f040781fa33e220c7502d50834796b797a1639fceb30afc3b516",
+      "status": "passed"
+    },
+    "seed_failure_disabled": {
+      "no_auto_replay_over_live_data": true,
+      "status": "passed",
+      "stays_disabled_until_verified": true
+    },
+    "sixth_capacity_not_cap": {
+      "seventh_rejected_above_capacity": true,
+      "sixth_admitted_within_qualified_capacity": true,
+      "status": "passed"
+    },
+    "unknown_capacity_pending": {
+      "status": "passed",
+      "unknown_capacity_fails_closed": true
+    }
+  },
+  "level": "manual",
+  "owner": "H06.9",
+  "pins": {
+    "configuration": "pilot0_v1",
+    "image": "production_entrypoints_h06_6",
+    "schema": "all_6_stores_implemented",
+    "source": "42fbdc54d91c2b949691ae89fe04032434248236569cfca379fed5144c0721cf",
+    "tool": "python-admin-control-pilot0",
+    "workload": "pilot0_empty_and_synthetic_cohort"
+  },
+  "proof": "operations_economics",
+  "recorded_at_ms": 1795477100237,
+  "revision": 1,
+  "status": "passed",
+  "version": 1
+}

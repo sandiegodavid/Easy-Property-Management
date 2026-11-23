@@ -46,6 +46,7 @@ interface Outcome {
 interface Start {
   attemptId: string;
   firebase: FirebaseOptions;
+  supportContact?: string;
 }
 async function request<T>(path: string, body?: object): Promise<T> {
   const response = await fetch(path, {
@@ -75,6 +76,7 @@ function Login() {
   const [factors, setFactors] = useState<{ uid: string; displayName?: string | null }[]>([]);
   const [factorId, setFactorId] = useState("");
   const [code, setCode] = useState("");
+  const [support, setSupport] = useState("");
   const auth = useRef<Auth | null>(null);
   const attempt = useRef("");
   const resolver = useRef<MultiFactorResolver | null>(null);
@@ -111,6 +113,7 @@ function Login() {
         `/auth/start?flow=${encodeURIComponent(flow)}&method=google${source ? `&source=${encodeURIComponent(source)}` : ""}`,
       );
       attempt.current = start.attemptId;
+      if (start.supportContact) setSupport(start.supportContact);
       auth.current ??= initializeAuth(initializeApp(start.firebase), {
         persistence: inMemoryPersistence,
         popupRedirectResolver: browserPopupRedirectResolver,
@@ -311,6 +314,9 @@ function Login() {
           )}
         </>
       )}
+      <p className="muted">
+        Need help signing in? Contact {support || "your workspace administrator"}.
+      </p>
     </section>
   );
 }

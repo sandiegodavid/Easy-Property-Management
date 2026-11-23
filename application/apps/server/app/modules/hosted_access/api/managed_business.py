@@ -22,10 +22,14 @@ from app.modules.hosted_access.application.managed_provider import (
     ProviderDenied,
     ProviderUnavailable,
 )
-from app.modules.hosted_access.application.storage_budget import HostedStorageBudget
 from app.modules.hosted_access.domain.models import HostedAccessError
 from app.platform.actor_context import OperatorActor, operator_actor_scope
 from app.platform.attempt_fences import PreparedEditRequired
+from app.platform.hosted_security_headers import (
+    API_SECURITY_HEADER_NAMES_LOWER,
+    API_SECURITY_HEADERS,
+    API_SECURITY_HEADERS_ASGI,
+)
 from app.modules.hosted_access.infrastructure.draft_leases import conflict
 from app.platform.sqlite_engine import workspace_mutation_scope
 
@@ -58,7 +62,7 @@ def business_error(error):
     return JSONResponse(
         {"detail": {"code": error.code, "message": str(error)}},
         status_code=error.status,
-        headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
+        headers=API_SECURITY_HEADERS,
     )
 
 
@@ -204,13 +208,9 @@ class ManagedBusiness:
                     headers = [
                         (name, value)
                         for name, value in message["headers"]
-                        if name not in {b"cache-control", b"referrer-policy"}
+                        if name.lower() not in API_SECURITY_HEADER_NAMES_LOWER
                     ]
-                    message["headers"] = [
-                        *headers,
-                        (b"cache-control", b"no-store"),
-                        (b"referrer-policy", b"no-referrer"),
-                    ]
+                    message["headers"] = [*headers, *API_SECURITY_HEADERS_ASGI]
                 await send(message)
 
             if hasattr(self.inputs.storage, "reserve_request"):

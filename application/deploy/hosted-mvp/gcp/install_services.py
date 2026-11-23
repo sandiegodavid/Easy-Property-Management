@@ -13,6 +13,7 @@ from urllib.request import Request, urlopen
 from uuid import uuid4
 
 from sqlalchemy import create_engine
+from app.modules.host_agent.infrastructure.backup_proxy import load_r2_credentials
 from app.modules.host_agent.infrastructure.host_services import service_unit, TunnelSettings
 from app.modules.host_agent.infrastructure.network_policy import NetworkSettings
 from app.modules.host_agent.infrastructure.schema_store import HostMetadata, bind_host
@@ -107,6 +108,35 @@ def credential(project, tunnel_id):
     destination = Path("/etc/epm/secrets/tunnel.json")
     publish_credential(destination, data, tunnel_id)
     validate_tunnel_credential(destination, tunnel_id)
+
+
+def r2_credential(project, *, secret_name="epm-h05-r2-credentials"):
+    """Fetch scoped R2 credentials from GCP Secret Manager into root-only protected storage."""
+    request = Request(
+        "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
+        headers={"Metadata-Flavor": "Google"},
+    )
+    with urlopen(request, timeout=10) as response:
+        token = json.loads(response.read(65536))["access_token"]
+    url = (
+        f"https://secretmanager.googleapis.com/v1/projects/{project}"
+        f"/secrets/{secret_name}/versions/latest:access"
+    )
+    request = Request(url, headers={"Authorization": "Bearer " + token})
+    with urlopen(request, timeout=10) as response:
+        data = base64.b64decode(json.loads(response.read(65536))["payload"]["data"], validate=True)
+    destination = Path("/etc/epm/secrets/r2.json")
+    directory(destination.parent, 0o700)
+    with TemporaryDirectory(prefix=".r2-", dir=destination.parent) as temporary:
+        staged = Path(temporary) / "r2.json"
+        with staged.open("xb") as output:
+            os.fchmod(output.fileno(), 0o600)
+            output.write(data)
+            output.flush()
+            os.fsync(output.fileno())
+        load_r2_credentials(staged)
+        os.replace(staged, destination)
+    return destination
 
 
 def install(project, domain, tunnel_id):
@@ -222,6 +252,9 @@ def publish_units(config, identities):
                 f"d {projection} 0750 root {identity.pw_name} -",
             ]
         )
+    backup_proxy_identity = account("epm-backup-proxy")
+    bp_name = backup_proxy_identity.pw_name
+    tmpfiles.append(f"d {layout.backup_proxy_runtime} 0750 {bp_name} {bp_name} -")
     Path("/etc/tmpfiles.d/epm-host.conf").write_text("\n".join(tmpfiles) + "\n")
     call("systemd-tmpfiles", "--create", "/etc/tmpfiles.d/epm-host.conf")
     for component, name in {
@@ -230,6 +263,7 @@ def publish_units(config, identities):
         "gateway": "gateway",
         "tunnel": "tunnel",
         "egress": "egress",
+        "backup_proxy": "backup-proxy",
     }.items():
         Path(f"/etc/systemd/system/epm-{name}.service").write_text(
             installation_unit(component, layout)
@@ -245,7 +279,7 @@ After=docker.service srv-epm-data.mount epm-network-policy.service
 Type=simple
 User=root
 UMask=0077
-ExecStart={runner} --registry {layout.stops}
+ExecStart={runner} --registry {layout.stops} --config {layout.config}
 ExecStopPost={runner} --registry {layout.stops} --contain-all
 Restart=on-failure
 RestartSec=5
@@ -278,6 +312,22 @@ WantedBy=multi-user.target
     ):
         call("systemctl", "start", name)
     print("Protected empty inventory and closed services installed; admission unavailable.")
+
+
+def install_ops_agent_config(
+    config_yaml: str,
+    *,
+    destination: Path = Path("/etc/google-cloud-ops-agent/config.yaml"),
+) -> Path:
+    """Write root-owned GCP Ops Agent YAML configuration (0644) atomically."""
+    if "logging:" not in config_yaml or "metrics:" not in config_yaml:
+        raise ValueError("Ops Agent configuration must declare logging and metrics pipelines.")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    tmp = destination.with_suffix(".yaml.tmp")
+    tmp.write_text(config_yaml, encoding="utf-8")
+    tmp.chmod(0o644)
+    tmp.replace(destination)
+    return destination
 
 
 if __name__ == "__main__":

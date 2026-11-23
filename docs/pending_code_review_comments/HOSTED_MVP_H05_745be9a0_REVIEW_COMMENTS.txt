@@ -1,299 +1,163 @@
 Review: commit 745be9a0 (H05 impl) against docs/hosting/design/HOSTED_MVP_H05_DESIGN.md
-Review date: 2026-11-23
+Original review date: 2026-11-23
+Follow-up re-review date: 2026-11-23 (against commit 9b3404bf)
 Branch: hosted_mvp
+Summary: 0 open, 0 regressed, 41 resolved (remove resolved items after 2026-12-23).
 
 
 Backup engine, envelope crypto, R2/KMS, alerting and host backup proxy
 
-1. [P0] Cross-DEK chunk deduplication collision silently publishes unrestorable verified backup points
-File: application/apps/server/app/modules/hosted_recovery/infrastructure/engine.py:105-125,148-160,180-192,231-236,334-340,480-490
-Related: application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:1106-1110; application/apps/server/app/modules/hosted_admin/infrastructure/admin_recovery.py:535-540
+Open findings: None.
 
-_obtain_dek() generates a fresh random 32-byte DEK whenever existing_wrapped_dek_b64 is None. Callers only cache _last_wrapped_dek_b64 in memory, so any container restart, deploy, or repair_runtime resets it to None. Chunk object keys are namespaced only by key_fingerprint(context.key_ref) (chunks/{key_fp}/{chunk_sha256}.enc), not by DEK identity. When head_object(object_key) reports head.exists == True (lines 150-160, 182-192), _upload_file_chunks() skips uploading and records the pre-existing chunk (encrypted under an earlier DEK) in the new manifest (which wraps the new DEK). Because default full_readback=False only runs head_object on deduplicated chunks (lines 480-490), verify_point() passes and publishes a "verified" point whose manifest DEK cannot decrypt its deduplicated chunks (restore_point() fails with RecoveryCryptoError / InvalidTag). In AdminControlRecoveryService (full_readback=True), every backup after a restart fails permanently whenever any chunk matches an existing chunk in R2 under the same key_ref.
-Namespace chunk keys by a DEK-derived fingerprint in addition to key_fp (e.g., chunks/{key_fp}/{dek_fp}/{chunk_sha256}.enc) so distinct DEKs can never collide, and reload existing_wrapped_dek_b64 from the latest verified manifest/store on startup when key_ref is unchanged to preserve cross-restart deduplication.
+Resolved findings (2026-11-23):
 
-2. [P1] BackupProxyHandler.list_objects overflows the 16 KiB frame header at ~173 chunks and drops the connection
-File: application/apps/server/app/modules/host_agent/infrastructure/backup_proxy.py:47,271-278,309-318,356-359
+1. [P0] [resolved - 2026-11-23] Cross-DEK chunk deduplication collision silently publishes unrestorable verified backup points
+Verified in commit 9b3404bf: engine.py namespaces chunks as chunks/{key_fp}/{dek_fp}/{chunk_sha256}.enc and adds read_wrapped_dek(); hosted_recovery.py and admin_recovery.py reload existing_wrapped_dek_b64 from the latest verified manifest on capture.
 
-BackupProxyHandler.dispatch() returns {"ok": True, "keys": relative_keys}, b"" (line 278), placing the entire key list in the JSON header, which is capped at MAX_HEADER_BYTES = 16 * 1024 (line 47). Each chunk key is ~92 bytes (~95 bytes in JSON), so at ~173 keys (~43 MiB at default 256 KiB chunks, below the 50 MB Free allowance), _send_frame() raises BackupProxyUnavailable. Because _send_frame() at lines 356-359 is outside the except HostedRecoveryError handler and only catches OSError, the exception escapes into ThreadPoolExecutor and abruptly closes the socket.
-Serialize the list_objects key payload in response_body (bounded by MAX_BODY_BYTES) instead of response_header, and catch HostedRecoveryError around response framing so a bounded error header is returned instead of EOF.
+2. [P1] [resolved - 2026-11-23] BackupProxyHandler.list_objects overflows the 16 KiB frame header at ~173 chunks and drops the connection
+Verified in commit 9b3404bf: backup_proxy.py serializes {"keys": relative_keys} in response_body (bounded by MAX_BODY_BYTES) and catches HostedRecoveryError around _send_frame().
 
-3. [P2] Slowloris worker-pool starvation and unbounded connection queue in BackupProxyServer
-File: application/apps/server/app/modules/host_agent/infrastructure/backup_proxy.py:297-306,339-345,407,415-424
+3. [P2] [resolved - 2026-11-23] Slowloris worker-pool starvation and unbounded connection queue in BackupProxyServer
+Verified in commit 9b3404bf: backup_proxy.py enforces a monotonic total-frame deadline across _recv_frame()/_recv_exact(), caps queued connections (max_queued=32), and caps per-UID concurrency (max_per_uid=2).
 
-BackupProxyServer uses ThreadPoolExecutor(max_workers=8) (line 407) with an unbounded queue and accepts connections without concurrency limits (lines 418-423). handle_proxy_connection() sets a per-recv() timeout of 15s (line 341), while _recv_exact() loops without a total request deadline (lines 297-306). A single compromised Operator container can pin all 8 workers indefinitely by dripping 1 byte every 14s on a 2 MiB body, denying backup/restore to all other workspaces and Admin on the shared host.
-Enforce a monotonic overall deadline across _recv_frame()/_recv_exact(), cap total queued connections, and enforce a per-UID in-flight concurrency limit.
+4. [P2] [resolved - 2026-11-23] Hard 1000-key list_objects cap without pagination breaks pruning and catalog enumeration beyond 1000 objects
+Verified in commit 9b3404bf: list_objects_page() with continuation_token / next_token wired end-to-end across ports.py, r2_store.py, backup_proxy.py, and engine.py (_list_all_objects / prune_unreferenced_chunks).
 
-4. [P2] Hard 1000-key list_objects cap without pagination breaks pruning and catalog enumeration beyond 1000 objects
-File: application/apps/server/app/modules/hosted_recovery/infrastructure/r2_store.py:155-183,247-265
-Related: application/apps/server/app/modules/host_agent/infrastructure/backup_proxy.py:264-278,506-514; application/apps/server/app/modules/hosted_recovery/infrastructure/engine.py:617-623
+5. [P2] [resolved - 2026-11-23] Unbounded memory read in R2ObjectStore.get_object before proxy size enforcement
+Verified in commit 9b3404bf: ObjectStore.get_object(max_bytes=...) checks ContentLength, reads at most max_bytes + 1 inside contextlib.closing(response["Body"]), and BackupProxyHandler passes max_bytes=MAX_BODY_BYTES.
 
-R2ObjectStore.list_objects clamps max_keys to 1000 and discards NextContinuationToken; BackupProxyHandler exposes no continuation token; prune_unreferenced_chunks() calls list_objects("chunks/") once. Any workspace accumulating >1000 chunks across 7 points or key rotations leaks R2 objects beyond the first 1000 lexicographical keys and cannot fully enumerate manifests.
-Add opaque continuation_token / next_token pagination to ObjectStorePort.list_objects, BackupProxyHandler, and BackupTransport.list_objects, and iterate all pages in prune_unreferenced_chunks().
+6. [P3] [resolved - 2026-11-23] load_manifest does not validate nonce length before AESGCM.decrypt
+Verified in commit 9b3404bf: engine.py validates len(nonce) == AES_GCM_NONCE_BYTES before AESGCM.decrypt(), raising RecoveryIntegrityError on mismatch.
 
-5. [P2] Unbounded memory read in R2ObjectStore.get_object before proxy size enforcement
-File: application/apps/server/app/modules/hosted_recovery/infrastructure/r2_store.py:130-135
-Related: application/apps/server/app/modules/host_agent/infrastructure/backup_proxy.py:246-248
+7. [P3] [resolved - 2026-11-23] _validate_list_subprefix leaks ValueError as unavailable and permits duplicate trailing slashes
+Verified in commit 9b3404bf: backup_proxy.py validates subprefix[:-1] inside try/except ValueError -> BackupProxyDenied, and r2_store.py strips single trailing slash cleanly.
 
-R2ObjectStore.get_object() calls response["Body"].read() with no byte bound and without closing StreamingBody; BackupProxyHandler only enforces len(data) > MAX_BODY_BYTES after buffering the full object in RAM.
-Check ContentLength against a max_bytes bound, read at most max_bytes + 1 bytes inside contextlib.closing(response["Body"]), and reject oversized objects before buffering.
-
-6. [P3] load_manifest does not validate nonce length before AESGCM.decrypt
-File: application/apps/server/app/modules/hosted_recovery/infrastructure/engine.py:399,407-410
-
-A corrupted or tampered manifest with a decoded nonce length outside 8..128 bytes raises an unhandled ValueError from AESGCM.decrypt() instead of RecoveryIntegrityError/RecoveryCryptoError, and non-96-bit nonces are not rejected upfront.
-Validate len(nonce) == AES_GCM_NONCE_BYTES immediately after base64 decoding and raise RecoveryIntegrityError on mismatch.
-
-7. [P3] _validate_list_subprefix leaks ValueError as unavailable and permits duplicate trailing slashes
-File: application/apps/server/app/modules/host_agent/infrastructure/backup_proxy.py:79-85,263
-Related: application/apps/server/app/modules/hosted_recovery/infrastructure/r2_store.py:158,250
-
-_validate_list_subprefix() calls validate_relative_object_key(subprefix.rstrip("/")) without converting ValueError into BackupProxyDenied (so malformed subprefixes return backup_proxy_unavailable instead of backup_proxy_denied), and .rstrip("/") allows double trailing slashes such as "chunks//".
-Validate subprefix[:-1] inside try/except ValueError -> BackupProxyDenied, and use prefix[:-1] in r2_store.py:158,250.
-
-8. [P3] WebhookAlertSink and CloudKmsEnvelopeProvider follow HTTP redirects via urllib.request.urlopen
-File: application/apps/server/app/modules/hosted_recovery/infrastructure/alerting.py:56-80
-Related: application/apps/server/app/modules/hosted_recovery/infrastructure/kms_provider.py:85-90
-
-urllib.request.urlopen() follows 301/302/307/308 redirects by default without re-validating HTTPS or destination host, and WebhookAlertSink only checks webhook_url.startswith("https://") without rejecting loopback/link-local/metadata hosts. Redirects can downgrade HTTPS or leak the KMS Bearer token.
-Use a custom urllib.request.build_opener() with a redirect-denying HTTPRedirectHandler, and reject loopback/link-local/metadata destinations in WebhookAlertSink.
+8. [P3] [resolved - 2026-11-23] WebhookAlertSink and CloudKmsEnvelopeProvider follow HTTP redirects via urllib.request.urlopen
+Verified in commit 9b3404bf: alerting.py and kms_provider.py use _NoRedirectHandler with urllib.request.build_opener(), and WebhookAlertSink rejects loopback/link-local/private/unspecified IPs and metadata hosts.
 
 
 Operator recovery service, restore, minimal recovery mode and hosted access
 
-9. [P0] operator_entry.py ignores recovery_meta.active_business_ref in normal mode and never closes live business DB connections on restore
-File: application/apps/server/app/modules/hosted_access/infrastructure/operator_entry.py:223-236,283-294
-Related: application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:451-457,1880,1967-1968,2058
+Open findings: None.
 
-HostedWorkspaceRecoveryService resolves business storage under (workspace_root / active_business_ref) / "property-management.sqlite" (D6 incarnation directories) and switches recovery_meta.active_business_ref to incarnation-<new_gen> on restore. In normal mode, operator_entry.py hardcodes WorkspacePaths(root=workspace).database (line 283) and passes configuration.workspace_configuration directly to create_app() (line 292), ignoring recovery_meta.active_business_ref. It also omits close_business_connections when constructing HostedWorkspaceRecoveryService (lines 223-236), so live SQLite connections stay open during normal-mode restore fencing.
-Resolve the active business incarnation directory from recovery_meta.active_business_ref before constructing business_engine and create_app(), and wire close_business_connections to dispose active business connections when restore enters the fenced phase.
+Resolved findings (2026-11-23):
 
-10. [P0] Post-restore access_epoch advancement permanently locks out Operator authentication in operator_entry.py
-File: application/apps/server/app/modules/hosted_access/infrastructure/operator_entry.py:155,193-195
-Related: application/apps/server/app/modules/hosted_access/infrastructure/destination_identity.py:90-109; application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:1738,2048; application/apps/server/app/modules/hosted_access/infrastructure/source_lifecycle.py:485
+9. [P0] [resolved - 2026-11-23] operator_entry.py ignores recovery_meta.active_business_ref in normal mode and never closes live business DB connections on restore
+Verified in commit 9b3404bf: operator_entry.py resolves recovery_service.active_business_directory(), writes control/active-workspace-config.json when switched, and wires close_business_connections to dispose business_engine.
 
-confirm_restore advances access_meta.access_epoch to epoch + 1 via SourceLifecycle.verify_restore_binding() (source_lifecycle.py:485). However, operator_entry.py:193-194 returns the static configuration.binding loaded once from disk with the original access_epoch. DestinationIdentity.check_current() (destination_identity.py:97) rejects every request with ProviderDenied whenever access_meta.access_epoch != binding.access_epoch. Immediately after any successful restore, the Operator cannot sign in fresh or call POST /api/hosted/recovery/accept, even across container restarts.
-Update current_binding() in operator_entry.py so access_epoch tracks access_meta.access_epoch (when >= configuration.binding.access_epoch and backed by a verified restore_binding receipt) or atomically persist and reload the binding epoch on restore switchover.
+10. [P0] [resolved - 2026-11-23] Post-restore access_epoch advancement permanently locks out Operator authentication in operator_entry.py
+Verified in commit 9b3404bf: operator_entry.py current_binding() tracks access_meta.access_epoch when backed by an applied verify_restore_binding receipt in source_receipts.
 
-11. [P0] Failed restore leaves access_meta.maintenance_operation_id permanently stuck, locking out Operator sign-in and retries
-File: application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:1965-1966,2102-2139
-Related: application/apps/server/app/modules/hosted_access/infrastructure/destination_identity.py:101; application/apps/server/app/modules/hosted_access/infrastructure/source_lifecycle.py:428
+11. [P0] [resolved - 2026-11-23] Failed restore leaves access_meta.maintenance_operation_id permanently stuck, locking out Operator sign-in and retries
+Verified in commit 9b3404bf: hosted_recovery.py _release_maintenance_fence(op_id) clears maintenance_operation_id on pre-switch rollback and during reconcile_startup() for needs_attention restores.
 
-confirm_restore sets access_meta.maintenance_operation_id = op_id and revokes live sessions (lines 1965-1966) before downloading/restoring the point. If any subsequent step fails (R2/KMS outage, tamper/integrity failure, ENOSPC/EDQUOT), the except Exception handler (lines 2102-2139) deletes target_dir and marks restore_operations.phase = 'needs_attention' without ever clearing access_meta.maintenance_operation_id. DestinationIdentity.check_current() denies all auth/session requests while maintenance_operation_id IS NOT NULL, and SourceLifecycle refuses any new maintenance_fence, permanently wedging the workspace.
-Release the maintenance_operation_id fence (when equal to op_id) during pre-switched rollback in confirm_restore, and reconcile stale maintenance_operation_id locks on startup when the referenced restore_operations row is in needs_attention.
+12. [P1] [resolved - 2026-11-23] Non-atomic restore switchover ordering (verify_restore_binding before active_business_ref commit) risks split-brain and target deletion
+Verified in commit 9b3404bf: hosted_recovery.py commits recovery_meta.active_business_ref and phase='switched' while fenced before running _run_verify_restore_binding() and never deletes target_dir once switched is True.
 
-12. [P1] Non-atomic restore switchover ordering (verify_restore_binding before active_business_ref commit) risks split-brain and target deletion
-File: application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:2048-2115
+13. [P1] [resolved - 2026-11-23] Idempotent replay of confirm_restore fails at both HTTP and service layers
+Verified in commit 9b3404bf: lookup_idempotent_restore() runs after caller auth and before preview/recent-auth consumption, and intent.access_epoch is bound to preview.source_epoch.
 
-confirm_restore calls _run_verify_restore_binding() at line 2048 (committing access_epoch + 1, restore_generation + 1, and clearing maintenance_operation_id in access.sqlite) before committing recovery_meta.active_business_ref = :target_ref and phase = 'switched' in recovery.sqlite (lines 2055-2092). A crash or ENOSPC between lines 2048 and 2055 un-fences traffic against the old business tree with bumped generations, and the except handler at line 2105 deletes target_dir.
-Commit recovery_meta.active_business_ref, source_generation, restore_generation, and phase = 'switched' in recovery.sqlite first while maintenance_operation_id still fences traffic, then invoke the idempotent _run_verify_restore_binding() and record new_access_epoch. Never rmtree(target_dir) once active_business_ref has switched.
+14. [P1] [resolved - 2026-11-23] _live_business_readiness() and GET /api/hosted/recovery/status perform a full-DB dump and 50+ MB retained-file SHA-256 hash on every request
+Verified in commit 9b3404bf: hosted_recovery.py adds O(1) detect_runtime_mode() wired into _live_business_readiness() and GET /api/hosted/recovery/status.
 
-13. [P1] Idempotent replay of confirm_restore fails at both HTTP and service layers
-File: application/apps/server/app/modules/hosted_access/api/operator_recovery.py:290-305
-Related: application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:1769-1798,1830
+15. [P2] [resolved - 2026-11-23] SQLite BEGIN IMMEDIATE write transaction on recovery.sqlite held across full-DB scans and retained-file reads
+Verified in commit 9b3404bf: probe_live_workspace_state() runs outside immediate_transaction() in both reconcile_startup() and confirm_restore().
 
-(a) In hosted_recovery.py:1769-1798, when command is None, intent is constructed using self._current_access_epoch(). After a successful restore advances access_epoch from N to N+1, replaying with the same (point_id, preview_id, idempotency_key) hashes a different access_epoch and raises SemanticConflict (409) instead of returning the original OperationOutcome.
-(b) In operator_recovery.py:290-305, get_preview(body.preview_id) and sessions.consume_recent(...) run before confirm_restore(). Because the first call removes preview_id from self._previews and consumes the one-use challenge, every HTTP retry returns 403 restore_denied before reaching idempotency lookup.
-Authenticate the caller first, look up existing (kind='restore', idempotency_key) before rejecting a consumed preview or recomputing intent with the mutated live access_epoch, and bind intent.access_epoch to the preview's source_epoch (or stored command payload on replay).
+16. [P2] [resolved - 2026-11-23] D4 5-minute execution_authorization_expires_at TTL is stored but never enforced during confirm_restore
+Verified in commit 9b3404bf: hosted_recovery.py checks self.clock() > auth_expires_at before fencing and again before switching active_business_ref.
 
-14. [P1] _live_business_readiness() and GET /api/hosted/recovery/status perform a full-DB dump and 50+ MB retained-file SHA-256 hash on every request
-File: application/apps/server/app/modules/hosted_access/infrastructure/operator_entry.py:106-132,316-318
-Related: application/apps/server/app/modules/hosted_access/api/operator_recovery.py:138; application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:237-336,1496
+17. [P2] [resolved - 2026-11-23] _enforce_retention() permanently leaks 'expired' points and their R2 objects after any transient storage error
+Verified in commit 9b3404bf: _enforce_retention() queries both 'verified' and 'expired' rows and retries R2 deletion/pruning on all expired points.
 
-ManagedBusiness.dispatch() calls readiness() on every /api/* request, and GET /api/hosted/recovery/status calls detect_startup_mode() on every poll. Both invoke probe_live_workspace_state(), which runs PRAGMA quick_check(1), dumps and JSON-serializes every row of every table in property-management.sqlite, and reads every retained file on disk into memory to SHA-256 hash it.
-Split lightweight readiness/mode checks (checking restore_operations for interrupted phases and active_business_ref existence/cached startup state) from full workspace fingerprinting, reserving probe_live_workspace_state() for backup capture, startup reconciliation, and restore validation.
-
-15. [P2] SQLite BEGIN IMMEDIATE write transaction on recovery.sqlite held across full-DB scans and retained-file reads
-File: application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:646-696,1832-1894
-
-Both reconcile_startup() (line 695) and confirm_restore() (line 1891) call probe_live_workspace_state(...) inside with immediate_transaction(self.recovery_engine).
-Read active_business_ref and source_generation in a short read query, run probe_live_workspace_state() outside any write lock, then open immediate_transaction() only for the local state update and audit insert.
-
-16. [P2] D4 5-minute execution_authorization_expires_at TTL is stored but never enforced during confirm_restore
-File: application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:87,1946,1964-2093
-
-confirm_restore writes EXECUTION_AUTH_TTL_MS into restore_operations.execution_authorization_expires_at (line 1946) but never checks self.clock() > auth_expires_at before fencing or committing the switched transition.
-Check self.clock() > auth_expires_at before fencing and before switching active_business_ref; fail closed and roll back if expired.
-
-17. [P2] _enforce_retention() permanently leaks 'expired' points and their R2 objects after any transient storage error
-File: application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:1295-1359
-
-_enforce_retention() queries only WHERE state = 'verified' and updates excess rows to state = 'expired' before deleting from R2 (lines 1300-1335). If R2 deletion fails transiently (line 1336), subsequent runs never revisit 'expired' rows, leaking both catalog rows and R2 objects indefinitely.
-Include existing state = 'expired' rows in _enforce_retention() so deferred manifest deletions and unreferenced chunk prunes are retried and transitioned to 'pruned'.
-
-18. [P2] operator_entry.py omits recovery_meta binding verification, reconcile_startup(), summary publishing, and alert wiring
-File: application/apps/server/app/modules/hosted_access/infrastructure/operator_entry.py:207-240
-
-(a) After validate_schema() on recovery_database (lines 210-213), operator_entry.py never checks that recovery_meta.(deployment_ref, workspace_id) matches (binding.deployment_id, binding.scope.workspace_id).
-(b) HostedWorkspaceRecoveryService is constructed without summary_signer_key, summary_publisher, or alert_emitter, and reconcile_startup() is never called on boot, leaving interrupted 'running' backups unreconciled and D10/D12 alerting and Admin summary reporting unwired in production.
-Validate recovery_meta against configuration.binding on startup, call recovery_service.reconcile_startup() during boot, and wire summary_signer_key, summary_publisher, and alert_emitter.
+18. [P2] [resolved - 2026-11-23] operator_entry.py omits recovery_meta binding verification, reconcile_startup(), summary publishing, and alert wiring
+Verified in commit 9b3404bf: operator_entry.py validates recovery_meta identity against binding, calls reconcile_startup() on boot, and wires alert_emitter and summary_signer_key (async summary_publisher HTTP/Unix relay wired in H06.3).
 
 
 Admin control-plane recovery, status ingest and Admin control
 
-19. [P0] confirm_control_restore updates immutable control_restore_operations.new_registry_generation, failing every real control restore
-File: application/apps/server/app/modules/hosted_admin/infrastructure/admin_recovery.py:801,829-845,889-922,939-951
-Related: application/database/admin-recovery-migrations/versions/admin_recovery_0001_initial.py:280-286
+Open findings: None.
 
-admin_recovery_0001_initial.py:280-286 makes control_restore_operations.new_registry_generation immutable via trigger. confirm_control_restore() inserts control_restore_operations with new_registry_generation = source_gen + 1 (lines 801, 829-845), later increments main.control_meta.registry_generation in the restored admin.sqlite and reads new_reg_gen (lines 889-922), and then executes UPDATE control_restore_operations SET phase = 'switched', new_registry_generation = :rgen (lines 939-951). Because control_meta.registry_generation increments on every create_assignment (admin_control.py:920-924) while admin_recovery_meta.source_generation only increments on control restore, new_reg_gen != source_gen + 1 as soon as any operator exists, causing the immutability trigger to abort every real control restore (deleting target_dir and marking the restore failed).
-Make control_restore_operations.new_registry_generation nullable and write-once (immutable once non-NULL) in admin_recovery_0001_initial.py (updating docs/database/admin-recovery.md in the same change), insert NULL at phase 'prepared', and set new_reg_gen once at phase 'switched'.
+Resolved findings (2026-11-23):
 
-20. [P1] POST /api/admin/recovery/reconstruct bypasses pinned bootstrap authority, deployment binding, and MFA step-up verification
-File: application/apps/server/app/modules/hosted_admin/api/recovery_router.py:182-196
-Related: application/apps/server/app/modules/hosted_admin/infrastructure/admin_recovery.py:1050-1143
+19. [P0] [resolved - 2026-11-23] confirm_control_restore updates immutable control_restore_operations.new_registry_generation, failing every real control restore
+Verified in commit 9b3404bf: admin_recovery_0001_initial.py and docs/database/admin-recovery.md make new_registry_generation nullable and write-once; admin_recovery.py inserts NULL at prepared and sets new_reg_gen once at switched.
 
-recovery_router.py:185 discards the AdminRecoveryAuthority returned by authenticate_recovery and calls recovery.reconstruct_catalog() with no actor. reconstruct_catalog() never calls _verify_recovery_actor(conn, actor) and audits actor_ref="service:admin_recovery" instead of the calling Admin principal.
-Accept actor on reconstruct_catalog(), enforce _verify_recovery_actor(conn, actor) when called via HTTP, and record actor.bootstrap_principal_ref in control_recovery_audit.
+20. [P1] [resolved - 2026-11-23] POST /api/admin/recovery/reconstruct bypasses pinned bootstrap authority, deployment binding, and MFA step-up verification
+Verified in commit 9b3404bf: recovery_router.py passes actor to reconstruct_catalog(actor=actor), which enforces _verify_recovery_actor(conn, actor) and audits actor.bootstrap_principal_ref.
 
-21. [P1] AdminControlRecoveryService.original() skips all actor/reference authorization checks and crashes on reconstructed operations
-File: application/apps/server/app/modules/hosted_admin/infrastructure/admin_recovery.py:1202-1222,1089,361-362
+21. [P1] [resolved - 2026-11-23] AdminControlRecoveryService.original() skips all actor/reference authorization checks and crashes on reconstructed operations
+Verified in commit 9b3404bf: original() validates actor, idempotency_key, and request_hash; reconstruct_catalog() persists valid serialized AdminRecoveryCommand JSON.
 
-(a) original(self, actor, reference) reads control_recovery_operations by operation_id without verifying actor (_verify_recovery_actor / deployment_id / ServiceAuthority.service) or validating reference.kind/idempotency_key/request_hash against the stored row.
-(b) reconstruct_catalog() inserts request_json = '{}' (line 1089), which crashes AdminRecoveryCommand.model_validate_json() in _outcome_from_row() (line 362) with ValidationError.
-Verify actor and reference fields in original() (raising SemanticConflict on mismatch), and persist a valid serialized AdminRecoveryCommand JSON in reconstruct_catalog().
+22. [P1] [resolved - 2026-11-23] D5 independent Admin recovery authentication has no production adapter and build_admin_identity_app requires admin.sqlite-backed AdminSessions
+Verified in commit 9b3404bf: admin_recovery.py implements build_bootstrap_recovery_authenticator() and standalone create_admin_recovery_app() booting without admin.sqlite.
 
-22. [P1] D5 independent Admin recovery authentication has no production adapter and build_admin_identity_app requires admin.sqlite-backed AdminSessions
-File: application/apps/server/app/modules/hosted_admin/infrastructure/admin_recovery.py:107-115
-Related: application/apps/server/app/modules/hosted_access/api/admin_identity.py:23-36,199-206
+23. [P2] [resolved - 2026-11-23] confirm_control_restore ignores stale preview.source_generation and turns post-lock AdminRecoveryDenied into HTTP 500
+Verified in commit 9b3404bf: admin_recovery.py checks source_gen == preview.source_generation inside the write transaction and re-raises AdminRecoveryDenied before except Exception.
 
-BootstrapRecoveryAuthority.verify_identity() is never called in production code, and build_admin_identity_app() defaults authenticate_recovery=None while requiring a live AdminSessions instance backed by admin.sqlite. When admin.sqlite is damaged or missing, Admin recovery mode has no standalone ASGI builder or production authenticate_recovery adapter verifying Google + TOTP MFA + live Firebase revocation against /run/epm/admin-recovery-authority.json.
-Implement the production authenticate_recovery adapter (Google + TOTP MFA + live Firebase revocation + CSRF + BootstrapRecoveryAuthority.verify_identity()) and provide a standalone Admin recovery-mode ASGI entrypoint that boots without opening admin.sqlite.
+24. [P2] [resolved - 2026-11-23] ReconcileCheckpoint is a no-op stub and _execute_capture_control omits deployment_id check
+Verified in commit 9b3404bf: admin_recovery.py checks actor.deployment_id == self.deployment_id in _execute_capture_control() and implements ReconcileCheckpoint for orphaned 'running' captures.
 
-23. [P2] confirm_control_restore ignores stale preview.source_generation and turns post-lock AdminRecoveryDenied into HTTP 500
-File: application/apps/server/app/modules/hosted_admin/infrastructure/admin_recovery.py:680-696,771-805,980-1010
-Related: application/apps/server/app/modules/hosted_admin/api/recovery_router.py:164
+25. [P2] [resolved - 2026-11-23] Post-restore admin.sqlite reconciliation leaves in-flight handoffs, login attempts, continuations, and pending identity_commands live
+Verified in commit 9b3404bf: admin_recovery.py expires/rejects non-terminal login_handoffs, login_attempts, email_continuations, and marks pending identity_commands as rejected in the post-restore transaction.
 
-confirm_control_restore() never checks source_gen == preview.source_generation inside the write transaction, allowing a stale preview from an earlier generation to be confirmed. Additionally, _verify_recovery_actor() and point state checks (lines 774-788) sit inside the try block caught by except Exception (line 980), converting AdminRecoveryDenied into OperationState.FAILED (HTTP 500) instead of HTTP 403.
-Enforce source_gen == preview.source_generation inside the write transaction and re-raise AdminRecoveryDenied (or run pre-insert validation before the failure-catching try block).
-
-24. [P2] ReconcileCheckpoint is a no-op stub and _execute_capture_control omits deployment_id check
-File: application/apps/server/app/modules/hosted_admin/infrastructure/admin_recovery.py:447-458,461-501
-
-execute() returns OperationState.SUCCEEDED for ReconcileCheckpoint without inspecting control_recovery_operations or reconciling orphaned 'running' captures, and _execute_capture_control() never checks actor.deployment_id == self.deployment_id.
-Verify actor.deployment_id == self.deployment_id in _execute_capture_control() and implement ReconcileCheckpoint to reconcile orphaned 'running' control backups.
-
-25. [P2] Post-restore admin.sqlite reconciliation leaves in-flight handoffs, login attempts, continuations, and pending identity_commands live
-File: application/apps/server/app/modules/hosted_admin/infrastructure/admin_recovery.py:888-917
-
-Lines 895-917 revoke admin_sessions and managed_identity_sessions and mark pending/running operations as 'unknown', but do not invalidate active login_handoffs, login_attempts, email_continuations, or pending identity_commands captured in a recent backup.
-Expire/reject non-terminal login_handoffs, login_attempts, email_continuations, and mark pending identity_commands as 'unknown'/'rejected' in the same post-restore transaction on restored_admin_db.
-
-26. [P2] reconstruct_on_clean_host resets admin_recovery_meta.source_generation = 1, regressing historical generations
-File: application/apps/server/app/modules/hosted_admin/infrastructure/admin_recovery.py:1251-1268,1294-1295
-
-reconstruct_on_clean_host() initializes admin_recovery_meta.source_generation = 1 and calls reconstruct_catalog() without advancing source_generation to the maximum manifest.source_generation found in off-host manifests, allowing post-host-loss restores to collide with historical generations.
-After reconstruct_catalog(), advance admin_recovery_meta.source_generation to max(1, max_reconstructed_source_generation).
+26. [P2] [resolved - 2026-11-23] reconstruct_on_clean_host resets admin_recovery_meta.source_generation = 1, regressing historical generations
+Verified in commit 9b3404bf: reconstruct_on_clean_host() advances admin_recovery_meta.source_generation to max(1, max_reconstructed_source_generation).
 
 
 Host Agent gateway, positive workspace routing and clean-runtime repair
 
-27. [P0] Gateway.verify() / Gateway._record() kills every eligible Operator container on supervision and blocks runtime effects
-File: application/apps/server/app/modules/host_agent/infrastructure/gateway.py:285-318
-Related: application/apps/server/app/modules/host_agent/infrastructure/runtime_authority.py:19,26; application/apps/server/app/modules/host_agent/application/service.py:107-121
+Open findings: None.
 
-Gateway._record() (lines 300-312) only allows row.desired_state == "eligible" when _eligible_verified(command) returns True, which requires command.payload.source_identity_proof_ref and command.payload.resource_readiness_proof_ref (lines 285-291). RuntimeAuthority.verify_runtime() (called by HostAgent.supervise()) and RuntimeAuthority.verify() (called by start_container, apply_limits, repair_runtime) invoke Gateway.verify() with StartContainer/ApplyLimits/RepairRuntime payloads that do not carry ingress proof refs. On the first supervise() tick for any eligible workspace, _record() raises HostAgentDenied and HostAgent.supervise() stops (contains) the healthy container and marks the binding needs_attention.
-Separate ingress-command proof verification (for apply_ingress_policy only) from runtime-authority verification of already-admitted eligible bindings (verifying against persisted/live WorkspaceRouteObservation and live gateway config).
+Resolved findings (2026-11-23):
 
-28. [P0] Production Inventory and AuthEndpoints lack eligible_ready() and resolve_eligible(), causing eligible routing to fail and wedge the gateway
-File: application/apps/server/app/modules/host_agent/infrastructure/gateway.py:45-47,200-218,257-262
-Related: application/apps/server/app/modules/host_agent/infrastructure/inventory.py:411-435,561-585; application/apps/server/app/modules/host_agent/infrastructure/auth_endpoints.py:44-83; application/apps/server/app/modules/host_agent/infrastructure/auth_projection.py:278-279
+27. [P0] [resolved - 2026-11-23] Gateway.verify() / Gateway._record() kills every eligible Operator container on supervision and blocks runtime effects
+Verified in commit 9b3404bf: gateway.py separates apply_ingress_policy command-proof verification from runtime-authority verify()/supervise() checks for already-admitted eligible bindings.
 
-Gateway._snapshot() checks hasattr(self.auth_endpoints, "resolve_eligible") and hasattr(self.inventory, "eligible_ready") (lines 201-209), neither of which exists on production Inventory or AuthEndpoints (only on test fakes). Inventory.reserve() commits ingress_bindings.desired_state = "eligible" before driver.apply(), then _snapshot() yields eligible=() and auth_config() raises HostAgentUnavailable. Worse, Gateway.auth_effect()'s rollback fallback calls closed_config() (line 261), which raises HostAgentUnavailable (gateway.py:46-47) whenever any row in ingress_bindings has desired_state == "eligible", breaking gateway operations for all other operators on the host.
-Implement Inventory.eligible_ready() (backed by persisted verified WorkspaceRouteObservation state) and AuthEndpoints.resolve_eligible() (resolving and validating WorkspaceRouteManifest), and ensure auth_effect() rollback closes only the failing/unverified binding rather than crashing on other eligible bindings.
+28. [P0] [resolved - 2026-11-23] Production Inventory and AuthEndpoints lack eligible_ready() and resolve_eligible(), causing eligible routing to fail and wedge the gateway
+Verified in commit 9b3404bf: inventory.py implements eligible_ready(), auth_endpoints.py implements resolve_eligible(), and gateway.py rollback excludes eligible bindings and restores previous Caddy config.
 
-29. [P1] _workspace_eligible_routes() forbidden-prefix and traversal deny rules are bypassable via URL encoding, double slashes, dot segments, or case variation
-File: application/apps/server/app/modules/host_agent/infrastructure/auth_projection.py:153-185,196-243
+29. [P1] [resolved - 2026-11-23] _workspace_eligible_routes() forbidden-prefix and traversal deny rules are bypassable via URL encoding, double slashes, dot segments, or case variation
+Verified in commit 9b3404bf: auth_projection.py matches forbidden prefixes via normalized Caddy "path" matcher, case-insensitive (?i) orig_uri, and traversal/encoded-delimiter regexes.
 
-forbidden_pattern and traversal_pattern match only raw, unnormalized {http.request.orig_uri}, followed by a catch-all proxy_route. Requests such as /%61dmin, //admin, /./admin, /ADMIN, or /api/%2e%2e/admin bypass deny_route and are proxied to the upstream container, where Starlette/FastAPI decodes and normalizes the path.
-Match forbidden prefixes against both raw orig_uri (case-insensitive, rejecting //, /./, /../, %2e, %2f, %5c) and Caddy's normalized path matcher (or enforce an explicit normalized prefix allowlist for Operator routes).
+30. [P1] [resolved - 2026-11-23] auth_config() and Gateway.apply()/inspect() do not bind WorkspaceRouteObservation proofs to WorkspaceRouteManifest or command.payload, and apply(eligible) has no rollback
+Verified in commit 9b3404bf: auth_projection.py and gateway.py enforce proof equality across command.payload, WorkspaceRouteObservation, and WorkspaceRouteManifest, and wrap apply(eligible) with rollback.
 
-30. [P1] auth_config() and Gateway.apply()/inspect() do not bind WorkspaceRouteObservation proofs to WorkspaceRouteManifest or command.payload, and apply(eligible) has no rollback
-File: application/apps/server/app/modules/host_agent/infrastructure/auth_projection.py:256-277
-Related: application/apps/server/app/modules/host_agent/infrastructure/gateway.py:200-209,323-344,376-395
+31. [P1] [resolved - 2026-11-23] CleanRuntimeRepairer bypasses host_inventory.sqlite, omits access_meta binding/generation/epoch fencing, risks UID ownership breakage on access.sqlite, and wedges permanently on crash in running
+Verified in commit 9b3404bf: repair_runtime.py coordinates through Inventory.exclusive() and resource_bindings updates, enforces binding_id/resource_generation/access_epoch/non-retired fences, resumes 'running', checkpoints WAL, and preserves UID:GID on sidecars.
 
-auth_config() never verifies observation.resource_readiness_proof_ref == manifest.recovery_proof_ref; Gateway.apply()/inspect() never verify that the projected WorkspaceRouteObservation proofs match command.payload.source_identity_proof_ref and command.payload.resource_readiness_proof_ref; and Gateway.apply(desired_state="eligible") has no rollback if admin.load() or post-load admin.inspect() != config fails.
-Enforce proof equality between command.payload, WorkspaceRouteObservation, and WorkspaceRouteManifest, and wrap apply(eligible) with rollback to the previous known-good config on load/inspect failure.
-
-31. [P1] CleanRuntimeRepairer bypasses host_inventory.sqlite, omits access_meta binding/generation/epoch fencing, risks UID ownership breakage on access.sqlite, and wedges permanently on crash in running
-File: application/apps/server/app/modules/host_agent/infrastructure/repair_runtime.py:97-180,278-328,330-404
-
-(a) CleanRuntimeRepairer never acquires Inventory.exclusive() or updates resource_bindings.container_ref/state/revision, leaving Host Agent supervision referencing the removed old container.
-(b) load_intent() omits non-retired and op.access_epoch == o.access_epoch checks; _validate_retained_stores_and_revoke_sessions() omits binding_id, resource_generation, and access_epoch checks on access_meta.
-(c) _mark_running() (line 165) rejects state == 'running', so a crash during stop_container/replace_container permanently wedges the operation and blocks all subsequent lifecycle operations for that operator.
-(d) Line 278 opens operator-owned access.sqlite read-write under the host agent's UID without preserving operator host_uid:host_gid on created -wal/-shm/-journal files, risking EACCES/SQLITE_READONLY when the unprivileged replacement container boots.
-Coordinate repair_runtime through Inventory.exclusive() and resource_bindings updates, enforce binding_id/resource_generation/access_epoch/non-retired fences, support recovery of an interrupted 'running' repair, and preserve operator UID/GID ownership (or checkpoint/chown) on access.sqlite sidecar files.
-
-32. [P2] HostAgent.execute() runs eligible_proof_verifier before checking retained terminal receipts, breaking idempotent replay
-File: application/apps/server/app/modules/host_agent/application/service.py:46-66
-
-eligible_proof_verifier(command) runs at lines 46-56 before admission.resolve(), before inventory.exclusive(), and before inventory.retained(command) at line 62. Replaying an already-applied eligible command after the live proof expires or degrades raises HostAgentUnavailable instead of returning the retained terminal receipt.
-Check inventory.retained(command) inside inventory.exclusive() first, and run eligible_proof_verifier() inside the lock only for non-terminal eligible execution/inspection.
+32. [P2] [resolved - 2026-11-23] HostAgent.execute() runs eligible_proof_verifier before checking retained terminal receipts, breaking idempotent replay
+Verified in commit 9b3404bf: service.py checks inventory.retained(command) inside inventory.exclusive() before invoking eligible_proof_verifier().
 
 
 Frontend UI, qualification scripts and operations runbook
 
-33. [P0] Minimal Recovery Mode UI (HostedRecovery) is unreachable in the Operator web app
-File: application/apps/web/src/app/workspace-gate.tsx:22-38,108-121
-Related: application/apps/web/src/app/hosted-settings.tsx:254; application/apps/server/app/modules/hosted_access/infrastructure/operator_identity_runtime.py:118-122
+Open findings: None.
 
-In Minimal Recovery Mode, DestinationHTTP returns 503 {"code": "recovery_mode_active", ...} for all business /api/* routes, including /api/operator/bootstrap. WorkspaceGate converts any 503 on /api/operator/bootstrap into a fatal BootstrapFailure error screen (workspace-gate.tsx:31-36,108-120), while HostedRecovery is only mounted inside HostedSettings (hosted-settings.tsx:254) behind shell.tsx after WorkspaceGate succeeds.
-Detect recovery_mode_active (or check /api/hosted/recovery/status in managed hosted mode) inside WorkspaceGate and render <HostedRecovery /> directly without requiring /api/operator/bootstrap.
+Resolved findings (2026-11-23):
 
-34. [P1] Operator restore step-up (recent_auth_grant) has no UI/browser flow to obtain a grant
-File: application/apps/web/src/app/hosted-recovery.tsx:276-295,568-595
-Related: application/apps/server/app/modules/hosted_access/api/operator_recovery.py:248-270,298-305
+33. [P0] [resolved - 2026-11-23] Minimal Recovery Mode UI (HostedRecovery) is unreachable in the Operator web app
+Verified in commit 9b3404bf: workspace-gate.tsx detects 503 recovery_mode_active (or checks /api/hosted/recovery/status on 503) and renders <HostedRecovery forceVisible /> directly.
 
-hosted-recovery.tsx:572-580 only renders a raw <input id="recent-auth-grant" type="password" /> with no button, redirect, or flow to initiate fresh Google or email-link step-up authentication against the central identity origin using preview.stepUpChallengeId. Real Operators have no way to obtain a recent_auth_grant token in the browser.
-Add an interactive step-up initiation flow bound to preview.stepUpChallengeId that redirects/authenticates through the central recent-auth flow and captures the resulting grant.
+34. [P1] [resolved - 2026-11-23] Operator restore step-up (recent_auth_grant) has no UI/browser flow to obtain a grant
+Verified in commit 9b3404bf: hosted-recovery.tsx adds an interactive "Start fresh verification" flow bound to preview.stepUpChallengeId capturing the resulting recent_auth_grant.
 
-35. [P1] AdminWorkspace.tsx handleRepairRuntime() sends workspace_id as bindingId and hardcoded 1 as expectedResourceGeneration
-File: application/apps/web/src/admin/AdminWorkspace.tsx:350-369
-Related: application/apps/web/src/admin/admin-api.ts:56-59; application/apps/server/app/modules/hosted_admin/application/ui_contracts.py:34-48; application/apps/server/app/modules/hosted_admin/api/router.py:348-357,470-522
+35. [P1] [resolved - 2026-11-23] AdminWorkspace.tsx handleRepairRuntime() sends workspace_id as bindingId and hardcoded 1 as expectedResourceGeneration
+Verified in commit 9b3404bf: ui_contracts.py and admin_control.py expose binding_id (component_deployment_id) and resource_generation (component_deployments.revision) on OperatorSummary; AdminWorkspace.tsx removes the unsafe fallbacks.
 
-AdminWorkspace.tsx:364-366 sends bindingId: op.binding_id ?? op.workspace_id and expectedResourceGeneration: op.resource_generation ?? 1. Neither binding_id nor resource_generation is populated by OperatorSummary or detail_operator, so every live Admin-lite runtime repair request silently sends workspace_id (wrong UUID) and generation 1.
-Expose binding_id and resource_generation on detail_operator / AdminDetail (or resolve them server-side from the operator's active binding) and remove the unsafe fallbacks.
+36. [P1] [resolved - 2026-11-23] qualify_h05_recovery.py and HOSTED_MVP_H05_11_COMPONENT_RECOVERY.json record 8 nonexistent test function names as "passed"
+Verified in commit 9b3404bf: qualify_h05_recovery.py maps all 17 cases to exact test_file::test_func node IDs with JUnit XML per-node verification and regenerated HOSTED_MVP_H05_11_COMPONENT_RECOVERY.json.
 
-36. [P1] qualify_h05_recovery.py and HOSTED_MVP_H05_11_COMPONENT_RECOVERY.json record 8 nonexistent test function names as "passed"
-File: application/deploy/hosted-mvp/gcp/qualify_h05_recovery.py:56-125,257-278
-Related: docs/hosting/qualification/reports/HOSTED_MVP_H05_11_COMPONENT_RECOVERY.json:9-104
+37. [P1] [resolved - 2026-11-23] Whole-host control loss CLI has no main() entrypoint and H05_RECOVERY_OPERATIONS_RUNBOOK.md mismatches both CLI flags and bootstrap authority JSON schema
+Verified in commit 9b3404bf: admin_recovery.py adds main() + if __name__ == "__main__": wired to reconstruct_on_clean_host(); H05_RECOVERY_OPERATIONS_RUNBOOK.md aligns CLI flags and bootstrap authority JSON schema.
 
-run_component_qualification() runs pytest *unique_files rather than targeting each test_file::test_func, then stamps every entry in CASE_TEST_MAP as "passed". Eight of the 17 mapped test_function names do not exist in the repository (consistent_scheduled_capture, unchanged_file_only_checkpoints, source_commit_crash, encrypt_key_custody_readback, seven_points_incremental_retention, clean_runtime_repair, separate_admin_recovery_loss, whole_host_control_loss).
-Update CASE_TEST_MAP to the exact existing test function names, execute explicit f"{test_file}::{test_func}" node IDs (or parse per-node JUnit/JSON results), and regenerate HOSTED_MVP_H05_11_COMPONENT_RECOVERY.json.
+38. [P1] [resolved - 2026-11-23] h05_sizing_actor.py run_exhaustion_proof() never exercises backup or restore staging under quota exhaustion
+Verified in commit 9b3404bf: h05_sizing_actor.py run_exhaustion_proof() invokes real service.execute(Capture) and service.confirm_restore() under quota exhaustion and verifies fail-closed cleanup and tree integrity.
 
-37. [P1] Whole-host control loss CLI has no main() entrypoint and H05_RECOVERY_OPERATIONS_RUNBOOK.md mismatches both CLI flags and bootstrap authority JSON schema
-File: docs/hosting/runbooks/H05_RECOVERY_OPERATIONS_RUNBOOK.md:56-68,144-157
-Related: application/apps/server/app/modules/hosted_admin/infrastructure/admin_recovery.py:85-100,1298-1313
+39. [P2] [resolved - 2026-11-23] Post-restore loadStatus() in HostedRecovery overwrites the success banner with an "unavailable" dead-end instead of prompting sign-in
+Verified in commit 9b3404bf: hosted-recovery.tsx catches 401 RecoveryAuthError via pauseHostedSession() while preserving the restore confirmation banner and /auth/start sign-in CTA.
 
-(a) admin_recovery.py defines build_host_loss_cli_parser() (lines 1298-1313) but has no main() or if __name__ == "__main__": entrypoint, so python -m app.modules.hosted_admin.infrastructure.admin_recovery exits 0 without doing anything.
-(b) Runbook lines 148-156 pass --deployment-id, --admin-dir, --recovery-db, --proxy-socket, --proxy-uid, which do not match build_host_loss_cli_parser()'s flags (--admin-recovery-db, --control-root, --scratch-root, --backup-proxy-socket, --backup-proxy-uid).
-(c) Runbook lines 58-67 document /run/epm/admin-recovery-authority.json with keys issuer/allowed_admin_uids/allowed_admin_emails/require_totp_mfa, whereas BootstrapRecoveryAuthority (admin_recovery.py:94-99) strictly requires {"version": 1, "deployment_id": "...", "principals": [{"issuer": ..., "subject": ..., "principal_ref": ..., "mfa_required": true}]}.
-Implement main() + if __name__ == "__main__": in admin_recovery.py wired to reconstruct_on_clean_host(), and align the runbook's CLI flags and bootstrap authority JSON schema with the code.
+40. [P2] [resolved - 2026-11-23] Stale UI state across recovery point selection, operator switching, and post-acceptance
+Verified in commit 9b3404bf: hosted-recovery.tsx, AdminRecovery.tsx, and AdminWorkspace.tsx reset preview/confirm state on point change, repair state on operator switch, and tracked operationId after acceptance.
 
-38. [P1] h05_sizing_actor.py run_exhaustion_proof() never exercises backup or restore staging under quota exhaustion
-File: application/deploy/hosted-mvp/gcp/h05_sizing_actor.py:453-544
-Related: docs/hosting/design/HOSTED_MVP_H05_DESIGN.md:193
-
-_trigger_quota_exhaustion() only writes dummy fill.bin / i-0..16383 files into scratch or a synthetic workspace/incarnation-staging-fault directory and deletes them in finally. run_exhaustion_proof() never invokes service.execute(Capture) or service.confirm_restore() while quota is exhausted, yet reports original_tree_preserved: True, no_empty_init: True, honest_status_recorded: True.
-Trigger quota exhaustion during real service.execute(Capture) and service.confirm_restore() calls, verify fail-closed staging cleanup/rollback, and assert original tree integrity and honest backup_state afterward.
-
-39. [P2] Post-restore loadStatus() in HostedRecovery overwrites the success banner with an "unavailable" dead-end instead of prompting sign-in
-File: application/apps/web/src/app/hosted-recovery.tsx:131-157,283-305,396-414
-
-POST /api/hosted/recovery/confirm revokes all active operator sessions. Line 304 immediately calls await loadStatus() with the revoked cookie, receives 401 signed_out, and sets loadState = { status: "unavailable", ... } (without calling checkHostedResponse() or pauseHostedSession()), unmounting the restore confirmation banner and showing an unavailable error screen with no sign-in CTA.
-Handle 401 (signed_out / renewal_required) in recoveryFetch via pauseHostedSession(...) or render a post-restore sign-in prompt while preserving the restore switch confirmation.
-
-40. [P2] Stale UI state across recovery point selection, operator switching, and post-acceptance
-File: application/apps/web/src/app/hosted-recovery.tsx:345-348,533
-Related: application/apps/web/src/admin/AdminRecovery.tsx:167-169,283; application/apps/web/src/admin/AdminWorkspace.tsx:893-901
-
-(a) Changing selectedPointId in hosted-recovery.tsx:533 or AdminRecovery.tsx:283 does not clear preview, leaving an open confirm form bound to the previously previewed point.
-(b) Switching inspected operators in AdminWorkspace.tsx:893-901 does not reset repairOperation, repairConfirmChecked, or repairKey, leaking prior operator repair state onto the newly selected operator.
-(c) handleAcceptRestore (hosted-recovery.tsx:345) and handleAccept (AdminRecovery.tsx:167) do not clear operationId / lastOperationId after acceptance succeeds.
-Reset preview/confirmation state on point change, reset repair UI state on operator switch, and clear tracked operationId upon successful acceptance.
-
-41. [P2] D8 unchanged protection state is dead code in Admin-lite UI because backend Protection omits state
-File: application/apps/web/src/admin/admin-api.ts:220-234
-Related: application/apps/server/app/modules/hosted_admin/infrastructure/admin_control.py:1641-1652; application/apps/web/src/app/hosted-settings.tsx:226
-
-admin-api.ts:220 checks data.state to render "Protected — unchanged", but admin_control.py:1643-1650 constructs Protection(status="protected" | "degraded", ...) without a state field, so data.state is always undefined in live responses (and hosted-settings.tsx:226 only checks status === "protected").
-Include the underlying protection state (healthy | unchanged | overdue | unavailable | unknown) in the backend Protection contract so Admin-lite and Operator Settings surface unchanged distinctly per D8.
+41. [P2] [resolved - 2026-11-23] D8 unchanged protection state is dead code in Admin-lite UI because backend Protection omits state
+Verified in commit 9b3404bf: ui_states.py adds state to Protection, admin_control.py and hosted_recovery.py populate it, and hosted-settings.tsx renders unchanged distinctly per D8.

@@ -19,6 +19,7 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+import time
 from uuid import uuid4
 
 from sqlalchemy import text
@@ -52,6 +53,7 @@ from app.platform.schema_resources import HostedStore
 from app.platform.sqlite_engine import create_sqlite_engine
 
 FREE_LOGICAL_BYTES = 50_000_000
+PEAK_SAMPLE_INTERVAL_S = 0.25
 DEFAULT_NOW_MS = 1_760_000_000_000
 DEPLOYMENT_ID = "00000000-0000-4000-8000-000000000950"
 OPERATOR_ID = "00000000-0000-4000-8000-000000000951"
@@ -395,10 +397,18 @@ def run_h05_workload(
     logical_used = _populate_workload(shape, incarnation, target_bytes)
     trees = {"workspace": dirs.workspace, "control": dirs.control, "scratch": dirs.scratch}
     peaks = {role: {"peak_bytes": 0, "peak_inodes": 0} for role in trees}
+    last_sample = [0.0]
+
+    def _throttled_sample() -> None:
+        now = time.monotonic()
+        if now - last_sample[0] >= PEAK_SAMPLE_INTERVAL_S:
+            last_sample[0] = now
+            _update_peaks(peaks, trees)
+
     service, rec_engine, acc_engine = _setup_recovery_service(
         dirs,
         clock_ms=clock_ms,
-        on_activity=lambda: _update_peaks(peaks, trees),
+        on_activity=_throttled_sample,
     )
     try:
         _update_peaks(peaks, trees)
@@ -478,17 +488,22 @@ def _fill_quota_until_error(kind: str, dirs: SizingDirs) -> tuple[int | None, Pa
         raise ValueError(f"Unknown exhaustion kind: {kind}")
 
     observed_errno: int | None = None
-    try:
-        if kind.endswith("byte_exhaustion"):
-            with (target_dir / "fill.bin").open("wb") as handle:
-                for _ in range(512):
-                    handle.write(b"\0" * (1024 * 1024))
-                    handle.flush()
-        else:
+    if kind.endswith("byte_exhaustion"):
+        with (target_dir / "fill.bin").open("wb", buffering=0) as handle:
+            for chunk_size in (1024 * 1024, 64 * 1024, 4096, 512):
+                chunk = b"\0" * chunk_size
+                try:
+                    for _ in range(512):
+                        handle.write(chunk)
+                        os.fsync(handle.fileno())
+                except OSError as exc:
+                    observed_errno = exc.errno
+    else:
+        try:
             for idx in range(16_384):
                 (target_dir / f"i-{idx}").touch()
-    except OSError as exc:
-        observed_errno = exc.errno
+        except OSError as exc:
+            observed_errno = exc.errno
     return observed_errno, target_dir, remove_dir
 
 

@@ -57,6 +57,7 @@ import {
   useSourceNavigationState,
 } from "../shared/home-navigation";
 import { readResult } from "../workflows/reads";
+import { HostedMaintenanceBanner } from "./hosted-settings";
 import { hostedMode } from "./hosted-session-state";
 
 function NavigationIcon({ kind }: { kind: (typeof destinations)[number]["icon"] }) {
@@ -464,6 +465,7 @@ function Layout() {
           <Link to="/settings/recovery">Unfinished forms</Link>
           <HomeReturn />
         </header>
+        <HostedMaintenanceBanner />
         {!scope.canWrite && <p>Workspace writes are unavailable.</p>}
         {(bootstrap.preferencesState !== "available" || !bootstrap.preferences) && (
           <p>Appearance and navigation preferences are unavailable. Using display defaults.</p>

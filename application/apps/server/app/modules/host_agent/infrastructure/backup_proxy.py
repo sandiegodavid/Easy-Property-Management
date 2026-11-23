@@ -9,6 +9,7 @@ authenticated exclusively by kernel peer UID mapped through host_inventory.sqlit
 
 from __future__ import annotations
 
+import argparse
 import base64
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -18,6 +19,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import signal
 import socket
 import sqlite3
 import stat
@@ -644,3 +646,150 @@ class UnixBackupProxyClient:
             wrapped_dek,
         )
         return body
+
+
+MAX_CREDENTIALS_BYTES = 16 * 1024
+REQUIRED_R2_CREDENTIAL_KEYS = frozenset(
+    {"endpoint_url", "bucket", "access_key_id", "secret_access_key"}
+)
+
+
+def load_r2_credentials(path: Path) -> dict[str, str]:
+    """Load and validate scoped R2 credentials JSON (never logs or echoes secrets)."""
+    raw = path.read_bytes()
+    if len(raw) > MAX_CREDENTIALS_BYTES:
+        raise BackupProxyDenied("R2 credentials payload is too large.")
+    try:
+        parsed = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as error:
+        raise BackupProxyDenied("R2 credentials must be valid JSON.") from error
+    if not isinstance(parsed, dict) or set(parsed) != REQUIRED_R2_CREDENTIAL_KEYS:
+        raise BackupProxyDenied("R2 credentials JSON keys do not match contract.")
+    result: dict[str, str] = {}
+    for key in REQUIRED_R2_CREDENTIAL_KEYS:
+        val = parsed[key]
+        if not isinstance(val, str) or not val.strip():
+            raise BackupProxyDenied(f"R2 credential field {key} must be a non-empty string.")
+        result[key] = val.strip()
+    return result
+
+
+def build_cli_parser() -> argparse.ArgumentParser:
+    """CLI parser for host-side epm-backup-proxy.service."""
+    parser = argparse.ArgumentParser(
+        description="Host-side epm-backup-proxy (SO_PEERCRED -> R2 + Cloud KMS prefix fence)."
+    )
+    parser.add_argument("--config", type=Path, help="Protected JSON configuration file.")
+    parser.add_argument(
+        "--socket", type=Path, default=Path("/run/epm-backup-proxy/backup-proxy.sock")
+    )
+    parser.add_argument("--inventory", type=Path)
+    parser.add_argument("--deployment-id")
+    parser.add_argument("--admin-uid", type=int)
+    parser.add_argument("--operator-key-ref", action="append", default=[])
+    parser.add_argument("--control-key-ref", action="append", default=[])
+    parser.add_argument("--credentials-file", type=Path)
+    parser.add_argument("--client-gid", type=int)
+    parser.add_argument("--application-directory", type=Path)
+    return parser
+
+
+def _resolve_cli_settings(args: argparse.Namespace) -> dict[str, object]:
+    cfg: dict[str, object] = {}
+    if args.config is not None:
+        raw = args.config.read_bytes()
+        if len(raw) > MAX_CREDENTIALS_BYTES:
+            raise BackupProxyDenied("Backup proxy config file is too large.")
+        loaded = json.loads(raw.decode("utf-8"))
+        if not isinstance(loaded, dict):
+            raise BackupProxyDenied("Backup proxy config must be a JSON object.")
+        cfg.update(loaded)
+
+    socket_path = Path(cfg.get("socket", args.socket))
+    inventory_raw = cfg.get("inventory") or args.inventory
+    deployment_id = cfg.get("deployment_id") or args.deployment_id
+    admin_uid = cfg.get("admin_uid") if "admin_uid" in cfg else args.admin_uid
+    operator_keys = list(cfg.get("operator_key_refs") or args.operator_key_ref or [])
+    control_keys = list(cfg.get("control_key_refs") or args.control_key_ref or [])
+    client_gid = cfg.get("client_gid") if "client_gid" in cfg else args.client_gid
+    app_dir_raw = cfg.get("application_directory") or args.application_directory
+
+    creds_raw = args.credentials_file or cfg.get("credentials_file")
+    if creds_raw is None:
+        cred_dir = os.environ.get("CREDENTIALS_DIRECTORY")
+        if cred_dir:
+            creds_raw = Path(cred_dir) / "r2.json"
+
+    if (
+        inventory_raw is None
+        or not isinstance(deployment_id, str)
+        or not deployment_id
+        or not isinstance(admin_uid, int)
+        or not operator_keys
+        or not control_keys
+        or creds_raw is None
+    ):
+        raise BackupProxyDenied("Missing required epm-backup-proxy configuration fields.")
+
+    return {
+        "socket": socket_path,
+        "inventory": Path(str(inventory_raw)),
+        "deployment_id": deployment_id,
+        "admin_uid": admin_uid,
+        "operator_key_refs": frozenset(str(k) for k in operator_keys),
+        "control_key_refs": frozenset(str(k) for k in control_keys),
+        "credentials_file": Path(str(creds_raw)),
+        "client_gid": int(client_gid) if client_gid is not None else None,
+        "application_directory": Path(str(app_dir_raw)) if app_dir_raw is not None else None,
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run host-side epm-backup-proxy until SIGTERM/SIGINT."""
+    from app.modules.hosted_recovery.infrastructure.kms_provider import CloudKmsEnvelopeProvider
+    from app.modules.hosted_recovery.infrastructure.r2_store import R2ObjectStore
+    from app.platform.config import application_root
+
+    args = build_cli_parser().parse_args(argv)
+    settings = _resolve_cli_settings(args)
+    creds = load_r2_credentials(settings["credentials_file"])  # type: ignore[arg-type]
+    object_store = R2ObjectStore(
+        endpoint_url=creds["endpoint_url"],
+        bucket=creds["bucket"],
+        access_key_id=creds["access_key_id"],
+        secret_access_key=creds["secret_access_key"],
+    )
+    kms = CloudKmsEnvelopeProvider()
+    resolver = InventoryPeerResolver(
+        settings["inventory"],  # type: ignore[arg-type]
+        application_directory=settings["application_directory"] or application_root(),  # type: ignore[arg-type]
+        expected_deployment_id=str(settings["deployment_id"]),
+        admin_uid=int(settings["admin_uid"]),  # type: ignore[arg-type]
+        operator_key_refs=settings["operator_key_refs"],  # type: ignore[arg-type]
+        control_key_refs=settings["control_key_refs"],  # type: ignore[arg-type]
+    )
+    handler = BackupProxyHandler(
+        object_store=object_store,
+        kms=kms,
+        peer_resolver=resolver.resolve,
+    )
+    stopped = threading.Event()
+    for signum in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(signum, lambda *_args: stopped.set())
+
+    with backup_proxy_listener(
+        settings["socket"],  # type: ignore[arg-type]
+        client_gid=settings["client_gid"],  # type: ignore[arg-type]
+    ) as listener:
+        server = BackupProxyServer(listener, handler)
+        server.start()
+        try:
+            while not stopped.is_set():
+                stopped.wait(1.0)
+        finally:
+            server.stop()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

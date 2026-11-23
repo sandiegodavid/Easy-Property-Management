@@ -20,7 +20,7 @@
 | **H05.6** | Independent Admin control-plane backup & recovery mode (protected bootstrap authority D5), whole-host loss reconstruction CLI | [H05.6](HOSTED_MVP_H05_6_CHECKPOINT_2026-11-23.md) | Done |
 | **H05.7** | Positive Workspace Gateway Routing (`desired_state="eligible"`, `WorkspaceRouteManifest` D9, `ADMIN_H05_ROUTES` v3, live `_live_business_readiness`) | [H05.7](HOSTED_MVP_H05_7_CHECKPOINT_2026-11-23.md) | Done |
 | **H05.8** | Operator Data & Backup + Minimal Recovery Mode UI; Admin-lite protection status, Repair Runtime & Control Recovery UI (Playwright verified at `390px`/`900px`/`1440px`) | [H05.8](HOSTED_MVP_H05_8_CHECKPOINT_2026-11-23.md) | Done |
-| **H05.9** | Native Linux/Docker/GCP backup/restore reserve sizing actor (`h05_sizing_actor.py`) & closed validator (`qualify_h05_sizing.py`) | [H05.9](HOSTED_MVP_H05_9_CHECKPOINT_2026-11-23.md) | Harness Done (Live GCP run documented in runbook) |
+| **H05.9** | Native Linux/Docker/GCP backup/restore reserve sizing actor (`h05_sizing_actor.py`) & closed validator (`qualify_h05_sizing.py`) | [H05.9](HOSTED_MVP_H05_9_CHECKPOINT_2026-11-23.md) · [Sizing JSON](HOSTED_MVP_H05_9_RECOVERY_SIZING.json) | Done (Native GCP qualified in H06.1) |
 | **H05.10** | Negative Security Gate Verification (2 P2 findings discovered & resolved; zero unresolved P1/P2 findings) | [H05.10](HOSTED_MVP_H05_10_CHECKPOINT_2026-11-23.md) | Done |
 | **H05.11** | Cloud KMS provisioning plan (`cloud_plan.kms_plan`), 17-case `recovery.json` runner/validator (`qualify_h05_recovery.py`), component 17/17 + joint H04/H05 positive handoff proof, & live GCP operations runbook | This report | Component Proof Done; Live GCP Execution Ready |
 

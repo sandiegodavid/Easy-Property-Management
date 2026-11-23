@@ -1,0 +1,36 @@
+{
+  "cases": {
+    "observability_plan_and_ops_agent": {
+      "status": "passed"
+    },
+    "synthetic_alert_and_recovery_delivery": {
+      "duplicate_recovery_suppressed": true,
+      "duplicate_suppressed": true,
+      "incident_delivered": true,
+      "recovery_notice_delivered": true,
+      "status": "passed",
+      "structured_log_delivery_count": 2,
+      "unsafe_webhook_urls_rejected": 3,
+      "webhook_delivery_count": 2
+    }
+  },
+  "owner": "H06.7",
+  "plan_summary": {
+    "alert_policy_names": [
+      "backup_alerts",
+      "containment_alerts",
+      "cpu_headroom",
+      "disk_headroom",
+      "host_loss_heartbeat",
+      "memory_headroom"
+    ],
+    "budget_excludes_credits": true,
+    "command_count": 9,
+    "log_retention_days": 30,
+    "monthly_budget_usd": 250
+  },
+  "proof": "h06_7_observability_alerts_and_budget",
+  "recorded_at_ms": 1795476332308,
+  "status": "passed",
+  "version": 1
+}

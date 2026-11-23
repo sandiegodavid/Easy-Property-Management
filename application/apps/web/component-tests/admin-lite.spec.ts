@@ -221,3 +221,46 @@ test("Admin-lite directory, add operator preservation on 409, and detail invitat
   await page.getByRole("button", { name: "Mark delivered" }).click();
   await expect(page.getByText("Delivery confirmed.")).toBeVisible();
 });
+
+test("H06.5 Admin-lite cohort overview renders cleanly at 390px, 900px, and 1440px in Light and Dark themes", async ({
+  page,
+}) => {
+  await page.route("**/api/admin/session", (route) =>
+    route.fulfill({
+      json: { expiresAt: Date.now() + 3_600_000, csrfToken: "admin-csrf-token" },
+    }),
+  );
+  await page.route("**/api/admin/bootstrap", (route) => route.fulfill({ json: BOOTSTRAP }));
+  await page.route("**/api/admin/operators?*", (route) =>
+    route.fulfill({
+      json: {
+        directory: {
+          state: "ready",
+          data: {
+            items: [READY_OPERATOR],
+            matching_total: 1,
+            freshness: { state: "known", as_of: 1_700_000_000_000, source_revision: "registry:1" },
+          },
+        },
+        nextCursor: null,
+        actions: [{ action: "admin_create_assignment", enabled: true }],
+      },
+    }),
+  );
+
+  for (const colorScheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme });
+    for (const width of [390, 900, 1440]) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.goto("/admin/index.html");
+      const overview = page.getByTestId("admin-cohort-overview");
+      await expect(overview).toBeVisible();
+      await expect(overview).toContainText("pilot0-free-v1");
+      await expect(overview).toContainText("Shared Pilot 0 announced window");
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      );
+      expect(overflow).toBe(false);
+    }
+  }
+});

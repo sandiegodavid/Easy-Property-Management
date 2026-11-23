@@ -83,8 +83,10 @@ class OperatorIdentityInputs:
     writer_lock: HostedWriterLock | None = None
     usage_reader: Callable | None = None
     protection_reader: Callable | None = None
+    maintenance_reader: Callable | None = None
     recovery_service: object | None = None
     recovery_mode: bool = False
+    background_scheduler: object | None = None
 
 
 def managed_entry_metadata(inputs):
@@ -274,6 +276,7 @@ def compose_operator_identity(
                     usage_reader=inputs.usage_reader,
                     support_contact=inputs.support_contact,
                     protection_reader=inputs.protection_reader,
+                    maintenance_reader=inputs.maintenance_reader,
                 ),
             )
         )
@@ -297,12 +300,31 @@ def compose_operator_identity(
         business=business,
         recovery_mode=inputs.recovery_mode,
     )
-    return partial(
+    identity_cm = partial(
         own_identity_listener,
         inputs.listener,
         dispatch,
         peer_uid=inputs.relay_uid,
     )
+    if inputs.background_scheduler is None:
+        return identity_cm
+
+    @asynccontextmanager
+    async def _identity_and_scheduler():
+        stop_event = asyncio.Event()
+        async with identity_cm():
+            task = asyncio.create_task(inputs.background_scheduler.run_forever(stop_event))
+            try:
+                yield
+            finally:
+                stop_event.set()
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+    return _identity_and_scheduler
 
 
 @dataclass

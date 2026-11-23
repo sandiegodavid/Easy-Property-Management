@@ -149,3 +149,42 @@ test("507 hosted_storage_quota_exceeded preserves form input as a definite rejec
   await expect(page.getByTestId("outcome-flag")).toHaveText("definite");
   await expect(input).toHaveValue("123 Oak Street");
 });
+
+test("H06.5 Pilot 0 maintenance updating notice and disclosure render cleanly at 390px, 900px, and 1440px in Light and Dark themes", async ({
+  page,
+}) => {
+  await page.route("**/api/hosted/settings", (route) =>
+    route.fulfill({
+      json: {
+        ...READY_SETTINGS,
+        maintenance: {
+          state: "ready",
+          data: {
+            message: "Applying Pilot 0 runtime update.",
+            starts_at: 1795377600000,
+            ends_at: 1795379400000,
+          },
+          freshness: {
+            state: "known",
+            as_of: 1795377600000,
+            source_revision: "maintenance:in_progress:1795377600000",
+          },
+        },
+      },
+    }),
+  );
+
+  for (const colorScheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme });
+    for (const width of [390, 900, 1440]) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.goto(`${fixture}?mode=hosted`);
+      await expect(page.getByText("Updating your workspace:")).toBeVisible();
+      await expect(page.getByTestId("pilot0-disclosure")).toContainText("No contractual SLA");
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      );
+      expect(overflow).toBe(false);
+    }
+  }
+});

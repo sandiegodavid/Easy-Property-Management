@@ -72,6 +72,8 @@ def plan(target, startup):
             "compute.googleapis.com",
             "artifactregistry.googleapis.com",
             "secretmanager.googleapis.com",
+            "logging.googleapis.com",
+            "monitoring.googleapis.com",
             p,
         ],
         ["compute", "networks", "create", target.network, "--subnet-mode=custom", p],
@@ -153,6 +155,7 @@ def kms_plan(
     keyring: str = "epm-h05-recovery",
     operator_key: str = "operator-workspace-kek",
     control_key: str = "admin-control-kek",
+    next_rotation_time: str = "2027-02-21T00:00:00Z",
 ) -> list[list[str]]:
     """Explicit reviewed Cloud KMS provisioning commands for H05 off-host recovery."""
     for name in (keyring, operator_key, control_key):
@@ -174,6 +177,7 @@ def kms_plan(
             "--purpose=encryption",
             "--protection-level=software",
             "--rotation-period=90d",
+            "--next-rotation-time=" + next_rotation_time,
             p,
         ],
         [
@@ -186,6 +190,7 @@ def kms_plan(
             "--purpose=encryption",
             "--protection-level=software",
             "--rotation-period=90d",
+            "--next-rotation-time=" + next_rotation_time,
             p,
         ],
         [
@@ -211,6 +216,255 @@ def kms_plan(
             p,
         ],
     ]
+
+
+MAX_BUDGET_USD = 1000
+_EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
+_DOMAIN_RE = re.compile(
+    r"^(?=.{4,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
+    r"(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$"
+)
+_BILLING_RE = re.compile(r"^[A-F0-9]{6}-[A-F0-9]{6}-[A-F0-9]{6}$")
+
+
+def ops_agent_config() -> str:
+    """Return hardened GCP Ops Agent YAML for epm-h02-host (30d Cloud Logging + host metrics)."""
+    return """logging:
+  receivers:
+    epm_systemd:
+      type: systemd_journald
+    epm_docker_json:
+      type: files
+      include_paths:
+        - /var/lib/docker/containers/*/*-json.log
+  processors:
+    parse_epm_json:
+      type: parse_json
+      time_key: timestamp
+  service:
+    pipelines:
+      epm_logs:
+        receivers: [epm_systemd, epm_docker_json]
+        processors: [parse_epm_json]
+metrics:
+  receivers:
+    hostmetrics:
+      type: hostmetrics
+      collection_interval: 60s
+  service:
+    pipelines:
+      epm_host_metrics:
+        receivers: [hostmetrics]
+"""
+
+
+def _alert_policy(
+    display_name: str,
+    condition_name: str,
+    metric_filter: str,
+    *,
+    threshold_value: float,
+    options: tuple[str, str] = ("0s", "COMPARISON_GT"),
+) -> dict[str, object]:
+    duration, comparison = options
+    return {
+        "displayName": display_name,
+        "combiner": "OR",
+        "conditions": [
+            {
+                "displayName": condition_name,
+                "conditionThreshold": {
+                    "filter": metric_filter,
+                    "comparison": comparison,
+                    "thresholdValue": threshold_value,
+                    "duration": duration,
+                    "aggregations": [
+                        {
+                            "alignmentPeriod": "60s",
+                            "perSeriesAligner": "ALIGN_MEAN",
+                        }
+                    ],
+                },
+            }
+        ],
+    }
+
+
+def observability_plan(
+    target: Target,
+    *,
+    notification_email: str,
+    heartbeat_host: str = "epmdemo.xyz",
+    billing_account: str | None = None,
+    monthly_budget_usd: int = 250,
+) -> dict[str, object]:
+    """Explicit reviewed GCP Monitoring, Logging, Ops Agent & Budget plan (H06.7 / D3 / D9)."""
+    if not _EMAIL_RE.fullmatch(notification_email):
+        raise ValueError("A valid operational owner notification_email is required.")
+    if not _DOMAIN_RE.fullmatch(heartbeat_host):
+        raise ValueError("A canonical heartbeat_host domain is required.")
+    if not (1 <= monthly_budget_usd <= MAX_BUDGET_USD):
+        raise ValueError("monthly_budget_usd must be between 1 and 1000.")
+    if billing_account is not None and not _BILLING_RE.fullmatch(billing_account):
+        raise ValueError("Canonical GCP billing account ID (XXXXXX-XXXXXX-XXXXXX) is required.")
+
+    p = "--project=" + target.project
+    sa = target.service_account + "@" + target.project + ".iam.gserviceaccount.com"
+    commands: list[list[str]] = [
+        [
+            "services",
+            "enable",
+            "logging.googleapis.com",
+            "monitoring.googleapis.com",
+            "billingbudgets.googleapis.com",
+            p,
+        ],
+        [
+            "projects",
+            "add-iam-policy-binding",
+            target.project,
+            "--member=serviceAccount:" + sa,
+            "--role=roles/logging.logWriter",
+        ],
+        [
+            "projects",
+            "add-iam-policy-binding",
+            target.project,
+            "--member=serviceAccount:" + sa,
+            "--role=roles/monitoring.metricWriter",
+        ],
+        [
+            "logging",
+            "buckets",
+            "update",
+            "_Default",
+            "--location=global",
+            "--retention-days=30",
+            p,
+        ],
+        [
+            "beta",
+            "monitoring",
+            "channels",
+            "create",
+            "--display-name=EPM Pilot 0 Owner Email",
+            "--type=email",
+            "--channel-labels=email_address=" + notification_email,
+            p,
+        ],
+        [
+            "logging",
+            "metrics",
+            "create",
+            "epm_hosted_recovery_alerts",
+            "--description=Hosted recovery overdue/failure alerts (H05/H06)",
+            '--log-filter=jsonPayload.event="hosted_recovery_alert" OR '
+            'textPayload:"hosted_recovery_alert"',
+            p,
+        ],
+        [
+            "logging",
+            "metrics",
+            "create",
+            "epm_host_guardian_containment",
+            "--description=Host guardian container containment events (H02/H06)",
+            '--log-filter=jsonPayload.event="host_guardian_containment" OR '
+            'textPayload:"host_guardian_containment"',
+            p,
+        ],
+        [
+            "monitoring",
+            "uptime",
+            "create",
+            "epm-pilot0-host-heartbeat",
+            "--resource-type=uptime-url",
+            "--resource-labels=host=" + heartbeat_host + ",project_id=" + target.project,
+            "--protocol=https",
+            "--path=/",
+            "--period=5",
+            "--timeout=10",
+            p,
+        ],
+    ]
+    if billing_account is not None:
+        commands.append(
+            [
+                "billing",
+                "budgets",
+                "create",
+                "--billing-account=" + billing_account,
+                "--display-name=EPM Pilot 0 Monthly Gross Spend ($" + str(monthly_budget_usd) + ")",
+                "--budget-amount=" + str(monthly_budget_usd) + "USD",
+                "--filter-projects=projects/" + target.project,
+                "--credit-types-treatment=exclude-all-credits",
+                "--threshold-rule=percent=0.5",
+                "--threshold-rule=percent=0.8",
+                "--threshold-rule=percent=1.0",
+            ]
+        )
+
+    policies = {
+        "backup_alerts": _alert_policy(
+            "EPM Backup Overdue or Failure Alert",
+            "epm_hosted_recovery_alerts > 0",
+            'metric.type="logging.googleapis.com/user/epm_hosted_recovery_alerts"',
+            threshold_value=0.0,
+        ),
+        "containment_alerts": _alert_policy(
+            "EPM Host Guardian Containment Alert",
+            "epm_host_guardian_containment > 0",
+            'metric.type="logging.googleapis.com/user/epm_host_guardian_containment"',
+            threshold_value=0.0,
+        ),
+        "disk_headroom": _alert_policy(
+            "EPM Host Disk Utilization > 80%",
+            "Disk percent_used > 80%",
+            (
+                'metric.type="agent.googleapis.com/disk/percent_used" '
+                'AND resource.type="gce_instance" '
+                'AND metric.labels.state="used"'
+            ),
+            threshold_value=80.0,
+            options=("300s", "COMPARISON_GT"),
+        ),
+        "memory_headroom": _alert_policy(
+            "EPM Host Memory Utilization > 85%",
+            "Memory percent_used > 85%",
+            (
+                'metric.type="agent.googleapis.com/memory/percent_used" '
+                'AND resource.type="gce_instance" '
+                'AND metric.labels.state="used"'
+            ),
+            threshold_value=85.0,
+            options=("300s", "COMPARISON_GT"),
+        ),
+        "cpu_headroom": _alert_policy(
+            "EPM Host CPU Utilization > 85%",
+            "CPU utilization > 85% for 10m",
+            ('metric.type="agent.googleapis.com/cpu/utilization" AND resource.type="gce_instance"'),
+            threshold_value=0.85,
+            options=("600s", "COMPARISON_GT"),
+        ),
+        "host_loss_heartbeat": _alert_policy(
+            "EPM Host Loss External Heartbeat Failure",
+            "External HTTPS uptime check failed",
+            (
+                'metric.type="monitoring.googleapis.com/uptime_check/check_passed" '
+                'AND resource.type="uptime_url"'
+            ),
+            threshold_value=1.0,
+            options=("300s", "COMPARISON_LT"),
+        ),
+    }
+
+    return {
+        "commands": commands,
+        "alert_policies": policies,
+        "ops_agent_config_yaml": ops_agent_config(),
+        "log_retention_days": 30,
+        "monthly_budget_usd": monthly_budget_usd,
+        "budget_excludes_credits": True,
+    }
 
 
 if __name__ == "__main__":

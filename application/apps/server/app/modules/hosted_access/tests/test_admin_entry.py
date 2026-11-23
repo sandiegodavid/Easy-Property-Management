@@ -84,7 +84,7 @@ def test_protected_startup_lock_public_config_and_private_credential_rotation(
     build = admin_entry.build_central_provider
 
     def capture(*args, **kwargs):
-        assert kwargs["rate_admission"].daily_limit == 9
+        assert kwargs["rate_admission"].daily_limit == selected.deployment_sends_per_day
         provider = build(*args, **kwargs)
         captured.append(provider)
         return provider

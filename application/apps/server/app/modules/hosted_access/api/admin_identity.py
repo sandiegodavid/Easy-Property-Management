@@ -16,6 +16,7 @@ from app.modules.hosted_access.api.start_rate import StartRateLimiter
 from app.modules.hosted_access.infrastructure.admin_sessions import AdminSessions
 from app.modules.hosted_admin.api.recovery_router import build_admin_recovery_router
 from app.modules.hosted_admin.api.router import build_admin_lite_router
+from app.platform.hosted_security_headers import HSTS_HEADER_VALUE, PERMISSIONS_POLICY_VALUE
 
 MAX_BODY = 20000
 
@@ -78,6 +79,8 @@ def build_admin_identity_app(
                 "Cache-Control": "no-store",
                 "Referrer-Policy": "no-referrer",
                 "X-Content-Type-Options": "nosniff",
+                "Strict-Transport-Security": HSTS_HEADER_VALUE,
+                "Permissions-Policy": PERMISSIONS_POLICY_VALUE,
                 "Content-Security-Policy": (
                     "default-src 'none'; script-src 'self' https://apis.google.com; "
                     "style-src 'self'; connect-src 'self' https://identitytoolkit.googleapis.com "

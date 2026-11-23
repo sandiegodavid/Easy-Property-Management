@@ -1,0 +1,45 @@
+{
+  "cases": {
+    "admin_control_recovery": {
+      "capture_ms": 1423,
+      "cross_key_denied": true,
+      "path_traversal_denied": true,
+      "point_id": "1eedee35-cb61-4c08-910d-142d8d6dec0e",
+      "restore_ms": 360,
+      "restored_sha256": "4fbd5baa80ad4d9caea7d71b3e8b1c682047bdaade4fcfee4f4b098ac9669c0e",
+      "status": "passed",
+      "tampered_chunk_rejected": true,
+      "uploaded_chunks": 1,
+      "verified_chunks": 1
+    },
+    "disposable_r2_cleanup": {
+      "deleted_objects": 5,
+      "remaining_objects": 0,
+      "status": "passed"
+    },
+    "operator_workspace_recovery": {
+      "capture_ms": 2671,
+      "cross_key_denied": true,
+      "point_id": "4841ff60-7ae9-4986-988c-bd3db38677b9",
+      "restore_ms": 907,
+      "restored_db_sha256": "178ffb50f2da2b1ef3e5e2a560e75b230ff0c6ec3ffbeb78934fac73d33876c8",
+      "restored_file_sha256": "5dc6c7c9988a79e0c3c7ccae46f7c0c840c606d1f9c9260f3720a82c8dd8be02",
+      "status": "passed",
+      "uploaded_chunks": 2,
+      "verified_chunks": 2
+    }
+  },
+  "environment": {
+    "admin_key_ref": "projects/project-47b72bb7-ba90-42c9-910/locations/us-west1/keyRings/epm-h05-recovery/cryptoKeys/admin-control-kek",
+    "disposable_deployment_id": "7606b3e4-995c-41c9-b791-1fa1faa5e961",
+    "host": "epm-h02-host",
+    "kernel": "7.0.0-1017-gcp",
+    "operator_key_ref": "projects/project-47b72bb7-ba90-42c9-910/locations/us-west1/keyRings/epm-h05-recovery/cryptoKeys/operator-workspace-kek",
+    "r2_bucket": "epm-hosted-recovery"
+  },
+  "owner": "H06.6",
+  "proof": "live_r2_kms_backup_proxy_recovery",
+  "recorded_at_ms": 1795475938960,
+  "status": "passed",
+  "version": 1
+}

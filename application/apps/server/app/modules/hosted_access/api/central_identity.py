@@ -19,6 +19,7 @@ from app.modules.hosted_access.application.managed_provider import (
     ProviderUnavailable,
 )
 from app.modules.hosted_access.infrastructure.central_login import CentralCompletion
+from app.platform.hosted_security_headers import HSTS_HEADER_VALUE, PERMISSIONS_POLICY_VALUE
 
 
 class Completion(BaseModel):
@@ -98,6 +99,8 @@ def build_central_identity_app(
                 "Cache-Control": "no-store",
                 "Referrer-Policy": "no-referrer",
                 "X-Content-Type-Options": "nosniff",
+                "Strict-Transport-Security": HSTS_HEADER_VALUE,
+                "Permissions-Policy": PERMISSIONS_POLICY_VALUE,
                 "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
                 "Content-Security-Policy": f"default-src 'none'; script-src 'self' 'nonce-{nonce}' https://apis.google.com; "
                 "style-src 'self'; connect-src 'self' https://identitytoolkit.googleapis.com "

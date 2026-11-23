@@ -5,8 +5,15 @@ from __future__ import annotations
 import base64
 import binascii
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+import json
+import logging
+from pathlib import Path
 import re
+import socket
+import threading
+import time
 from typing import Literal
 
 from cryptography.exceptions import InvalidSignature
@@ -14,6 +21,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey,
 from pydantic import model_validator
 from sqlalchemy import Engine, text
 
+from app.modules.host_agent.infrastructure.unix_transport import peer_uid
 from app.modules.hosted_recovery.domain.models import HostedRecoveryError
 from app.platform.hosted_contracts.semantic import SemanticRequest, canonical_bytes
 from app.platform.hosted_contracts.values import (
@@ -276,3 +284,204 @@ class RecoveryStatusIngestService:
                 source_epoch=summary.source_epoch,
                 source_revision=summary.source_revision,
             )
+
+
+INTERNAL_RECOVERY_STATUS_ROUTE = "/internal/recovery-status"
+MAX_INTERNAL_REQUEST_BYTES = 16 * 1024
+_RELAY_LOGGER = logging.getLogger("epm.hosted_recovery.summary_relay")
+
+
+def _write_http_json(conn: socket.socket, status_code: int, reason: str, body: dict) -> None:
+    payload = json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    response = (
+        f"HTTP/1.1 {status_code} {reason}\r\n"
+        "Content-Type: application/json\r\n"
+        "Cache-Control: no-store\r\n"
+        f"Content-Length: {len(payload)}\r\n"
+        "Connection: close\r\n\r\n"
+    ).encode("ascii") + payload
+    conn.sendall(response)
+
+
+def _read_bounded_http_request(
+    conn: socket.socket, *, deadline: float
+) -> tuple[str, str, bytes] | None:
+    buf = bytearray()
+    header_end = -1
+    while header_end == -1:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return None
+        conn.settimeout(remaining)
+        chunk = conn.recv(4096)
+        if not chunk:
+            return None
+        buf.extend(chunk)
+        if len(buf) > MAX_INTERNAL_REQUEST_BYTES:
+            return None
+        header_end = buf.find(b"\r\n\r\n")
+    head = bytes(buf[:header_end]).decode("ascii", errors="strict")
+    lines = head.split("\r\n")
+    if not lines:
+        return None
+    parts = lines[0].split(" ")
+    if len(parts) != 3:
+        return None
+    method, path, _version = parts
+    content_length = 0
+    for line in lines[1:]:
+        if ":" in line:
+            k, v = line.split(":", 1)
+            if k.strip().lower() == "content-length":
+                content_length = int(v.strip())
+    if content_length < 0 or content_length > MAX_INTERNAL_REQUEST_BYTES:
+        return None
+    body = bytearray(buf[header_end + 4 :])
+    while len(body) < content_length:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return None
+        conn.settimeout(remaining)
+        chunk = conn.recv(min(4096, content_length - len(body)))
+        if not chunk:
+            return None
+        body.extend(chunk)
+    return method, path, bytes(body[:content_length])
+
+
+def handle_recovery_status_connection(
+    conn: socket.socket,
+    ingest: RecoveryStatusIngestService,
+    *,
+    allowed_uid: int,
+    timeout_seconds: float = 5.0,
+) -> None:
+    """Serve one SO_PEERCRED + Ed25519 authenticated POST /internal/recovery-status request."""
+    deadline = time.monotonic() + timeout_seconds
+    try:
+        if peer_uid(conn) != allowed_uid:
+            _write_http_json(conn, 403, "Forbidden", {"code": "peer_uid_denied"})
+            return
+        parsed = _read_bounded_http_request(conn, deadline=deadline)
+        if parsed is None:
+            _write_http_json(conn, 400, "Bad Request", {"code": "malformed_request"})
+            return
+        method, path, body = parsed
+        if method != "POST" or path != INTERNAL_RECOVERY_STATUS_ROUTE:
+            _write_http_json(conn, 405, "Method Not Allowed", {"code": "route_denied"})
+            return
+        payload = json.loads(body.decode("utf-8"))
+        token = payload.get("token") if isinstance(payload, dict) else None
+        if not isinstance(token, str) or not token:
+            _write_http_json(conn, 400, "Bad Request", {"code": "missing_token"})
+            return
+        outcome = ingest.ingest_signed(token)
+        _write_http_json(
+            conn,
+            200,
+            "OK",
+            {
+                "applied": outcome.applied,
+                "reason": outcome.reason,
+                "operatorId": outcome.operator_id,
+                "sourceEpoch": outcome.source_epoch,
+                "sourceRevision": outcome.source_revision,
+            },
+        )
+    except RecoverySummaryDenied:
+        try:
+            _write_http_json(conn, 403, "Forbidden", {"code": RecoverySummaryDenied.code})
+        except OSError:
+            pass
+    except UnicodeDecodeError, ValueError:
+        try:
+            _write_http_json(conn, 400, "Bad Request", {"code": "malformed_json"})
+        except OSError:
+            pass
+    except Exception:
+        try:
+            _write_http_json(conn, 503, "Service Unavailable", {"code": "ingest_unavailable"})
+        except OSError:
+            pass
+
+
+class RecoveryStatusRelayServer:
+    """Private Unix-socket server for POST /internal/recovery-status (H06.3 / D7)."""
+
+    def __init__(
+        self,
+        listener: socket.socket,
+        ingest: RecoveryStatusIngestService,
+        *,
+        allowed_uid: int,
+        max_workers: int = 4,
+    ):
+        self._listener = listener
+        self._ingest = ingest
+        self._allowed_uid = allowed_uid
+        self._stop = threading.Event()
+        self._pool = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="summary-relay")
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        self._listener.settimeout(0.2)
+        self._thread = threading.Thread(target=self._serve_loop, daemon=True)
+        self._thread.start()
+
+    def _serve_loop(self) -> None:
+        while not self._stop.is_set():
+            try:
+                conn, _ = self._listener.accept()
+            except TimeoutError:
+                continue
+            except OSError:
+                break
+            self._pool.submit(self._handle_and_close, conn)
+
+    def _handle_and_close(self, conn: socket.socket) -> None:
+        try:
+            handle_recovery_status_connection(conn, self._ingest, allowed_uid=self._allowed_uid)
+        finally:
+            conn.close()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=5.0)
+        self._pool.shutdown(wait=True)
+
+
+class UnixSummaryPublisher:
+    """Best-effort, bounded-timeout publisher sending signed summaries to Admin over AF_UNIX."""
+
+    def __init__(
+        self,
+        socket_path: Path,
+        *,
+        expected_peer_uid: int,
+        timeout_seconds: float = 5.0,
+    ):
+        self.socket_path = socket_path
+        self.expected_peer_uid = expected_peer_uid
+        self.timeout_seconds = timeout_seconds
+
+    def __call__(self, token: str) -> None:
+        body = json.dumps({"token": token}, separators=(",", ":")).encode("utf-8")
+        request = (
+            f"POST {INTERNAL_RECOVERY_STATUS_ROUTE} HTTP/1.1\r\n"
+            "Host: internal\r\n"
+            "Content-Type: application/json\r\n"
+            f"Content-Length: {len(body)}\r\n"
+            "Connection: close\r\n\r\n"
+        ).encode("ascii") + body
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+                conn.settimeout(self.timeout_seconds)
+                conn.connect(str(self.socket_path))
+                if peer_uid(conn) != self.expected_peer_uid:
+                    _RELAY_LOGGER.warning("Recovery status relay peer UID mismatch; dropping.")
+                    return
+                conn.sendall(request)
+                conn.recv(2048)
+        except OSError:
+            _RELAY_LOGGER.warning("Best-effort protection summary relay unavailable.")

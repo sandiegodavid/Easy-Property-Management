@@ -1,6 +1,7 @@
 """Protected, installed Admin and central login composition on one TLS listener."""
 
 import argparse
+import asyncio
 from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
 from ipaddress import IPv4Address, ip_address, ip_network
 import os
@@ -17,13 +18,14 @@ from sqlalchemy import text
 from starlette.responses import Response
 
 from app.hosted_candidates.runtime import inspect
-from app.modules.hosted_access.api.admin_identity import build_admin_identity_app
 from app.modules.hosted_access.api.central_identity import build_central_identity_app
 from app.modules.hosted_access.application.identity_evidence import IdentityBinding
 from app.modules.hosted_access.application.managed_provider import ProviderDenied
 from app.modules.hosted_access.infrastructure.admin_bootstrap import private_file
-from app.modules.hosted_access.infrastructure.admin_entry import build_resources, load_deployment
-from app.modules.hosted_access.infrastructure.admin_sessions import AdminSessions
+from app.modules.hosted_access.infrastructure.admin_entry import (
+    build_admin_runtime,
+    load_deployment,
+)
 from app.modules.hosted_access.infrastructure.central_attempts import CentralAttempts
 from app.modules.hosted_access.infrastructure.central_handoffs import CentralHandoffs, PairingSource
 from app.modules.hosted_access.infrastructure.central_login import CentralLogin
@@ -39,7 +41,13 @@ from app.modules.hosted_access.infrastructure.handoff_channel import (
     own_identity_listener,
 )
 from app.modules.hosted_access.infrastructure.handoff_signing import IdentitySigner
+from app.modules.hosted_access.infrastructure.health_probes import internal_health_server
 from app.modules.hosted_access.infrastructure.tls_candidate import run_identity_tls
+from app.modules.hosted_admin.infrastructure.recovery_status_ingest import (
+    RecoveryStatusIngestService,
+    RecoveryStatusRelayServer,
+)
+from app.modules.hosted_recovery.infrastructure.scheduler import AdminControlBackupScheduler
 from app.platform.hosted_contracts.values import Contract, Reference
 from app.platform.config import application_root
 from app.platform.hosted_artifacts import load_manifest
@@ -120,12 +128,46 @@ class SourceRegistry(Contract):
         return Ed25519PublicKey.from_public_bytes(bytes.fromhex(peer.public_key))
 
 
-class AwaitingWorkspaceReadiness:
-    """The H04/H05 authorities are absent from this authentication candidate."""
+class AdminWorkspaceReadiness:
+    """Live H04/H05 workspace readiness backed by admin.sqlite and verified protection state."""
 
-    @staticmethod
-    def ready(_operator_id, _access_epoch):
-        return False
+    def __init__(self, engine):
+        self.engine = engine
+
+    def ready(self, operator_id: str, access_epoch: int) -> bool:
+        with self.engine.connect() as connection:
+            row = (
+                connection.execute(
+                    text(
+                        "SELECT o.setup_state, o.desired_access, o.access_epoch, "
+                        "       rec.protection_state "
+                        "FROM main.operators o "
+                        "LEFT JOIN main.workspace_recovery_status rec "
+                        "  ON rec.operator_id = o.operator_id "
+                        "WHERE o.operator_id = :operator_id"
+                    ),
+                    {"operator_id": operator_id},
+                )
+                .mappings()
+                .one_or_none()
+            )
+        if row is None:
+            return False
+        return (
+            row["desired_access"] == "enabled"
+            and int(row["access_epoch"]) == int(access_epoch)
+            and row["setup_state"] in {"ready_for_claim", "active"}
+            and row["protection_state"] in {"healthy", "unchanged"}
+        )
+
+
+async def _recovery_mode_central_unavailable(scope, receive, send):
+    await Response(
+        content='{"code":"admin_recovery_mode_active","message":"Sign-in is unavailable during Admin recovery."}',
+        status_code=503,
+        media_type="application/json",
+        headers={"Cache-Control": "no-store"},
+    )(scope, receive, send)
 
 
 @contextmanager
@@ -218,27 +260,62 @@ def create_app(config_path):
     ui = {component: root / f"{component}_build/dist" for component in ("admin", "central")}
     if not all((directory / "index.html").is_file() for directory in ui.values()):
         raise ValueError("Both identity builds are required.")
-    engine, provider = build_resources(deployment, setup, proxy=configuration.provider_proxy)
+
+    def clock():
+        return time_ns() // 1_000_000
+
+    bundle = build_admin_runtime(
+        deployment,
+        setup,
+        ui_directory=ui["admin"],
+        proxy=configuration.provider_proxy,
+        clock=clock,
+    )
+    engine = bundle.engine
     try:
+        if bundle.recovery_mode:
+
+            @asynccontextmanager
+            async def recovery_lifespan(_app):
+                try:
+                    with HostedWriterLock(deployment.writer_lock):
+                        yield
+                finally:
+                    if bundle.admin_recovery_engine is not None:
+                        bundle.admin_recovery_engine.dispose()
+
+            app = FastAPI(
+                openapi_url=None, docs_url=None, redoc_url=None, lifespan=recovery_lifespan
+            )
+            app.mount(
+                "/",
+                SharedIdentityHTTP(
+                    bundle.app,
+                    _recovery_mode_central_unavailable,
+                    _recovery_mode_central_unavailable,
+                    configuration=configuration,
+                    setup=setup,
+                ),
+            )
+            return app, configuration
+
+        assert engine is not None
         with engine.connect() as connection:
             if connection.execute(
                 text("SELECT deployment_id, login_origin FROM control_meta")
             ).all() != [(deployment.deployment_id, setup.origins.central)]:
                 raise ValueError("Current Admin registration differs from the deployed origin.")
 
-        def clock():
-            return time_ns() // 1_000_000
-
         source = SourceBrowserDirectory(
             registry, configuration.host_relay_socket, relay_uid=configuration.host_relay_uid
         )
         attempts = CentralAttempts(engine, setup, source, clock=clock)
-        login = CentralLogin(attempts, provider, deployment_id=deployment.deployment_id)
+        login = CentralLogin(attempts, bundle.provider, deployment_id=deployment.deployment_id)
         handoffs = CentralHandoffs(
             attempts,
             signer,
             source,
-            AwaitingWorkspaceReadiness(),
+            AdminWorkspaceReadiness(engine),
             deployment_id=deployment.deployment_id,
         )
         pairing = CentralPairing(
@@ -246,32 +323,54 @@ def create_app(config_path):
             PairingSource(registry.resolve_key, source.observe_pairing, clock=clock),
             deployment_id=deployment.deployment_id,
         )
-        sessions = AdminSessions(engine, provider, clock=clock)
-        web = {
-            "firebase": {
-                "apiKey": provider.api_key.get_secret_value(),
-                "authDomain": setup.origins.central.removeprefix("https://"),
-                "projectId": setup.realm.project_id,
-            },
-            "supportContact": deployment.support_contact,
-        }
-        admin = build_admin_identity_app(sessions, web_config=web, ui_directory=ui["admin"])
         central = build_central_identity_app(
             login,
-            web_config=web,
+            web_config=bundle.web_config,
             ui_directory=ui["central"],
             network_source=network_source,
             pairing=pairing,
             handoffs=handoffs,
         )
-        helper = FirebaseHelpers(setup, configuration.provider_proxy, public_config=web["firebase"])
+        helper = FirebaseHelpers(
+            setup, configuration.provider_proxy, public_config=bundle.web_config["firebase"]
+        )
+
+        def _resolve_summary_key(
+            operator_id: str, workspace_id: str, key_id: str
+        ) -> Ed25519PublicKey | None:
+            for peer in registry.sources:
+                if (
+                    peer.binding.scope.operator_id == operator_id
+                    and peer.binding.scope.workspace_id == workspace_id
+                    and peer.key_id == key_id
+                ):
+                    return Ed25519PublicKey.from_public_bytes(bytes.fromhex(peer.public_key))
+            return None
+
+        recovery_ingest = RecoveryStatusIngestService(
+            engine,
+            resolve_public_key=_resolve_summary_key,
+            clock=clock,
+        )
+        admin_scheduler = (
+            AdminControlBackupScheduler(
+                bundle.admin_recovery,
+                deployment_id=deployment.deployment_id,
+                clock=clock,
+            )
+            if bundle.admin_recovery is not None
+            else None
+        )
 
         @asynccontextmanager
         async def lifespan(_app):
+            stop_scheduler = asyncio.Event()
+            scheduler_task = None
+            relay_server = None
             try:
                 with HostedWriterLock(deployment.writer_lock):
                     async with AsyncExitStack() as stack:
-                        authority = CentralSessionAuthority(handoffs, provider)
+                        authority = CentralSessionAuthority(handoffs, bundle.provider)
                         for peer in registry.sources:
                             binding = peer.binding
                             listener = stack.enter_context(
@@ -290,18 +389,50 @@ def create_app(config_path):
                                     peer_uid=configuration.host_relay_uid,
                                 )
                             )
+                        if registry.sources:
+                            summary_listener = stack.enter_context(
+                                owned_identity_socket(
+                                    configuration.socket_directory, "recovery-status"
+                                )
+                            )
+                            relay_server = RecoveryStatusRelayServer(
+                                summary_listener,
+                                recovery_ingest,
+                                allowed_uid=configuration.host_relay_uid,
+                            )
+                            relay_server.start()
+                        if admin_scheduler is not None:
+                            scheduler_task = asyncio.create_task(
+                                admin_scheduler.run_forever(stop_scheduler)
+                            )
                         yield
             finally:
+                stop_scheduler.set()
+                if scheduler_task is not None:
+                    scheduler_task.cancel()
+                    try:
+                        await scheduler_task
+                    except asyncio.CancelledError:
+                        pass
+                if relay_server is not None:
+                    relay_server.stop()
+                if bundle.admin_recovery_engine is not None:
+                    bundle.admin_recovery_engine.dispose()
                 engine.dispose()
 
         app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None, lifespan=lifespan)
         app.mount(
             "/",
-            SharedIdentityHTTP(admin, central, helper, configuration=configuration, setup=setup),
+            SharedIdentityHTTP(
+                bundle.app, central, helper, configuration=configuration, setup=setup
+            ),
         )
         return app, configuration
     except BaseException:
-        engine.dispose()
+        if bundle.admin_recovery_engine is not None:
+            bundle.admin_recovery_engine.dispose()
+        if engine is not None:
+            engine.dispose()
         raise
 
 
@@ -311,13 +442,15 @@ def main():
     parser.add_argument("--tls-key", type=Path, required=True)
     parser.add_argument("--tls-certificate", type=Path, required=True)
     parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--health-port", type=int, default=8081)
     args = parser.parse_args()
     try:
         inspect("admin")
         if load_manifest(application_root() / "hosted-candidate.json").ui != "compiled_identity":
             raise ValueError("Install the shared identity package.")
         app, configuration = create_app(args.configuration)
-        run_identity_tls(app, configuration.listen_address, args)
+        with internal_health_server(lambda: True, port=args.health_port):
+            run_identity_tls(app, configuration.listen_address, args)
     except Exception:
         parser.exit(3, "The protected shared identity candidate is unavailable.\n")
 

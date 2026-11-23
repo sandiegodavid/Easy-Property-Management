@@ -28,7 +28,7 @@ fi
 modprobe br_netfilter
 sysctl -p /etc/sysctl.d/90-epm-h02.conf
 # Prevent Docker from starting after reboot unless the retained data mount exists.
-install -d -m 0755 /etc/systemd/system/docker.service.d
+install -d -m 0755 /etc/systemd/system/docker.service.d /etc/google-cloud-ops-agent
 printf '[Unit]\nRequires=srv-epm-data.mount\nAfter=srv-epm-data.mount\n' >/etc/systemd/system/docker.service.d/epm-data.conf
 systemctl stop docker.service docker.socket
 systemctl daemon-reload

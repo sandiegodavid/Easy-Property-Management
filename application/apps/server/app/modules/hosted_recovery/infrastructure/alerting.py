@@ -162,3 +162,15 @@ class DeduplicatingAlertEmitter:
 
     def active_kinds(self, operator_id: str) -> frozenset[AlertKind]:
         return frozenset(self._active.get(operator_id, ()))
+
+
+def build_alert_emitter(
+    *,
+    webhook_url: str | None = None,
+    timeout_seconds: float = 5.0,
+) -> DeduplicatingAlertEmitter:
+    """Build standard structured-log + optional validated HTTPS webhook alert emitter (H06.3 / D3)."""
+    sinks: list[AlertSink] = [StructuredLogAlertSink()]
+    if webhook_url:
+        sinks.append(WebhookAlertSink(webhook_url, timeout_seconds=timeout_seconds))
+    return DeduplicatingAlertEmitter(sinks)

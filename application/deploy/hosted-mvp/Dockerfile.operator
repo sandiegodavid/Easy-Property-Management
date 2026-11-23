@@ -1,4 +1,4 @@
-# Pinned linux/amd64 infrastructure candidate; normal application startup unavailable.
+# Pinned linux/amd64 production Operator workspace image (H06.6 / D8).
 FROM docker.io/library/python@sha256:1faf2343e747208b2a36e5f2b5ff908ec3b2d0078a6a7bfe73b535698fe83909 AS installed
 ENV PYTHONDONTWRITEBYTECODE=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 COPY . /input
@@ -15,7 +15,7 @@ COPY --from=installed /opt/epm/venv /opt/epm/venv
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_INDEX=1
 WORKDIR /opt/epm
 USER 65532:65532
-LABEL epm.component="operator" epm.acceptance="infrastructure_candidate" epm.runtime="unavailable"
-HEALTHCHECK --interval=30s --timeout=3s CMD ["/opt/epm/venv/bin/python", "-B", "-c", "import http.client; c=http.client.HTTPConnection('127.0.0.1',8000,timeout=2); c.request('GET','/health/live'); assert c.getresponse().status==200"]
-ENTRYPOINT ["/opt/epm/venv/bin/python", "-B", "-m", "app.hosted_candidates.operator"]
-CMD ["--health-only"]
+LABEL epm.component="operator" epm.release_track="pilot0" epm.runtime="production"
+HEALTHCHECK --interval=30s --timeout=3s CMD ["/opt/epm/venv/bin/python", "-B", "-c", "import http.client; c=http.client.HTTPConnection('127.0.0.1',8081,timeout=2); c.request('GET','/health/live'); assert c.getresponse().status==200"]
+ENTRYPOINT ["/opt/epm/venv/bin/python", "-B", "-m", "app.modules.hosted_access.infrastructure.operator_entry"]
+CMD []

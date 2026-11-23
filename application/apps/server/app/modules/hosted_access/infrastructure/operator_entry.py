@@ -26,16 +26,20 @@ from app.modules.hosted_access.infrastructure.free_storage_admission import (
 )
 from app.modules.hosted_access.infrastructure.handoff_channel import CentralHandoffClient
 from app.modules.hosted_access.infrastructure.handoff_signing import IdentitySigner
+from app.modules.hosted_access.infrastructure.health_probes import internal_health_server
+from app.modules.hosted_access.infrastructure.maintenance_notice import (
+    DEFAULT_MAINTENANCE_NOTICE_PATH,
+    read_maintenance_notice,
+)
 from app.modules.hosted_access.infrastructure.operator_identity_runtime import (
     OperatorIdentityInputs,
     create_minimal_recovery_app,
 )
 from app.modules.hosted_access.infrastructure.usage_accounting import UsageAccountingStore
-from app.modules.hosted_recovery.infrastructure.alerting import (
-    DeduplicatingAlertEmitter,
-    StructuredLogAlertSink,
-)
+from app.modules.hosted_admin.infrastructure.recovery_status_ingest import UnixSummaryPublisher
+from app.modules.hosted_recovery.infrastructure.alerting import build_alert_emitter
 from app.modules.hosted_recovery.infrastructure.engine import ChunkedAeadBackupEngine
+from app.modules.hosted_recovery.infrastructure.scheduler import WorkspaceBackupScheduler
 from app.modules.workspace.application.service import WorkspacePaths
 from app.modules.workspace.infrastructure.hosted_recovery import HostedWorkspaceRecoveryService
 from app.modules.hosted_access.infrastructure.shared_identity_entry import (
@@ -74,6 +78,9 @@ class OperatorDeployment(Contract):
     recovery_database: Path | None = None
     backup_proxy_socket: Path | None = None
     backup_proxy_uid: Uid | None = None
+    recovery_status_socket: Path | None = None
+    alert_webhook_url: str | None = None
+    maintenance_notice_path: Path = DEFAULT_MAINTENANCE_NOTICE_PATH
     release_ref: Reference = "rel-hosted-mvp"
     business_schema_revision: Reference = "20260401_0001"
     access_schema_revision: Reference = "access_0001_initial"
@@ -264,6 +271,14 @@ def candidate(configuration):
                     for active_eng in list(live_business_engine_holder):
                         active_eng.dispose()
 
+                summary_publisher = (
+                    UnixSummaryPublisher(
+                        configuration.recovery_status_socket,
+                        expected_peer_uid=configuration.relay_uid,
+                    )
+                    if configuration.recovery_status_socket is not None
+                    else None
+                )
                 recovery_service = HostedWorkspaceRecoveryService(
                     recovery_engine=recovery_engine,
                     access_engine=engine,
@@ -277,9 +292,10 @@ def candidate(configuration):
                     business_schema_revision=configuration.business_schema_revision,
                     access_schema_revision=configuration.access_schema_revision,
                     clock=clock,
-                    alert_emitter=DeduplicatingAlertEmitter([StructuredLogAlertSink()]),
+                    alert_emitter=build_alert_emitter(webhook_url=configuration.alert_webhook_url),
                     summary_signer_key=getattr(signer, "key", None),
                     summary_key_id=configuration.signing_key_id,
+                    summary_publisher=summary_publisher,
                     close_business_connections=_close_business_connections,
                 )
                 recovery_service.reconcile_startup()
@@ -391,8 +407,22 @@ def candidate(configuration):
                                     if recovery_service is not None
                                     else None
                                 ),
+                                maintenance_reader=lambda: read_maintenance_notice(
+                                    configuration.maintenance_notice_path, clock=clock
+                                ),
                                 recovery_service=recovery_service,
                                 recovery_mode=False,
+                                background_scheduler=(
+                                    WorkspaceBackupScheduler(
+                                        recovery_service,
+                                        deployment_id=binding.deployment_id,
+                                        operator_id=binding.scope.operator_id,
+                                        workspace_id=binding.scope.workspace_id,
+                                        clock=clock,
+                                    )
+                                    if recovery_service is not None
+                                    else None
+                                ),
                             ),
                         )
                         yield TrustedSourceHTTP(app, configuration.gateway_address)
@@ -411,12 +441,14 @@ def main():
     parser.add_argument("--tls-key", type=Path, required=True)
     parser.add_argument("--tls-certificate", type=Path, required=True)
     parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--health-port", type=int, default=8081)
     args = parser.parse_args()
     try:
         inspect("operator")
         configuration = OperatorDeployment.model_validate_json(read_private(args.configuration))
         with candidate(configuration) as app:
-            run_identity_tls(app, configuration.listen_address, args)
+            with internal_health_server(lambda: True, port=args.health_port):
+                run_identity_tls(app, configuration.listen_address, args)
     except Exception:
         parser.exit(3, "The protected Operator authentication candidate is unavailable.\n")
 

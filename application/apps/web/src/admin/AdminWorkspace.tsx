@@ -804,6 +804,49 @@ export function AdminWorkspace({ session }: { session: AdminSession }) {
       )}
       {listError && <p role="alert">{listError}</p>}
 
+      <section
+        className="summary-strip"
+        aria-label="Pilot 0 cohort health, headroom, and maintenance overview"
+        data-testid="admin-cohort-overview"
+      >
+        <p>
+          <strong>Cohort:</strong> {total} operator{total === 1 ? "" : "s"} (
+          {items.filter((op) => op.setup_state === "active").length} active,{" "}
+          {items.filter((op) => op.setup_state === "needs_attention").length} needing attention)
+        </p>
+        <p>
+          <strong>Protection health:</strong>{" "}
+          {
+            items.filter(
+              (op) =>
+                op.protection.state === "ready" &&
+                (op.protection.data?.state === "healthy" ||
+                  op.protection.data?.state === "unchanged" ||
+                  op.protection.data?.status === "protected"),
+            ).length
+          }{" "}
+          protected,{" "}
+          {
+            items.filter(
+              (op) =>
+                op.protection.state !== "ready" ||
+                (op.protection.data?.status === "degraded" &&
+                  op.protection.data?.state !== "unchanged"),
+            ).length
+          }{" "}
+          degraded / unavailable
+        </p>
+        <p>
+          <strong>Host headroom:</strong>{" "}
+          {bootstrap?.capacity.available
+            ? `${bootstrap.capacity.profileRef} (snapshot r${bootstrap.capacity.snapshotRevision}, ${bootstrap.capacity.commitmentCount} commitments)`
+            : "Capacity review required"}
+        </p>
+        <p>
+          <strong>Maintenance window:</strong> Shared Pilot 0 announced window (Free pilot)
+        </p>
+      </section>
+
       <div className="filters" role="search" aria-label="Filter operators">
         <label htmlFor="filter-search">Search</label>
         <input

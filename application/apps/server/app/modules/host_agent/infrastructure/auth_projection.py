@@ -17,6 +17,7 @@ from app.modules.host_agent.application.dispatch import HostAgentDenied, HostAge
 from app.modules.host_agent.infrastructure.gateway import closed_config
 from app.modules.host_agent.infrastructure.endpoint_policy import hostname
 from app.platform.hosted_contracts.semantic import semantic_hash
+from app.platform.hosted_security_headers import CADDY_SECURITY_RESPONSE_HEADERS
 
 
 PRIVATE_BRIDGE_RANGES = tuple(
@@ -142,7 +143,10 @@ def _route(origin, method, path, endpoint):
                     "request": {
                         "set": upstream_headers,
                         "delete": delete_headers,
-                    }
+                    },
+                    "response": {
+                        "set": CADDY_SECURITY_RESPONSE_HEADERS,
+                    },
                 },
             }
         ],
@@ -238,7 +242,10 @@ def _workspace_eligible_routes(origin, endpoint):
                             "X-Epm-Client-Network",
                             "Upgrade",
                         ],
-                    }
+                    },
+                    "response": {
+                        "set": CADDY_SECURITY_RESPONSE_HEADERS,
+                    },
                 },
             }
         ],
