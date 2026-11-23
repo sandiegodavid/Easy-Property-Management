@@ -1,0 +1,493 @@
+Code Review Comments — Commit 74cca39c (H06.1-H06.9 impl)
+Review Date: 2026-11-23
+Reviewed Commit: 74cca39cb26a27f7a039994eda9dc920d415c6c0
+Scope: Full review of H06.1-H06.9 implementation (80 files changed, +6863/-373) across 5 boundaries.
+
+Validation Checks Run:
+- Python lint/format (`ruff check` + `ruff format --check` on 28 changed Python files): PASSED
+- Frontend lint/format/typecheck (`npm run lint`, `npm run format:check`, `npm run typecheck`, 212 files): PASSED
+- Focused Python unit tests (8 test modules): 87 passed, 1 sandbox-blocked (`test_loopback_tls_serves_exact_admin_host_and_releases_lock` PermissionError on 127.0.0.1 bind)
+
+Summary of Findings: 47 actionable findings (11 P0, 17 P1, 16 P2, 3 P3)
+- Boundary 1 (Host Agent, Services, Dockerfiles, and Host Install): 11 findings (6 P0, 2 P1, 3 P2)
+- Boundary 2 (Hosted Access Runtime, Security Headers & Logging): 8 findings (2 P0, 3 P1, 3 P2)
+- Boundary 3 (Hosted Recovery Scheduler, Unix-Socket Status Relay & Alerting): 10 findings (0 P0, 4 P1, 4 P2, 2 P3)
+- Boundary 4 (Frontend UI & Component Tests): 7 findings (0 P0, 3 P1, 4 P2)
+- Boundary 5 (GCP Cloud Plan, Qualification Scripts, Reports & Runbooks): 11 findings (3 P0, 5 P1, 2 P2, 1 P3)
+
+================================================================================
+BOUNDARY 1: Host Agent, Services, Dockerfiles, and Host Install
+================================================================================
+
+[P0] 1.1 `supervisor.py` passes wrong types/arguments to `CaddyAdmin` and `GatewaySettings`
+Files:
+- application/apps/server/app/modules/host_agent/infrastructure/supervisor.py:96-103
+Details:
+`build_supervision_agent()` constructs `CaddyAdmin(admin_socket)` (passing a `Path` instead of `GatewaySettings`) and `GatewaySettings(admin_socket, inputs.network.gateway_port)` (passing the TCP port `8080` as `gateway_uid` instead of `inputs.network.gateway_uid`, and omitting `port`). In `gateway.py:26-29,116-132`, `CaddyAdmin._request()` accesses `self.settings.admin_socket` and compares `info.st_uid != self.settings.gateway_uid` (compare `service_runtime.py:211-215,226`). Any `gateway.verify()` call crashes with `AttributeError` (or UID mismatch), causing `Supervisor.poll()` to stop and contain every healthy running container.
+Recommended Fix:
+Construct `gateway_settings = GatewaySettings(admin_socket, inputs.network.gateway_uid, inputs.network.gateway_port)` and pass `CaddyAdmin(gateway_settings)` and `gateway_settings` to `Gateway(...)`.
+
+[P0] 1.2 `supervisor.py` synthesizes dummy `RuntimeProfile` (`apparmor_sha256="0"*64`) and omits `networks`, triggering false-positive containment on every poll
+Files:
+- application/apps/server/app/modules/host_agent/infrastructure/supervisor.py:115-137
+- application/deploy/hosted-mvp/gcp/install_services.py:282
+Details:
+`epm-host-guardian.service` (`install_services.py:282`) invokes `supervisor` without `--profile`, so `build_supervision_agent()` falls back to a synthetic `RuntimeProfile` with `apparmor_sha256="0"*64` and hardcoded resource limits. It also constructs `NativeEffects` without `networks=...` (`networks=None`). During `HostAgent.supervise()` -> `NativeEffects._sandbox()` (`runtime_effects.py:55-57,93-119`), `epm.policy` label verification and `HostConfig.NetworkMode` (`"none"` vs the container's private bridge) will fail for every real running container, causing the guardian to forcibly stop all live containers within 5 seconds.
+Recommended Fix:
+Pass `--profile <pinned-profile-path>` in `epm-host-guardian.service` (remove or reject the dummy `"0"*64` fallback in production) and wire the production `NetworkEffects` instance into `NativeEffects(..., networks=...)`.
+
+[P0] 1.3 `epm-host-guardian.service` mounts `inventory.parent` read-only under `ProtectSystem=strict`, causing `EROFS` on every supervision poll
+Files:
+- application/deploy/hosted-mvp/gcp/install_services.py:287-288
+Details:
+`epm-host-guardian.service` sets `ProtectSystem=strict` with only `ReadWritePaths={layout.stops}`. However, `HostAgent.supervise()` (`service.py:111-118`) enters `self.inventory.exclusive()`, which opens `inventory.sqlite.effects.lock` in `path_parent(layout.inventory)` with `O_RDWR | O_CREAT` (`inventory.py:67,126-128`), and `mark_attention()` writes to `inventory.sqlite`. Under `ProtectSystem=strict`, this fails with `OSError(EROFS)` on every poll and triggers containment.
+Recommended Fix:
+Include `{path_parent(layout.inventory)}` in `ReadWritePaths=` (i.e. `ReadWritePaths={layout.stops} {path_parent(layout.inventory)}`).
+
+[P0] 1.4 `epm-backup-proxy.service` has conflicting `InaccessiblePaths`/`ReadOnlyPaths` and incompatible DAC permissions on `/etc/epm/backup-proxy.json` and `inventory.sqlite`
+Files:
+- application/apps/server/app/modules/host_agent/infrastructure/host_services.py:73-75,81,100-102
+- application/deploy/hosted-mvp/gcp/install_services.py:153,171,186-191,204
+Details:
+1. `layout.data` is `/srv/epm/data` and `layout.inventory` is `/srv/epm/data/host/inventory/inventory.sqlite` (nested inside `layout.data`). `host_services.py:101-102` sets both `ReadOnlyPaths={path_parent(layout.inventory)}` and `InaccessiblePaths={layout.data} ...`, which overmounts `/srv/epm/data` with an empty inaccessible directory and breaks systemd mount-namespace setup (`226/NAMESPACE`).
+2. `epm-backup-proxy.service` runs as unprivileged `epm-backup-proxy:epm-backup-proxy` with empty `CapabilityBoundingSet=`, while `install_services.py` sets `/etc/epm` (`0700 root:root`, line 204), `/srv/epm/data/host` (`0700 root:root`, line 153), and `/srv/epm/data/host/inventory` (`0700 root:root`, line 171), and `Inventory._file_identity()` (`inventory.py:76-82`) enforces `0700`/`0600 root:root` on `inventory.sqlite`. `epm-backup-proxy` will hit `EACCES` reading both `/etc/epm/backup-proxy.json` (`backup_proxy.py:700`) and `inventory.sqlite` (`backup_proxy.py:122`).
+Recommended Fix:
+Restrict `InaccessiblePaths` to non-inventory subdirs of `layout.data` (`workspace`, `control`, `scratch`) instead of `{layout.data}`; load `backup-proxy.json` via `LoadCredential=` (or a `0750 root:epm-backup-proxy` directory); and expose a read-only `root:epm-backup-proxy` (`0640`) projected inventory snapshot outside the `0700 root:root` directory so `Inventory._file_identity()` stays intact.
+
+[P0] 1.5 `epm-backup-proxy` Unix socket permissions (`0660`, `0750` parent dir, `os.chown` without `CAP_CHOWN`) block Admin and Operator containers from connecting
+Files:
+- application/apps/server/app/modules/host_agent/infrastructure/backup_proxy.py:399,411-413,677-744
+- application/apps/server/app/modules/host_agent/infrastructure/host_services.py:73-74,81
+- application/deploy/hosted-mvp/gcp/install_services.py:257
+Details:
+`backup_proxy_listener()` hardcodes `socket_mode=0o660` (not configurable via CLI/config) and calls `os.chown(socket_path, os.getuid(), client_gid)`. Because `epm-backup-proxy.service` has `CapabilityBoundingSet=` empty and no `SupplementaryGroups=`, `os.chown(..., client_gid)` fails with `EPERM` for any non-primary GID. Furthermore, every Operator container runs under a distinct per-operator UID/GID (`100000..165535`, `container_policy.py:132,163` with `GroupAdd: []`), and Admin runs under its own UID/GID, so a single `0660` group cannot grant access to both Admin and multiple Operators (nor can they traverse `0750 epm-backup-proxy:epm-backup-proxy` at `/run/epm-backup-proxy`).
+Recommended Fix:
+Since caller authentication and prefix-fencing are enforced strictly by kernel `SO_PEERCRED` (`peer_uid`) + `host_inventory.sqlite` and only authorized containers receive the bind-mounted socket, either allow `0o666` on the socket file (with direct socket bind-mount or `0711` parent dir) or assign a shared supplementary client group to `epm-backup-proxy.service` and authorized containers.
+
+[P0] 1.6 `Dockerfile.admin` and `Dockerfile.operator` set `CMD []` while their `ENTRYPOINT` modules require `--configuration`, `--tls-key`, and `--tls-certificate`
+Files:
+- application/deploy/hosted-mvp/Dockerfile.admin:20-21
+- application/deploy/hosted-mvp/Dockerfile.operator:20-21
+Details:
+Both Dockerfiles set `CMD []`, while `shared_identity_entry.main()` (`shared_identity_entry.py:441-443`) and `operator_entry.main()` (`operator_entry.py:440-442`) mark `--configuration`, `--tls-key`, and `--tls-certificate` as `required=True`. `container_spec()` (`container_policy.py:130-192`) does not set `Cmd`. Any container started by `HostAgent`/`container_spec()` (or without manual CLI overrides) exits immediately with `argparse` status `2`.
+Recommended Fix:
+Provide default in-container `/control/...` arguments in `CMD` (e.g. `["--configuration", "/control/deployment.json", "--tls-key", "/control/tls.key", "--tls-certificate", "/control/tls.crt"]`) or wire `Cmd` explicitly in `container_spec()`.
+
+[P1] 1.7 `epm-backup-proxy.service` cannot restart after `SIGKILL`/OOM due to stale Unix socket (`EADDRINUSE`)
+Files:
+- application/apps/server/app/modules/host_agent/infrastructure/backup_proxy.py:407-424
+- application/apps/server/app/modules/host_agent/infrastructure/host_services.py:71-108
+Details:
+`backup_proxy_listener()` never unlinks a pre-existing socket before `bind()`, relying solely on `finally:` cleanup. `epm-backup-proxy.service` sets `Restart=on-failure` and `MemoryMax=256M` but omits `RuntimeDirectory=epm-backup-proxy` (using boot-only `tmpfiles.d`). After an OOM kill or `SIGKILL`, the stale socket remains on disk, causing restart attempts to fail with `OSError(EADDRINUSE)` until hitting `StartLimitBurst=3` and entering permanent `failed` state.
+Recommended Fix:
+Add `RuntimeDirectory=epm-backup-proxy` to `epm-backup-proxy.service` so systemd cleans up the runtime directory on stop/restart, or safely unlink a stale owned `S_ISSOCK` file in `backup_proxy_listener()` after confirming no active listener responds.
+
+[P1] 1.8 `install_services.py` writes `epm-backup-proxy.service` without enabling/starting it, and never wires `r2_credential()` or `install_ops_agent_config()`
+Files:
+- application/deploy/hosted-mvp/gcp/install_services.py:113-139,260-314,317-330
+Details:
+`publish_units()` writes `/etc/systemd/system/epm-backup-proxy.service` (lines 266-270) but omits it from both `systemctl enable` (lines 298-305) and `systemctl start` (lines 307-313). `install_ops_agent_config()` (lines 317-330) and `r2_credential()` (lines 113-139) are defined but never wired into `install()`.
+Recommended Fix:
+Enable and start `epm-backup-proxy.service` once `/etc/epm/secrets/r2.json` is provisioned via `r2_credential()`, and wire `install_ops_agent_config()` into host setup.
+
+[P2] 1.9 `supervisor.py` reads `ServiceInputs` with 4 KiB default `protected_bytes` limit instead of 32 KiB
+Files:
+- application/apps/server/app/modules/host_agent/infrastructure/supervisor.py:93
+Details:
+`protected_bytes(config_path, owner=owner)` defaults to `MAX_CREDENTIAL_BYTES = 4096` (`tunnel_credentials.py:11,14`), whereas `service_runtime.py:279` uses `limit=32768` for `ServiceInputs` (which supports up to 64 `outbound_hosts`, relay config, and shared identity settings). A valid `host-services.json` > 4 KiB will cause `epm-host-guardian.service` to fail startup with `HostAgentDenied`.
+Recommended Fix:
+Pass `limit=32768` or reuse `service_runtime.load_inputs(config_path)`.
+
+[P2] 1.10 `backup_proxy.py` `_resolve_cli_settings()` accepts `bool` and non-positive `admin_uid` (including `0`/root)
+Files:
+- application/apps/server/app/modules/host_agent/infrastructure/backup_proxy.py:723-732
+Details:
+`not isinstance(admin_uid, int)` accepts `bool` (`True`/`False`) and `admin_uid <= 0` (e.g. `0` root), which would grant root or UID 1 control-plane backup access in `InventoryPeerResolver.resolve()` (line 132).
+Recommended Fix:
+Reject booleans and non-positive integers: `isinstance(admin_uid, bool) or not isinstance(admin_uid, int) or admin_uid <= 0` (and apply the same check to `client_gid` when set).
+
+[P2] 1.11 `auth_projection.py` omits `CADDY_SECURITY_RESPONSE_HEADERS` on `_workspace_eligible_routes` `deny_route`
+Files:
+- application/apps/server/app/modules/host_agent/infrastructure/auth_projection.py:184-191
+Details:
+`CADDY_SECURITY_RESPONSE_HEADERS` (`Strict-Transport-Security`, `Permissions-Policy`, `X-Content-Type-Options: nosniff`) was added to `_route` (lines 147-149) and `proxy_route` (lines 246-248), but `deny_route`'s `static_response` still sets only `Cache-Control: no-store`.
+Recommended Fix:
+Merge `CADDY_SECURITY_RESPONSE_HEADERS` into `deny_route`'s response headers map.
+
+
+================================================================================
+BOUNDARY 2: Hosted Access Runtime, Security Headers & Logging
+================================================================================
+
+[P0] 2.1 Admin recovery authentication (`authenticate_recovery`) crashes unconditionally on every valid Bearer token and bypasses step-up freshness
+Files:
+- application/apps/server/app/modules/hosted_access/infrastructure/admin_entry.py:205-220
+- application/apps/server/app/modules/hosted_admin/infrastructure/admin_recovery.py:1480-1499
+Details:
+1. `admin_entry.py:209` reads `primary.issuer`, but `VerifiedProviderIdentity` (`managed_provider.py:22-31`) only defines `primary.realm` -> raises `AttributeError`.
+2. `admin_recovery.py:1488-1490` calls `authority.verify_identity(issuer=issuer, subject=subject, mfa_verified=mfa_verified)`, but `BootstrapRecoveryAuthority.verify_identity` (`admin_recovery.py:107-109`) takes `mfa_verified_at: int | None` -> raises `TypeError`.
+3. `admin_recovery.py:1491-1498` constructs `AdminRecoveryAuthority` with forbidden extra field `bootstrap_authority_ref` and `mfa_verified_at=clock()`, whereas `AdminRecoveryAuthority` (`authority.py:58-63`, `extra="forbid"`) requires `step_up_at` and has no `bootstrap_authority_ref` -> raises `ValidationError`.
+4. `admin_entry.py:211` collapses `primary.mfa_verified_at` to a boolean and `admin_recovery.py:1496` stamps `clock()`, bypassing `STEP_UP_TTL_MS` freshness enforcement in `_verify_recovery_actor`.
+Recommended Fix:
+Return `"iss": primary.realm` and `"mfa_verified_at": primary.mfa_verified_at` from `_verify_firebase_token`; pass `mfa_verified_at` to `authority.verify_identity(...)` and `step_up_at=mfa_verified_at` (removing `bootstrap_authority_ref`) when constructing `AdminRecoveryAuthority`.
+
+[P0] 2.2 Operator minimal recovery mode crashes on startup (`asyncio.create_task()` called on an async context manager) and omits `HostedWriterLock`
+Files:
+- application/apps/server/app/modules/hosted_access/infrastructure/operator_identity_runtime.py:350-363,387,393
+- application/apps/server/app/modules/hosted_access/infrastructure/operator_entry.py:335
+Details:
+`compose_operator_identity` (`operator_identity_runtime.py:303-310`) returns `partial(own_identity_listener, ...)`, which is an `@asynccontextmanager`, not a coroutine function. `create_minimal_recovery_app`'s `lifespan` calls `asyncio.create_task(serve_identity())` at line 353, immediately raising `TypeError: a coroutine was expected, got <contextlib._AsyncGeneratorContextManager>` whenever `operator_entry.py:311-346` boots in `startup_recovery_mode`. Additionally, `operator_entry.py:335` passes `writer_lock=None` and `create_minimal_recovery_app` never acquires `HostedWriterLock`, permitting concurrent writers during restore.
+Recommended Fix:
+Enter `serve_identity()` via `async with serve_identity(): yield` inside `lifespan`, pass `writer_lock=HostedWriterLock(configuration.writer_lock)` from `operator_entry.py:335`, and hold `inputs.writer_lock` in `create_minimal_recovery_app`'s lifespan.
+
+[P1] 2.3 `/health/ready` probe is hardcoded to `lambda: True` in both production entrypoints
+Files:
+- application/apps/server/app/modules/hosted_access/infrastructure/operator_entry.py:450
+- application/apps/server/app/modules/hosted_access/infrastructure/shared_identity_entry.py:452
+Details:
+Both entrypoints pass `lambda: True` to `internal_health_server`, so `/health/ready` unconditionally returns `200 {"status":"ready"}` even when Admin fell back to `recovery_mode`, when Operator booted in `startup_recovery_mode` or fails `_live_business_readiness`, or before FastAPI lifespan acquires locks and binds sockets.
+Recommended Fix:
+Wire an O(1) readiness check reflecting lifespan readiness, non-recovery mode, and lightweight store/readiness state (e.g. `_live_business_readiness` for Operator; `not bundle.recovery_mode` + lifespan-started flag for Admin).
+
+[P1] 2.4 Security headers and request boundary checks missing on Admin recovery-mode app, `DestinationHTTP`/`SharedIdentityHTTP` errors, and Operator auth/security/recovery routes
+Files:
+- application/apps/server/app/modules/hosted_access/infrastructure/admin_entry.py:249-252
+- application/apps/server/app/modules/hosted_access/infrastructure/shared_identity_entry.py:164-170,234,242
+- application/apps/server/app/modules/hosted_access/infrastructure/operator_identity_runtime.py:114,121-124,135-138
+- application/apps/server/app/modules/hosted_access/api/operator_security.py:30
+- application/apps/server/app/modules/hosted_access/api/operator_recovery.py:40
+- application/apps/server/app/modules/hosted_access/api/destination_identity.py:91,156-157,237,252
+- application/apps/server/app/modules/hosted_access/api/firebase_helpers.py:64-68
+Details:
+- `create_admin_recovery_app` (`admin_recovery.py:1503-1524`) has no security headers middleware (`HSTS`, `Permissions-Policy`, `nosniff`, `Referrer-Policy`, `Cache-Control: no-store`, `CSP`), no duplicate-header/origin boundary middleware, and unbounded `await request.json()`.
+- `_recovery_mode_central_unavailable` sets only `Cache-Control: no-store`; `SharedIdentityHTTP` 421 responses and `DestinationHTTP` 403/503 responses emit no security headers.
+- `operator_security.py`, `operator_recovery.py`, `destination_identity.py`, and `firebase_helpers.py` were not updated to emit `Strict-Transport-Security`, `Permissions-Policy`, `X-Content-Type-Options: nosniff`, and `Content-Security-Policy` (unlike `managed_business.py` and `operator_settings.py`).
+Recommended Fix:
+Apply `API_SECURITY_HEADERS` consistently across all error/auth/recovery responses and add bounded body + boundary middleware to `create_admin_recovery_app`.
+
+[P1] 2.5 Log redaction bypasses in `hosted_logging.py`
+Files:
+- application/apps/server/app/platform/hosted_logging.py:13-68
+Details:
+1. `_JWT_RE` (line 33) ends with `\b`, which fails when a base64url JWT signature ends in `-` (since `-` is `\W`, there is no word boundary before whitespace/EOS) — valid JWTs ending in `-` leak unredacted.
+2. `redact_string` (lines 42-49) misses URL query/KV secrets (`oobCode=...`, `apiKey=...`, `key=...`, `code=...`, `token=...`, `x-csrf-token=...`, `x-epm-csrf=...`) and `Authorization: Basic ...`.
+3. `redact_value` (lines 58-68) only recurses into `dict`, `list`, and `tuple`, not `set`/`frozenset`. A `set` containing `bytes` (e.g. `{b"raw-dek-bytes"}`) falls through to `str(value)` and leaks raw bytes.
+4. `SENSITIVE_KEY_MARKERS` (lines 13-30) omits `csrf`, `oobcode`, `oob_code`, `handoff`, `assertion`, `signing_key`, and `access_key`.
+Recommended Fix:
+Replace trailing `\b` in `_JWT_RE` with `(?![A-Za-z0-9_-])`, add KV/query/Basic-auth redaction patterns, recurse into `set`/`frozenset` in `redact_value`, and extend `SENSITIVE_KEY_MARKERS`.
+
+[P2] 2.6 `AdminWorkspaceReadiness.ready()` ignores `workspace_recovery_status.source_epoch` and `verified_at`
+Files:
+- application/apps/server/app/modules/hosted_access/infrastructure/shared_identity_entry.py:137-161
+Details:
+Checks `o.access_epoch == access_epoch` and `rec.protection_state in {"healthy", "unchanged"}` without checking `rec.source_epoch == o.access_epoch` or `rec.verified_at is not None`. After an `access_epoch` bump (e.g. restore/re-enable), a stale recovery row from a prior epoch can falsely mark the workspace ready.
+Recommended Fix:
+Select `rec.source_epoch, rec.verified_at` and require `row["source_epoch"] == row["access_epoch"]` and `row["verified_at"] is not None`.
+
+[P2] 2.7 Maintenance notice never expires past `window_end_utc`, does not reject symlinks, and is dropped in Operator recovery mode
+Files:
+- application/apps/server/app/modules/hosted_access/infrastructure/maintenance_notice.py:44-103
+- application/apps/server/app/modules/hosted_access/infrastructure/operator_entry.py:312-345
+- application/apps/server/app/modules/hosted_access/infrastructure/operator_identity_runtime.py:373-392
+Details:
+`read_maintenance_notice` never compares `now_clock()` against `doc.window_end_utc`, and `is_maintenance_in_progress` has no clock/expiry check at all — a stale `active: true` notice remains displayed indefinitely (including `"Updating your workspace"`). `_load_notice` also does not reject symlinks (`path.is_symlink()`). Furthermore, `operator_entry.py:312-345` and `create_minimal_recovery_app` (`operator_identity_runtime.py:373-392`) omit `maintenance_reader` in recovery mode.
+Recommended Fix:
+Treat `now >= doc.window_end_utc` as inactive in both functions, reject symlinks in `_load_notice`, and pass `maintenance_reader` through in recovery mode.
+
+[P2] 2.8 Test gaps in `test_h06_runtime_wiring.py` and `test_h06_security_headers_and_logging.py`
+Files:
+- application/apps/server/app/modules/hosted_access/tests/test_h06_runtime_wiring.py:236-272
+- application/apps/server/app/modules/hosted_access/tests/test_h06_security_headers_and_logging.py:70-78
+Details:
+`test_admin_entry_mounts_admin_control_and_falls_back_to_recovery_mode` only checks unauthenticated `401` on `/api/admin/recovery/status` (never invoking `authenticate_recovery` with a valid token, which hid P0 2.1), and `test_managed_business_and_operator_settings_emit_full_api_security_headers` only inspects `SETTINGS_HEADERS` and `business_error()` directly rather than live HTTP responses across all hosted apps/error paths. No test boots `create_minimal_recovery_app` through `TestClient` lifespan (which hid P0 2.2).
+Recommended Fix:
+Add an authenticated + expired-MFA test for `authenticate_recovery`, a `TestClient` lifespan test for `create_minimal_recovery_app`, and HTTP-level security header assertions for `admin_identity`, `central_identity`, `create_admin_recovery_app`, and `DestinationHTTP`.
+
+
+================================================================================
+BOUNDARY 3: Hosted Recovery Scheduler, Unix-Socket Status Relay & Alerting
+================================================================================
+
+[P1] 3.1 Async protection summary relay cannot connect end-to-end (socket permissions, UID mismatch, and missing host-agent forwarder)
+Files:
+- application/apps/server/app/modules/hosted_access/infrastructure/shared_identity_entry.py:174-198,392-403
+- application/apps/server/app/modules/hosted_access/infrastructure/operator_entry.py:72,81,274-281
+- application/apps/server/app/modules/host_agent/infrastructure/identity_relay.py:190-256
+Details:
+- `shared_identity_entry.py:393-403` binds `recovery-status.sock` via `owned_identity_socket(configuration.socket_directory, "recovery-status")` (enforcing `0o700` on `socket_directory` and `0o600` on the socket, owned by Admin's UID) and restricts `RecoveryStatusRelayServer` to `allowed_uid=configuration.host_relay_uid`.
+- No host-agent relay forwards `POST /internal/recovery-status` to `recovery-status.sock` (`identity_relay.py` only forwards 4-byte length-prefixed `IdentityRelayCall`/`HandoffRequest` frames, and nothing in `host_agent/` or `deploy/` references `recovery_status_socket` or `recovery-status.sock`).
+- If Operator instead connects directly to `recovery-status.sock`, `0o700`/`0o600` denies any distinct non-root Operator UID (`EACCES`), AND `operator_entry.py:277` checks `expected_peer_uid=configuration.relay_uid` (host-agent UID, not Admin's UID) while `shared_identity_entry.py:401` checks `allowed_uid=configuration.host_relay_uid` (host-agent UID, not Operator's UID).
+Recommended Fix:
+Either (a) add a host-agent relay hop for `POST /internal/recovery-status` (matching `relay_uid` on Operator -> host-agent and `host_relay_uid` on host-agent -> Admin `recovery-status.sock`), or (b) expose `recovery-status.sock` in a group-traversable `0o750`/`0o660` directory (like `open_relay_socket`), configure Operator with Admin's UID, and allow registered Operator UID(s) on `RecoveryStatusRelayServer` (with Ed25519 signature verification already pinning `(operator_id, workspace_id, key_id)`).
+
+[P1] 3.2 `WorkspaceBackupScheduler.run_once()` enters a permanent hourly `SemanticConflict` loop on unchanged workspaces
+Files:
+- application/apps/server/app/modules/hosted_recovery/infrastructure/scheduler.py:75-111
+- application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:502-523,1053-1109
+Details:
+`run_once()` computes `due` solely from `snap.last_verified_at`: `(now - snap.last_verified_at) >= self.nightly_interval_ms + self.jitter_ms` (`scheduler.py:79-82`). When a workspace has no changes, `HostedWorkspaceRecoveryService._run_capture_locked` takes the unchanged fast-path (`hosted_recovery.py:1053-1109`), which intentionally does NOT update `recovery_points.verified_at` — it only updates `last_checked_at` and increments `backup_state.revision`. On the next hourly tick (still in the same `day_bucket`), `snap.last_verified_at` is still >=24h+jitter old (`due` stays `True`), `snap.revision` has incremented (changing `request_hash`), and `idempotency_key=f"nightly:{self.operator_id}:{day_bucket}"` is reused — causing `_lookup_idempotent()` to raise `SemanticConflict` every hour for the rest of the day, repeating daily forever while unchanged.
+Recommended Fix:
+Base `due` on the latest verified protection check timestamp (e.g. `max(snap.last_verified_at, snap.last_checked_at)` when `snap.protection_state == "unchanged"` and `snap.last_verified_at is not None`).
+
+[P1] 3.3 Both schedulers block same-day retries after a transient failure via `day_bucket` idempotency key + changing `expected_revision`
+Files:
+- application/apps/server/app/modules/hosted_recovery/infrastructure/scheduler.py:85-110,175-200
+- application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:996-1003,1300-1320
+- application/apps/server/app/modules/hosted_admin/infrastructure/admin_recovery.py:522-529,617-635
+Details:
+Both `WorkspaceBackupScheduler.run_once()` (line 106) and `AdminControlBackupScheduler.run_once()` (line 196) use `day_bucket = now // NIGHTLY_INTERVAL_MS` as the sole `idempotency_key` discriminator while embedding `expected_revision=max(1, revision)` into `intent` / `request_hash`. If a capture fails transiently (e.g. brief R2/KMS/proxy outage), `backup_state.revision` / `control_backup_state.revision` increments and `state='failed'` is persisted for that `day_bucket`. On the next hourly tick in the same UTC day, `request_hash` changes for the same `idempotency_key`, raising `SemanticConflict` (and even with an identical hash, `_lookup_idempotent` would return the cached `FAILED` outcome without retrying until the next UTC day). Similarly, `shared_identity_entry.py` / `admin_entry.py` never run `ReconcileCheckpoint` on startup for `AdminControlRecoveryService`, leaving crash-interrupted `running` backup rows stuck for the day.
+Recommended Fix:
+Include the current state revision or attempt bucket in `idempotency_key` (e.g. `f"nightly:{self.operator_id}:{day_bucket}:r{max(1, snap.revision)}"`) so retries after a failed attempt get a fresh idempotency key while duplicate calls at the same revision remain idempotent. Reconcile orphaned `running` control-backup operations on Admin startup.
+
+[P1] 3.4 Shutdown race: `HostedWriterLock` released and engines/sockets closed while `RecoveryStatusRelayServer` and scheduler threads are still active
+Files:
+- application/apps/server/app/modules/hosted_access/infrastructure/shared_identity_entry.py:370-421
+- application/apps/server/app/modules/hosted_recovery/infrastructure/scheduler.py:113-122,203-212
+- application/apps/server/app/modules/hosted_access/infrastructure/operator_identity_runtime.py:312-327
+Details:
+- In `shared_identity_entry.py:370-421`, `try:` wraps `with HostedWriterLock(deployment.writer_lock):` and `async with AsyncExitStack() as stack:`. On shutdown, `yield` exits `AsyncExitStack` (closing/unlinking `recovery-status.sock`) and releases `HostedWriterLock` BEFORE `finally:` cancels `scheduler_task` and calls `relay_server.stop()`. In-flight threads in `RecoveryStatusRelayServer` and `AdminControlBackupScheduler` can continue writing to `admin.sqlite` / `admin-recovery.sqlite` after the single-writer lock is released; `relay_server.stop()` also blocks the asyncio event loop synchronously.
+- In `scheduler.py:116,206`, `await asyncio.to_thread(self.run_once)` is not shielded on cancellation (unlike `_automatic_backup_scheduler` in `application/apps/server/app/bootstrap/api.py:860-865`). Cancelling `scheduler_task` returns `CancelledError` immediately while the worker thread is still executing `run_once()`, allowing `finally:` in both `shared_identity_entry.py` and `operator_entry.py` to dispose SQLite engines and release `HostedWriterLock` underneath an active backup transaction.
+Recommended Fix:
+Stop `scheduler_task` and `relay_server` (`await asyncio.to_thread(relay_server.stop)`) inside `try/finally` nested within `with HostedWriterLock(...)` and `async with AsyncExitStack()`. In `scheduler.py`, shield the `asyncio.to_thread(self.run_once)` task on `CancelledError` and await its completion before exiting `run_forever`.
+
+[P2] 3.5 Nightly backup schedule drifts forward by up to +2h/day
+Files:
+- application/apps/server/app/modules/hosted_recovery/infrastructure/scheduler.py:70-82,143-172
+Details:
+Adding `self.jitter_ms` (up to 1h) onto `self.nightly_interval_ms` (24h) while polling every `watchdog_interval_seconds` (1h) causes consecutive captures to run 25-26h apart, drifting forward daily and leaving as little as ~2h of margin before the 28h overdue threshold.
+Recommended Fix:
+Anchor each day's target time to `day_start_ms + self.jitter_ms` (deterministic UTC slot) and trigger when `now >= slot_ms` and `last_protected_at < slot_ms` (or immediately if no verified point exists).
+
+[P2] 3.6 `recovery_status_ingest.py` relay transport hardening and silent publisher failures
+Files:
+- application/apps/server/app/modules/hosted_admin/infrastructure/recovery_status_ingest.py:294-304,331-339,352-368,431-440,468-487
+Details:
+- `handle_recovery_status_connection` never calls `conn.settimeout(...)` before `peer_uid(conn)` or `_write_http_json` (lines 362-364, 379, 393, 398, 403), allowing `conn.sendall` to block indefinitely if a peer stalls reading.
+- `_read_bounded_http_request` (lines 331-336) silently accepts duplicate `Content-Length` headers and does not reject `Transfer-Encoding`; `TimeoutError` from `conn.recv` falls into `except Exception:` (line 401) and attempts to send `503` on a timed-out socket.
+- `RecoveryStatusRelayServer._serve_loop` (line 439) accepts in a tight loop and queues sockets unboundedly in `ThreadPoolExecutor` (unlike `identity_relay.py:296-310`, where worker threads call `accept()` directly).
+- `UnixSummaryPublisher.__call__` (lines 478-487) discards the HTTP status from `conn.recv(2048)` without logging non-200 responses, omits `socket_path` canonicality checks, and only catches `OSError` (not `HostAgentDenied`/`HostAgentUnavailable` from `peer_uid`).
+Recommended Fix:
+Set `conn.settimeout(remaining)` on entry and before `_write_http_json`; reject duplicate `Content-Length` and `Transfer-Encoding`; handle `TimeoutError` explicitly; bound accepted connections to worker count; in `UnixSummaryPublisher`, validate `socket_path.is_absolute()`, catch `peer_uid` errors, and log a warning on non-200 responses.
+
+[P2] 3.7 `WebhookAlertSink` SSRF check skips DNS-resolved IPs, non-global IP ranges, and URL userinfo
+Files:
+- application/apps/server/app/modules/hosted_recovery/infrastructure/alerting.py:20,28-40,80-105
+Details:
+`_validate_webhook_url` returns immediately when `ip_address(host)` raises `ValueError` (lines 35-36), so hostnames resolving to loopback/private/metadata IPs (e.g. `foo.localhost`, `*.internal`, DNS rebinding to `169.254.169.254`) bypass validation. For IP literals, checking `is_loopback | is_link_local | is_private | is_unspecified` misses CGNAT (`100.64.0.0/10`), multicast, and reserved ranges; URL userinfo (`user:pass@host`) is also not rejected.
+Recommended Fix:
+Reject `parsed.username`/`parsed.password` and `*.localhost`/`*.internal` hosts, replace the IP flag list with `not addr.is_global`, and resolve hostnames via `socket.getaddrinfo` before connecting to ensure every resolved address satisfies `addr.is_global`.
+
+[P2] 3.8 Hourly watchdog does not track dirty workspace mutations between captures, delaying 28h overdue alerts by ~24h
+Files:
+- application/apps/server/app/modules/hosted_recovery/infrastructure/scheduler.py:75-84
+- application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:603-640
+Details:
+`evaluate_freshness()` only checks `backup_state.dirty_since`, which is only set on `reconcile_startup()` or `_fail_capture()` — never on normal business mutations. If writes happen shortly after a backup and the next nightly capture fails 24-26h later, `dirty_since` is recorded at failure time rather than mutation time, delaying `backup_overdue` to ~52h after the unprotected write.
+Recommended Fix:
+Mark `dirty_since = COALESCE(dirty_since, now)` when business writes occur or when the hourly watchdog detects live workspace divergence from `protected_business_revision`/`protected_files_generation`.
+
+[P3] 3.9 `DeduplicatingAlertEmitter._active` is mutated without a lock across request and scheduler threads
+Files:
+- application/apps/server/app/modules/hosted_recovery/infrastructure/alerting.py:110-164
+Details:
+`notify_incident` and `notify_recovered` mutate `self._active` from both FastAPI threads and the `WorkspaceBackupScheduler` thread without synchronization.
+Recommended Fix:
+Guard `self._active` mutations with a `threading.Lock` (releasing it before calling `_deliver`).
+
+[P3] 3.10 Tests in `test_h06_scheduler_relay_and_maintenance.py` bypass real relay and recovery-service integration
+Files:
+- application/apps/server/app/modules/hosted_recovery/tests/test_h06_scheduler_relay_and_maintenance.py:137-289
+Details:
+Relay tests use `socket.socketpair` and only call `UnixSummaryPublisher` on a missing path; scheduler tests use `SimpleNamespace` stubs instead of `HostedWorkspaceRecoveryService` / `AdminControlRecoveryService`, which hid Findings 3.1, 3.2, and 3.3.
+Recommended Fix:
+Add integration tests exercising `UnixSummaryPublisher` -> `RecoveryStatusRelayServer` over a real Unix socket and `WorkspaceBackupScheduler` / `AdminControlBackupScheduler` against real recovery services (covering unchanged fast-path ticks and same-day retry after capture failure).
+
+
+================================================================================
+BOUNDARY 4: Frontend UI & Component Tests
+================================================================================
+
+[P1] 4.1 Contract mismatch: `workspace-gate.tsx` checks for `503 maintenance_in_progress`, which the backend never emits
+Files:
+- application/apps/web/src/app/workspace-gate.tsx:31-44,93-98
+- application/apps/server/app/modules/hosted_access/infrastructure/operator_entry.py:132-133
+- application/apps/server/app/modules/hosted_access/api/managed_business.py:58-61,155-156
+- application/apps/server/app/modules/hosted_access/infrastructure/maintenance_notice.py:97-103
+- application/apps/web/src/app/hosted-session-state.ts:52-63
+Details:
+`loadBootstrap()` handles `503` with `code === "maintenance_in_progress"` to render `"Updating your workspace..."`, but no backend route ever emits `maintenance_in_progress` (`is_maintenance_in_progress()` is only called in tests). When `maintenance_operation_id` is set in `access_meta`, `_live_business_readiness()` returns `False`, `ManagedBusiness.admit()` raises `ProviderUnavailable`, and `business_error()` returns `503` with `detail.code = "hosted_session_unavailable"`. `checkHostedResponse()` (`hosted-session-state.ts:52-55`) then matches `/^hosted_(session_|...)/` and calls `pauseHostedSession()`, redirecting the user to `ManagedSecurity`'s generic `"Sign-in is temporarily unavailable"` screen instead of `"Updating your workspace"`.
+Recommended Fix:
+Have the Operator backend check `maintenance_operation_id` and `is_maintenance_in_progress(configuration.maintenance_notice_path)` and return `503` with `{"detail": {"code": "maintenance_in_progress", "message": "Updating your workspace."}}` so `workspace-gate.tsx` receives the expected code without triggering `pauseHostedSession()`.
+
+[P1] 4.2 Draft preservation bug: `Gate` unmounts `<Admitted>{children}</Admitted>` on background refetch errors (including `503 maintenance_in_progress`)
+Files:
+- application/apps/web/src/app/workspace-gate.tsx:163-192
+- application/apps/web/src/app/workspace-scope.ts:23
+Details:
+`Gate` queries `/api/operator/bootstrap` with `staleTime: 0`, `refetchOnReconnect: true`, and `refetchOnWindowFocus: true`. In `@tanstack/react-query` v5, when a background refetch fails while `bootstrap.data` already exists, `bootstrap.isError` becomes `true`. Because line 176 branches on `if (bootstrap.isError)` before checking `bootstrap.data`, any `503 maintenance_in_progress` (or transient `503`) during a focus/reconnect refetch immediately unmounts `<Admitted>{children}</Admitted>`, discarding all in-memory form drafts — contradicting both the comment at lines 171-172 and the alert text at line 96 (`"Unfinished drafts are preserved on this device"`).
+Recommended Fix:
+When `bootstrap.data?.state === "ready"` and `bootstrap.isError` is a refetch error (other than `RecoveryModeActiveError`), keep `<Admitted>{children}</Admitted>` mounted (render a non-destructive banner/overlay or hide with `hidden`/`inert` like `ManagedSecurity`) so form state is preserved.
+
+[P1] 4.3 Stale React state closure in `admin/main.tsx` drops `supportContact` on first Google sign-in failure
+Files:
+- application/apps/web/src/admin/main.tsx:52,75-77,115-119
+Details:
+`google()` calls `setSupport(start.supportContact)` at line 77, which does not update the `support` value captured in the current async closure (`""` on initial render). If `signInWithPopup` or `/auth/complete` throws on the first attempt, line 117 reads the stale `support` (`""`) and displays `"or contact the platform owner"` instead of `start.supportContact`.
+Recommended Fix:
+Capture `let supportContact = support;` before the `try`, assign `supportContact = start.supportContact;` at line 77, and interpolate `${supportContact || "the platform owner"}` in the `catch` block at line 117.
+
+[P2] 4.4 `central/main.tsx` never populates `supportContact` on initial load, email-link flows, or `/auth/start` errors
+Files:
+- application/apps/web/src/central/main.tsx:79,108-116,145-186,317-319
+Details:
+`support` is only set inside `google()` after `GET /auth/start?flow=...&method=google` succeeds (line 116). On initial load, on `!flow && !emailMode`, when `/auth/start` fails, or throughout the email-link flow (`POST /auth/email-link` and `POST /auth/email/continue`), `support` stays `""`, so line 318 always falls back to `"your workspace administrator"` instead of the configured `supportContact` (D4 / H06.5).
+Recommended Fix:
+Embed `supportContact` in the HTML served by `central_identity.py:html()` (e.g. `<meta name="epm-support-contact" content="...">`, matching `epm-administrator-contact` in `operator_identity_runtime.py:96-97`) and initialize `support` state from that meta tag on mount.
+
+[P2] 4.5 `HostedMaintenanceBanner` only fetches `/api/hosted/settings` once on mount and never updates
+Files:
+- application/apps/web/src/app/hosted-settings.tsx:97-133
+- application/apps/web/src/app/shell.tsx:468
+Details:
+`HostedMaintenanceBanner` fetches `/api/hosted/settings` in a `useEffect` depending only on `[hosted]`. An operator with an already-open tab will never see a newly announced maintenance window, will never see an `announced` notice transition to `in_progress` (`"Updating your workspace"`), and will continue seeing a stale banner after maintenance ends until a full page reload.
+Recommended Fix:
+Poll `/api/hosted/settings` on a bounded interval while `document.visibilityState === "visible"` (plus `focus`/`visibilitychange`, like `HostedChanges`), or share a TanStack Query (`refetchInterval: 60_000`) between `HostedMaintenanceBanner` and `HostedSettings`.
+
+[P2] 4.6 Admin-lite Cohort Overview card has blank `total` rendering, inconsistent protection-health bucketing, filtered-page mislabeling, and hardcoded maintenance text
+Files:
+- application/apps/web/src/admin/AdminWorkspace.tsx:755-756,807-848
+Details:
+- Undefined/null `total` (line 813): `listData?.directory.data?.matching_total` can be `undefined` or `null` while loading or on error, rendering `"Cohort:  operators (0 active, 0 needing attention)"`.
+- Inconsistent protection bucketing (lines 818-837): the two `items.filter(...)` predicates are neither mutually exclusive nor exhaustive (`state === "ready"` with `data === null` or `data.state === "unknown"` is counted in neither bucket; `data.state === "healthy"` with `data.status === "degraded"` is counted in both; `data.state === "overdue"` with `data.status === "protected"` is miscounted as protected).
+- Filtered/paginated slice labeled as cohort (lines 813-838): `items` is only the current filtered page (`limit=20`), so counts reflect only the current page/filter rather than the full cohort.
+- Hardcoded maintenance status (line 846): `"Shared Pilot 0 announced window (Free pilot)"` is static text rather than reflecting live maintenance notice state.
+Recommended Fix:
+Guard `typeof total === "number"`; classify each operator with a single mutually exclusive helper matching `formatProtectionLabel()` in `admin-api.ts:207-247`; either return cohort-wide aggregates from the backend or label the counts as current-view/page counts; and source maintenance window status from backend data (or label it as policy).
+
+[P2] 4.7 Component test gaps for H06.5 UI flows
+Files:
+- application/apps/web/component-tests/hosted-settings.spec.ts:153-190
+- application/apps/web/component-tests/hosted-settings-fixture.tsx:59-65
+- application/apps/web/component-tests/admin-lite.spec.ts:225-266
+Details:
+`HostedMaintenanceBanner` is never rendered in `hosted-settings-fixture.tsx` or any component test; `workspace-gate.tsx` `503 maintenance_in_progress` handling and draft preservation are untested; `admin/main.tsx` and `central/main.tsx` support-contact error rendering is untested; and `admin-lite.spec.ts:225-266` only tests 1 `ready_for_claim` operator (no 0-operator, `matching_total: null`, or mixed protection/setup states).
+Recommended Fix:
+Add `<HostedMaintenanceBanner />` (`announced` + `in_progress`), `workspace-gate` maintenance draft-preservation, `admin`/`central` support-contact error-state, and Admin-lite zero/mixed-operator edge-case tests.
+
+
+================================================================================
+BOUNDARY 5: GCP Cloud Plan, Qualification Scripts, Reports & Runbooks
+================================================================================
+
+[P0] 5.1 `qualify_h06_image_schema.py` fakes/stubs multiple `image_schema.json` cases and emits a component-only PASS as release qualification
+Files:
+- application/deploy/hosted-mvp/gcp/qualify_h06_image_schema.py:50-68,113-130,147-156,218-240,280-288
+- docs/hosting/qualification/reports/HOSTED_MVP_H06_6_IMAGE_ALL_STORES.json:65-78
+- docs/hosting/design/HOSTED_MVP_H06_DESIGN.md:119
+Details:
+- `_case_wrong_component_manifest()` (lines 147-156) writes `{"component": "admin"}` to a temp JSON file, reads it back, checks `if loaded["component"] == "operator"`, and returns `passed` — a pure tautology that invokes zero production admission, installer, or manifest-verification code.
+- `_case_installed_without_checkout()` (lines 218-240) sets `env={"PYTHONPATH": str(APPLICATION_ROOT / "apps" / "server"), "PATH": "/usr/bin:/bin"}` (line 236), executing directly against the live repository checkout — the exact opposite of `image_schema.md:37` ("with checkout/PYTHONPATH absent").
+- `_case_build_separate_artifacts()` (lines 50-68) never builds any OCI image or Host Agent archive; it only checks substrings in `Dockerfile.admin`/`Dockerfile.operator` and records `"image": "production_entrypoints_h06_6"` (line 283) instead of immutable built image digests. `HOSTED_MVP_H06_6_IMAGE_ALL_STORES.json:65` is `"level": "component"` only (`image_schema.md:5` states a component fixture cannot qualify an installed release; no `docker_linux` proof exists).
+- `_case_existing_store_read_only()` (lines 113-130) only runs `validate_schema()` on `HostedStore.ADMIN` rather than repeating `initialize_store()` across all 6 stores (`image_schema.md:32`).
+Recommended Fix:
+Implement the `docker_linux` qualification runner against built immutable Admin/Operator OCI images and Host Agent archive, invoke real admission/manifest rejection in `_case_wrong_component_manifest`, run installed entrypoints with checkout/`PYTHONPATH` absent, test idempotent re-initialization across all 6 stores, and do not mark H06.6 image promotion Done until `docker_linux` passes.
+
+[P0] 5.2 `qualify_h06_pilot0.py` stubs/hardcodes `operations_economics.json` cases and emits `"level": "manual"` PASS with an unfilled worksheet and stale pre-H05.9 sizing
+Files:
+- application/deploy/hosted-mvp/gcp/qualify_h06_pilot0.py:93-151,286-318,358-379,382-427,430-439,442-486,489-505,598-615
+- docs/hosting/qualification/reports/HOSTED_MVP_H06_9_OPERATIONS_ECONOMICS.json:56,69
+- docs/hosting/qualification/reports/PILOT_0_COST_AND_OPS_WORKSHEET.md:3-7,36-48
+- docs/hosting/design/HOSTED_MVP_H06_DESIGN.md:3,122
+Details:
+- `_case_runtime_repair_support()` (lines 430-439) only checks `runbook.is_file()` and `hasattr(repair_runtime, "CleanRuntimeRepairer")`, never running `CleanRuntimeRepairer`, and hardcodes `"no_admin_offline_decrypt_bypass": True`.
+- `_case_seed_failure_disabled()` (lines 358-379) only calls `create_assignment(..., seed=("synthetic", "pilot0-small-v1"))`, checks `PENDING`, and hardcodes `"stays_disabled_until_verified": True` / `"no_auto_replay_over_live_data": True` without ever running or interrupting a seed.
+- `_case_manual_add_claim_disable()` (lines 286-318) only creates two `PENDING` assignments; it never verifies readiness/protection, invitation/claim, enable, disable, or stale-session rejection (`operations_economics.md:26`).
+- `_case_gross_spend_admin_minutes()` (lines 489-505) hardcodes `estimated_monthly_gross_micros = 56_210_000`, `observed_rehearsal_gross_micros = 0`, and `rehearsal_admin_minutes = 15`, while `PILOT_0_COST_AND_OPS_WORKSHEET.md:3-7,36-48` still has `<... fill before H06.10>` placeholders and `*TBD*` rows.
+- `_case_announced_maintenance_restart()` (lines 382-427) only calls `read_maintenance_notice()` on a temp file (no container drain/restart or draft preservation), and `_case_backup_alert_support()` (lines 442-486) only invokes `DeduplicatingAlertEmitter` with a mock `_opener` (no actual capture outage/watchdog/recovery).
+- `_free_budget()` / `_capacity_profile()` (lines 93-151) hardcode synthetic pre-H05.9 ceilings (`128/16/64 MiB`, `4096/1024/1024` inodes) and dummy hashes (`"a"*64`..`"f"*64`) instead of loading `HOSTED_MVP_H05_9_RECOVERY_SIZING.json` (`185/17/109 MiB`, `6400/768/3328` inodes).
+Recommended Fix:
+Replace the stubbed checks with real workflow/rehearsal verification bound to `HOSTED_MVP_H05_9_RECOVERY_SIZING.json`, capture real observed rehearsal spend/minutes and owner/credit facts in `PILOT_0_COST_AND_OPS_WORKSHEET.md`, and do not claim `"level": "manual"` PASS / H06.9 Done from an in-memory unit test.
+
+[P0] 5.3 Prerequisite live GCP 17-case `recovery.json` and 4-browser positive `identity_handoff.json` were silently dropped while `HOSTED_MVP_H06_DESIGN.md` declares H06.1-H06.9 complete
+Files:
+- docs/hosting/design/HOSTED_MVP_H06_DESIGN.md:3,16,36,114,119,122,136
+- docs/hosting/qualification/reports/HOSTED_MVP_H06_6_CHECKPOINT_2026-11-23.md:34-35
+- application/deploy/hosted-mvp/gcp/qualify_h06_live_r2_kms.py:164-352
+Details:
+`HOSTED_MVP_H06_DESIGN.md:16,36,136` requires executing live GCP 17-case `recovery.json` and 4-browser-context positive `identity_handoff.json` before H06.10. H06.1 (line 114) deferred both to after H06.6; H06.6 (line 119) ran only `qualify_h06_live_r2_kms.py` (3 basic proxy/engine smoke cases — not the 17-case `recovery.json` covering corrupt business DB recovery mode, `repair_runtime`, corrupt `admin.sqlite`, whole-host loss) and deferred 4-browser `identity_handoff.json` to H06.9/H06.10; H06.9 (line 122) was marked Done without running either proof.
+Recommended Fix:
+Re-open these gates in `HOSTED_MVP_H06_DESIGN.md` and execute both live GCP 17-case `recovery.json` and deployed 4-browser positive `identity_handoff.json` before H06.10.
+
+[P1] 5.4 `epm_host_guardian_containment` log-based metric filters for the wrong event name and will never fire
+Files:
+- application/deploy/hosted-mvp/gcp/cloud_plan.py:365-374
+- docs/hosting/runbooks/H06_7_GCP_OBSERVABILITY_AND_BUDGET_RUNBOOK.md:82-85
+- docs/hosting/runbooks/H06_8_INCIDENT_SUPPORT_AND_RETIREMENT_RUNBOOK.md:14
+(Compare: application/apps/server/app/modules/host_agent/infrastructure/supervisor.py:74-81)
+Details:
+`cloud_plan.py:371-372` (and the already-provisioned live GCP metric per `HOSTED_MVP_H06_7_CHECKPOINT_2026-11-23.md:32`) filters on `jsonPayload.event="host_guardian_containment" OR textPayload:"host_guardian_containment"`. However, `supervisor.py:78` emits `"runtime_containment_attention"`. No code in the repo emits `"host_guardian_containment"`, so containment alerts are completely blind.
+Recommended Fix:
+Update `cloud_plan.py:371-372`, both runbooks, and the live GCP metric filter to match `runtime_containment_attention` (or standardize `supervisor.py` and its tests on `host_guardian_containment`).
+
+[P1] 5.5 `cloud_plan.py` alert policies use invalid `ALIGN_MEAN` aligner for DELTA counter and BOOL uptime metrics, and omit inode headroom alerting
+Files:
+- application/deploy/hosted-mvp/gcp/cloud_plan.py:261-290,406-458
+Details:
+- `_alert_policy()` (lines 281-286) hardcodes `"perSeriesAligner": "ALIGN_MEAN"` for every policy. Google Cloud Monitoring rejects `ALIGN_MEAN` on `DELTA` log-based counter metrics (`backup_alerts` / `containment_alerts` at lines 407-418; requires `ALIGN_SUM`/`ALIGN_DELTA`/`ALIGN_RATE`) and on `BOOL` uptime metrics (`host_loss_heartbeat` `monitoring.googleapis.com/uptime_check/check_passed` at lines 448-457; requires `ALIGN_FRACTION_TRUE`/`ALIGN_NEXT_OLDER`, and should filter by `metric.labels.check_id`).
+- No inode headroom alert policy is generated despite D3 (`HOSTED_MVP_H06_DESIGN.md:56`) requiring `disk/inode >80%` alerting (`disk_headroom` monitors byte `percent_used` only).
+Recommended Fix:
+Parameterize `perSeriesAligner` per metric kind (`ALIGN_SUM` for log-based counters, `ALIGN_FRACTION_TRUE` for `check_passed`, `ALIGN_MEAN` for host gauges), bind `host_loss_heartbeat` to the check ID, and add an inode-headroom alert condition.
+
+[P1] 5.6 `epm_hosted_recovery_alerts` log-based metric fires false failure alerts on `backup_recovered` INFO logs
+Files:
+- application/deploy/hosted-mvp/gcp/cloud_plan.py:356-364
+- docs/hosting/runbooks/H06_7_GCP_OBSERVABILITY_AND_BUDGET_RUNBOOK.md:77-80
+(Compare: application/apps/server/app/modules/hosted_recovery/infrastructure/alerting.py:71-74)
+Details:
+`StructuredLogAlertSink.emit()` (`alerting.py:73-74`) logs `"hosted_recovery_alert %s"` at `logging.INFO` when `alert_kind == "backup_recovered"`. Because `epm_hosted_recovery_alerts` filters on `jsonPayload.event="hosted_recovery_alert" OR textPayload:"hosted_recovery_alert"` with no severity or `alert_kind` exclusion, every recovery notice triggers `EPM Backup Overdue or Failure Alert`.
+Recommended Fix:
+Add `AND severity>=WARNING` (and/or `AND NOT textPayload:"\"backup_recovered\""`) to the log filter in `cloud_plan.py`, the runbook, and the live GCP metric.
+
+[P1] 5.7 `gcloud billing budgets create` passes project ID instead of numeric project number to `--filter-projects`
+Files:
+- application/deploy/hosted-mvp/gcp/cloud_plan.py:390-404
+- docs/hosting/runbooks/H06_7_GCP_OBSERVABILITY_AND_BUDGET_RUNBOOK.md:118-126
+Details:
+Line 398 emits `--filter-projects=projects/` + `target.project` (a string project ID). The GCP Cloud Billing Budgets API requires `projects/<PROJECT_NUMBER>` and rejects project IDs.
+Recommended Fix:
+Accept a validated numeric `project_number` parameter in `observability_plan()` and pass `--filter-projects=projects/<project_number>` (and document resolving `projectNumber` via `gcloud projects describe` in `H06_7_GCP_OBSERVABILITY_AND_BUDGET_RUNBOOK.md`).
+
+[P1] 5.8 `H06_8_ANNOUNCED_MAINTENANCE_WINDOW_RUNBOOK.md` JSON schema fails `MaintenanceNoticeDocument` validation and silently disables maintenance UX
+Files:
+- docs/hosting/runbooks/H06_8_ANNOUNCED_MAINTENANCE_WINDOW_RUNBOOK.md:22-30,63
+(Compare: application/apps/server/app/modules/hosted_access/infrastructure/maintenance_notice.py:25-32)
+Details:
+The runbook instructs operators to write ISO-8601 strings for `window_start_utc`/`window_end_utc` (lines 26-27) and `"message": ""` (line 63). `MaintenanceNoticeDocument` requires integer epoch-ms (`Count | None`) and non-empty `Explanation | None`, so following the runbook raises `ValidationError` and fails safe to `maintenance_notice_unavailable` (operators never see the banner or `Updating your workspace`).
+Recommended Fix:
+Update the runbook examples to integer epoch-ms timestamps and `"message": null` (or file deletion), or add ISO-8601 parsing to `MaintenanceNoticeDocument`.
+
+[P2] 5.9 `qualify_h06_observability.py` & `HOSTED_MVP_H06_7_OBSERVABILITY_AND_ALERTS.json` report PASS from local in-memory simulation while live GCP alerts/budgets/Ops Agent remain unprovisioned
+Files:
+- application/deploy/hosted-mvp/gcp/qualify_h06_observability.py:132-182
+- docs/hosting/qualification/reports/HOSTED_MVP_H06_7_OBSERVABILITY_AND_ALERTS.json:1-36
+- docs/hosting/qualification/reports/HOSTED_MVP_H06_7_CHECKPOINT_2026-11-23.md:33
+Details:
+`qualify_h06_observability.py` runs `observability_plan()` in memory with placeholder email/billing account and a local `_recording_opener` callback, yet writes `"status": "passed"` even though the live notification channel, 6 alert policies, uptime check, `$250/mo` Billing Budget, and Ops Agent install on `epm-h02-host` have not been provisioned (`HOSTED_MVP_H06_7_CHECKPOINT_2026-11-23.md:33`).
+Recommended Fix:
+Mark this report explicitly as `"level": "component"` (plan + synthetic sink only) and require a live GCP verification check after provisioning owner bindings and Ops Agent.
+
+[P2] 5.10 `ops_agent_config()` applies `parse_json` (`time_key: timestamp`) to incompatible Docker JSON and systemd journal streams, with no redaction filter
+Files:
+- application/deploy/hosted-mvp/gcp/cloud_plan.py:230-258
+Details:
+Docker's json-file driver emits `{"log": ..., "stream": ..., "time": ...}` (timestamp key is `time`, not `timestamp`), and `systemd_journald` emits non-JSON lines from system units; routing both through `parse_json` with `time_key: timestamp` will fail/misparse timestamps. There is also no secret-redacting processor despite D3 (`HOSTED_MVP_H06_DESIGN.md:56`).
+Recommended Fix:
+Split `epm_docker_json` (`time_key: time`) and `epm_systemd` into separate pipelines with appropriate parsers, and add explicit redaction/exclusion processors or document that redaction is enforced strictly at the application logger.
+
+[P3] 5.11 Unrelated constant `REQUIRED_CLI_ARGS` reused as expected alert count
+Files:
+- application/deploy/hosted-mvp/gcp/qualify_h06_pilot0.py:479
+Details:
+`len(delivered) != REQUIRED_CLI_ARGS` reuses the CLI argument count constant (`2`) to assert 2 delivered alerts.
+Recommended Fix:
+Define a dedicated `EXPECTED_DELIVERED_ALERTS = 2` constant.
