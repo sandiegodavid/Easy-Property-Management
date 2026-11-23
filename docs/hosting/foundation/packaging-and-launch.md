@@ -28,7 +28,7 @@ marker closure; the actual Linux resolution produced 35 hash-locked wheels.
 Recorded build inputs include Python 3.14.10 slim Bookworm AMD64 and setuptools 84.0.0.
 The Debian container userspace and Ubuntu host kernel are separate pins, as are
 Desktop-emulated AMD64 and native Linux execution. Exact hashes are in the
-[packaging evidence](../qualification/reports/HOSTED_MVP_H02_4_VALIDATION.json), not
+[packaging evidence](../qualification/reports/HOSTED_MVP_H02_11_VALIDATION.json), not
 an instruction to resolve a newer moving tag.
 
 Preparation allowlists runtime Python, declared schema resources and public assets.
@@ -80,7 +80,7 @@ Admin/operator workflow acceptance.
 
 ## Artifact and implementation references
 
-The [native installed-candidate record](../qualification/reports/HOSTED_MVP_H02_9_VALIDATION.json)
+The [native installed-candidate record](../qualification/reports/HOSTED_MVP_H02_11_VALIDATION.json)
 pins the retained Admin/Operator registry digests, agent archive, dependency closure,
 Caddy/cloudflared binaries and installed probes. Those artifacts were not relabelled
 as final-source complete releases by later source-only tests. Final owners must

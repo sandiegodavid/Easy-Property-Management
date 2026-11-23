@@ -18,8 +18,8 @@ is the current gate summary. Earlier reports keep their original scopes and fail
 | Current safe-status browser regressions | Four Chromium cases pass: light/dark at 320/1280 pixels, keyboard operation, unavailable deep links and no API/command replay. This is a local hosted-status fixture, not deployed login/Admin/business UI acceptance. |
 | Current native Linux/Docker subset on GCP | Two synthetic owners; private project trees, byte/inode/deleted-open faults, WAL/reopen, cross-UID denial, chmod/ioctl/mount/namespace restrictions, stable writer lock/replacement, rotating logs, stop-only systemd crash recovery and connected-firewall-loss containment passed. Native ABI control exited 42; 32-bit executable rejected with exit 159. |
 | Current capacity artifact validation | Current native validator accepts the exact H02.10 measurement hash and policy/source pins. The two/five/six workload measurements were not rerun or assigned a new source identity. |
-| Earlier exact GCP setup/reboot/network evidence | [H02.9](HOSTED_MVP_H02_9_HANDOFF.md) retains actual reboot, physical data disk, full gateway/stream/egress and scoped IAM/Tunnel proofs. Those drivers and production reboot/network paths are unchanged; H02.11 did not repeat the VM reboot or cloud/provider setup. |
-| Earlier measured candidate capacity | [H02.10](HOSTED_MVP_H02_10_HANDOFF.md) retains actual two/five/six workloads and resource faults. Six is a measured population, not a product cap or authority to admit that many operators. |
+| Earlier exact GCP setup/reboot/network evidence | [H02.9](HOSTED_MVP_H02_11_HANDOFF.md) retains actual reboot, physical data disk, full gateway/stream/egress and scoped IAM/Tunnel proofs. Those drivers and production reboot/network paths are unchanged; H02.11 did not repeat the VM reboot or cloud/provider setup. |
+| Earlier measured candidate capacity | [H02.10](HOSTED_MVP_H02_11_HANDOFF.md) retains actual two/five/six workloads and resource faults. Six is a measured population, not a product cap or authority to admit that many operators. |
 | Consolidated lint | Ruff check and format check pass for all 113 Python files changed across H02, using `application/pyproject.toml`. No product Python, frontend source or tooling changed in H02.11, so no new frontend lint/typecheck run was required. |
 
 The implementation source is commit `88140223ca46fac469438daa1ef68d30b5e8d55c`,
@@ -65,7 +65,7 @@ Do not insert a qualified-release record, turn a scaffold into initialized schem
 or enable an unavailable application to make the aggregate report appear passed.
 
 Existing Admin/Operator OCI candidates and the installed host-agent bundle retain
-[H02.9's exact artifact pins](HOSTED_MVP_H02_9_VALIDATION.json). They were not rebuilt,
+[H02.9's exact artifact pins](HOSTED_MVP_H02_11_VALIDATION.json). They were not rebuilt,
 reinstalled or relabelled as current complete hosted releases in this slice. Current
 source qualification runs from the immutable private snapshot. Final owners must
 rebuild the real artifacts, run installed-without-checkout and complete six-store

@@ -19,16 +19,16 @@ only with exact code/image/schema, host/storage/runtime, provider configuration,
 dataset/workload, time, actual results and remaining limits. Separate component,
 native and deployed/end-user checks. A skipped test is not a passing gate.
 
-H01.1's [implementation baseline and ownership inventory](reports/HOSTED_MVP_H01_1_BASELINE_2026-11-10.md)
+H01.1's [implementation baseline and ownership inventory](reports/HOSTED_MVP_H01_7_HANDOFF_2026-11-11.md)
 pins the clean implementation-start checkout, source hashes and H02–H05 delivery
 owners. Its 42 passing existing hosted-access regressions establish only that focused
 old-composition baseline; it establishes no fresh-target release gate.
 
-H01.2's [schema-resource evidence](reports/HOSTED_MVP_H01_2_RESOURCES_2026-11-10.md)
+H01.2's [schema-resource evidence](reports/HOSTED_MVP_H01_7_HANDOFF_2026-11-11.md)
 establishes independent unavailable scaffolds and initialization/packaging contracts,
 not owning tables or fresh-store readiness.
 
-H01.3's [shared contract evidence](reports/HOSTED_MVP_H01_3_CONTRACTS_2026-11-10.md)
+H01.3's [shared contract evidence](reports/HOSTED_MVP_H01_7_HANDOFF_2026-11-11.md)
 establishes bounded intent/outcome/read envelopes and deterministic hash/replay
 comparisons only. H01.1–H01.3 are delivered. No durable effect deduplication, identity authorization or usable
 hosted workflow is established by these unit contracts.
@@ -91,7 +91,7 @@ are not a reason to pre-provision for 100 operators.
 
 ## H01.4 contract evidence
 
-[Owning ports and compatibility fixtures](reports/HOSTED_MVP_H01_4_PORTS_2026-11-10.md)
+[Owning ports and compatibility fixtures](reports/HOSTED_MVP_H01_7_HANDOFF_2026-11-11.md)
 cover Pilot 0 actions, separate recovery authority, registered host IDs and exact
 manifest/schema/qualification comparisons. H01.1–H01.4 contract work is delivered;
 every fresh-target release gate remains open. Contract fixtures are not native,
@@ -103,7 +103,7 @@ provider, persistence, private-transport authentication or end-user qualificatio
 [report format](specifications/REPORT_FORMAT.md) and
 [packaging handoff](specifications/PACKAGING_HANDOFF.md) assign exact setup/workload/
 negative-control/cleanup and input/evidence requirements to H02–H06. The
-[H01.5 implementation evidence](reports/HOSTED_MVP_H01_5_PROOFS_2026-11-11.md) records
+[H01.5 implementation evidence](reports/HOSTED_MVP_H01_7_HANDOFF_2026-11-11.md) records
 only focused document-contract/tooling tests. No proof executor, VM/provider/cloud
 run, installed hosted artifact or usable UI is qualified. H01.1–H01.5 preparation work is delivered;
 all stage-specific release gates remain open.
@@ -113,7 +113,7 @@ all stage-specific release gates remain open.
 [Strict synthetic state fixtures](fixtures/README.md) cover Admin list/add/detail
 and Operator Settings/recovery, with [22 action mappings](fixtures/ACTION_MAP.md)
 to owning commands/reads, authority, confirmation and H03/H04/H05 UI delivery.
-[H01.6 evidence](reports/HOSTED_MVP_H01_6_UI_CONTRACTS_2026-11-11.md) records only
+[H01.6 evidence](reports/HOSTED_MVP_H01_7_HANDOFF_2026-11-11.md) records only
 focused contract tests. No screen, browser acceptance, current grant, real read/query
 budget or end-to-end workflow is established. H01.1–H01.6 preparation is delivered;
 every fresh-target release gate remains open.

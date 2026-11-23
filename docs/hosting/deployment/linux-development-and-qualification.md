@@ -4,7 +4,7 @@
 
 Use synthetic data only. These tools cannot enroll an operator, enable ingress or
 promote a release. Mac Docker Desktop/emulated AMD64, native ARM64 Lima and native
-AMD64/GCP are separate evidence scopes. The [H02.8 handoff](../qualification/reports/HOSTED_MVP_H02_8_HANDOFF.md)
+AMD64/GCP are separate evidence scopes. The [H02.8 handoff](../qualification/reports/HOSTED_MVP_H02_11_HANDOFF.md)
 records actual results and remaining gates. Keep failed laboratories and raw logs.
 
 ## Mac Docker development

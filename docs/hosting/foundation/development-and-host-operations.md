@@ -76,7 +76,7 @@ Do not run fixtures using the same unit names while installing permanent service
 | Closed public check | `h02-check.epmdemo.xyz` returned HTTP 403 with connector running; a stopped connector is not that check |
 | Final recorded state | VM stopped/TERMINATED, same retained data disk attached, no running fixture containers before stop |
 
-[Exact setup/artifact/reboot pins](../qualification/reports/HOSTED_MVP_H02_9_VALIDATION.json)
+[Exact setup/artifact/reboot pins](../qualification/reports/HOSTED_MVP_H02_11_VALIDATION.json)
 and [final source/stop receipt](../qualification/reports/HOSTED_MVP_H02_11_VALIDATION.json)
 retain immutable identities, kernel/binary hashes and original observations. Resuming
 the host requires rechecking actual protected services, mount/enforcement and closed
@@ -92,7 +92,7 @@ and fresh capacity checks still apply to retained labs and disabled allocations.
 
 The separately approved old `epm-demo` VM ID `8394063058170166658` and sole 30-GiB boot
 disk ID `8124117985590132098` were deleted only after replacement qualification and
-exact-ID rechecks. The [reset receipt evidence](../qualification/reports/HOSTED_MVP_H02_9_VALIDATION.json)
+exact-ID rechecks. The [reset receipt evidence](../qualification/reports/HOSTED_MVP_H02_11_VALIDATION.json)
 records absent old IDs and preserved replacement/data disk. Project/domain, provider
 settings, unrelated resources, off-host backups and Lima baselines were preserved.
 Old demo URLs no longer have that VM behind them. Do not replay this completed reset

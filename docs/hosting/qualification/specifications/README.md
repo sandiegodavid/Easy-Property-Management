@@ -84,5 +84,5 @@ credentials; this interface does not imply that setup is already implemented.
   JSON validation proves consistency only and does not authenticate pins or results.
 
 See the [report format](REPORT_FORMAT.md), [packaging handoff](PACKAGING_HANDOFF.md)
-and [quota reuse boundary](../HOSTED_PROJECT_QUOTA_REUSE.md). Historical imports stay
+and [quota reuse boundary](../reports/HOSTED_MVP_H02_11_HANDOFF.md). Historical imports stay
 byte-for-byte unchanged; new environment/source pins require new reports.

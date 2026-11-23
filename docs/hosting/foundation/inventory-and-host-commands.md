@@ -109,8 +109,8 @@ Code: [dispatch contracts](../../../application/apps/server/app/modules/host_age
 [Unix transport](../../../application/apps/server/app/modules/host_agent/infrastructure/unix_transport.py),
 [owning schema runner](../../../application/apps/server/app/platform/hosted_schema.py).
 
-The [structural evidence](../qualification/reports/HOSTED_MVP_H02_2_VALIDATION.json)
-and [effect evidence](../qualification/reports/HOSTED_MVP_H02_3_VALIDATION.json)
+The [structural evidence](../qualification/reports/HOSTED_MVP_H02_11_VALIDATION.json)
+and [effect evidence](../qualification/reports/HOSTED_MVP_H02_11_VALIDATION.json)
 retain original transactions, source pins and query bounds. Structural validation
 used at most six target-connection statements in its tested case; original-result
 lookup stayed unchanged after adding another operator. These are specific component

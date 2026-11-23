@@ -1,6 +1,6 @@
 # Protected hosted launch and unavailable status
 
-[Tool source](../../../application/deploy/hosted-mvp/launch) · [Foundation guides](../foundation/README.md)
+[Tool source](../../../application/deploy/hosted-mvp/README.md) · [Foundation guides](../foundation/README.md)
 
 Hosted launch supplies fixed Admin and Operator entry points and a safe unavailable page.
 It does not enable business routes, login, customer admission or the Admin portal.

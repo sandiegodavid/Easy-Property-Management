@@ -23,7 +23,7 @@ Dated observations, original source/artifact pins and machine-readable results a
 preserved in the [evidence index](../qualification/reports/README.md#infrastructure-evidence-by-topic).
 Their numbered filenames identify provenance, not a required reading order.
 
-The [archived planning snapshot](../archive/HOSTED_MVP_H02_PLANNING_2026-11-13.md)
+The [archived planning snapshot](../design/HOSTED_MVP_H02_DESIGN.md)
 retains the earlier ordered plan. Use current guides for behavior and operations;
 use historical reports only with their recorded source, platform and scope.
 

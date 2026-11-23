@@ -6,10 +6,10 @@ Part of the accepted HOSTED-001 design. Requirements here do not establish imple
 
 #### H02 project-quota reuse contract
 
-Use the [selective quota import](../../qualification/HOSTED_PROJECT_QUOTA_REUSE.md),
+Use the [selective quota import](../../qualification/reports/HOSTED_MVP_H02_11_HANDOFF.md),
 from `Admin_UI_Workflow` at `cba6a7bf2561de06634abbddff0b60782949e6fc`, as an
 implementation input rather than rebuilding the low-level Linux quota work. The
-[import manifest](../../qualification/PROJECT_QUOTA_IMPORT_MANIFEST.json) records exact
+[import manifest](../../qualification/reports/HOSTED_MVP_H02_11_VALIDATION.json) records exact
 upstream blobs/hashes and unchanged historical evidence. Importing these files did
 not implement H02, register a runtime capability or qualify project-backed sources.
 

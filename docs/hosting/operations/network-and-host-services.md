@@ -6,8 +6,8 @@ This is a network/service integration and isolated qualification runbook, **not*
 permission to enable operators. The original component/native ARM64 results are dated
 evidence; the [foundation guide](../foundation/networking-and-access.md) indexes later
 native GCP checks and the remaining identity boundaries.
-See the [handoff and validation matrix](../qualification/reports/HOSTED_MVP_H02_6_HANDOFF.md)
-and [final source/result manifest](../qualification/reports/HOSTED_MVP_H02_6_FINAL_VALIDATION.json).
+See the [handoff and validation matrix](../qualification/reports/HOSTED_MVP_H02_11_HANDOFF.md)
+and [final source/result manifest](../qualification/reports/HOSTED_MVP_H02_11_VALIDATION.json).
 [Protected launch](../deployment/protected-launch.md) and [GCP setup](../deployment/gcp-host-setup.md)
 cover their separate composition and installation procedures.
 

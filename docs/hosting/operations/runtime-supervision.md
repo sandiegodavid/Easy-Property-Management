@@ -4,8 +4,8 @@
 
 This is a candidate host boundary, not a deployed application. H02.7 owns the fresh
 hosted composition; H03–H05 own source identity and recovery. Normal hosted startup
-and customer ingress remain unavailable. Use the [handoff and validation matrix](../qualification/reports/HOSTED_MVP_H02_5_HANDOFF.md)
-for delivered scope and the [native result](../qualification/reports/HOSTED_MVP_H02_5_NATIVE.json)
+and customer ingress remain unavailable. Use the [handoff and validation matrix](../qualification/reports/HOSTED_MVP_H02_11_HANDOFF.md)
+for delivered scope and the [native result](../qualification/reports/HOSTED_MVP_H02_11_VALIDATION.json)
 for tested sources, kernel, image and observations.
 
 ## Runtime ownership

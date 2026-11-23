@@ -2,7 +2,6 @@
 
 Reviewed November 22, 2026, following code review fixes in commit `63fd487a` (26 findings resolved from [HOSTED_MVP_H03_54be42cd_REVIEW_COMMENTS.txt](../../../pending_code_review_comments/HOSTED_MVP_H03_54be42cd_REVIEW_COMMENTS.txt)). **H03.12 identity-only qualification and protected configuration sealing are complete.** Business projection selection and H04/H05-owned deployed workspace-session, eligible-claim, and recovery step-up cases remain explicitly `unavailable` for H04/H05.
 
-- Prior review: [HOSTED_MVP_H03_12_EXIT_REVIEW_2026-11-21.md](HOSTED_MVP_H03_12_EXIT_REVIEW_2026-11-21.md)
 - Component proof report: [HOSTED_MVP_H03_12_COMPONENT_PROOF_2026-11-22.json](HOSTED_MVP_H03_12_COMPONENT_PROOF_2026-11-22.json)
 - Component proof assertions: [HOSTED_MVP_H03_12_COMPONENT_ASSERTIONS_2026-11-22.json](HOSTED_MVP_H03_12_COMPONENT_ASSERTIONS_2026-11-22.json)
 - Operations runbook: [identity-qualification-and-operations.md](../../operations/identity-qualification-and-operations.md)

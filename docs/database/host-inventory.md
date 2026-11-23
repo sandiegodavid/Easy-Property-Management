@@ -10,7 +10,7 @@ In this guide: [Host identity](#host_identity) · [Operator principals](#operato
 
 H02.2 delivers the [six-table current baseline](schema-resources.md#host-inventory)
 and separate protected metadata binding. H02.3 adds the
-[private command/reservation boundary](../hosting/qualification/reports/HOSTED_MVP_H02_3_HANDOFF.md).
+[private command/reservation boundary](../hosting/qualification/reports/HOSTED_MVP_H02_11_HANDOFF.md).
 Native verification and Docker/gateway effects remain later slices; schema creation
 itself creates no operator resources.
 

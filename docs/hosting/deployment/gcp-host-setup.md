@@ -5,7 +5,7 @@
 These tools prepare an isolated GCP qualification host. They do not enroll an
 operator, publish a qualified release or authorize business ingress. Retain raw logs,
 failed labs, exact artifacts and source manifests outside Git. The
-[completed H02.9 handoff](../qualification/reports/HOSTED_MVP_H02_9_HANDOFF.md)
+[completed H02.9 handoff](../qualification/reports/HOSTED_MVP_H02_11_HANDOFF.md)
 records the retained stopped target, completed one-time old-host reset, measured
 results and separate remaining owners. Do not replay that reset as ordinary setup.
 

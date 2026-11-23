@@ -86,7 +86,7 @@ a broad shared R2 credential plus a configurable prefix is insufficient isolatio
 
 ## Evidence and code
 
-[Native GCP evidence](../qualification/reports/HOSTED_MVP_H02_9_VALIDATION.json)
+[Native GCP evidence](../qualification/reports/HOSTED_MVP_H02_11_VALIDATION.json)
 records scoped IAM/Tunnel delivery, real public closed response, direct-origin denial,
 full network/stream/egress tests and rebooted service verification. [Current consolidated
 evidence](../qualification/reports/HOSTED_MVP_H02_11_VALIDATION.json) repeats the connected

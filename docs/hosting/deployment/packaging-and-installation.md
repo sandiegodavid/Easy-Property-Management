@@ -11,7 +11,7 @@ compiled Operator SPA is packaged but not served by the candidate launcher. The
 normal hosted startup unavailable; later qualification owns promotion.
 
 Use the [H02 design](../design/HOSTED_MVP_H02_DESIGN.md) for scope,
-and the [measured handoff](../qualification/reports/HOSTED_MVP_H02_4_HANDOFF.md)
+and the [measured handoff](../qualification/reports/HOSTED_MVP_H02_11_HANDOFF.md)
 for exact observed artifacts, tool versions and limitations. No step below uses the
 live demo, retained Lima quota-test VM, customer data or platform credentials.
 

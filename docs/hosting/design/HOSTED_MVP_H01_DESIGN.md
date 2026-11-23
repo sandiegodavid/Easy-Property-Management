@@ -2,11 +2,11 @@
 
 Status: H01.1–H01.7 contracts/scaffolding and focused validation delivered; ready
 for contract-review handoff. Fresh hosted runtime/deployment acceptance is not established.
-See the [pinned H01.1 evidence report](../qualification/reports/HOSTED_MVP_H01_1_BASELINE_2026-11-10.md)
+See the [pinned H01.1 evidence report](../qualification/reports/HOSTED_MVP_H01_7_HANDOFF_2026-11-11.md)
 for current-code reassessment, delivery ownership and focused regression results.
-The [H01.2 evidence report](../qualification/reports/HOSTED_MVP_H01_2_RESOURCES_2026-11-10.md)
+The [H01.2 evidence report](../qualification/reports/HOSTED_MVP_H01_7_HANDOFF_2026-11-11.md)
 records the unavailable scaffolds and initialization/packaging handoff.
-The [H01.3 evidence report](../qualification/reports/HOSTED_MVP_H01_3_CONTRACTS_2026-11-10.md)
+The [H01.3 evidence report](../qualification/reports/HOSTED_MVP_H01_7_HANDOFF_2026-11-11.md)
 records bounded values, semantic hash vectors and pure original-outcome comparison.
 No fresh hosted runtime or deployment is established. Implements the H01 design obligation in the [hosted MVP slices](mvp/delivery-plan.md#implementation-slices).
 The [database schema master](../../database/overview.md) owns all table/column definitions.
@@ -78,7 +78,7 @@ recorded baseline before any Docker/kernel/tool installation and record/requalif
 changed environment. H02's detailed design owns build/launch settings, any lab changes
 and the Docker-specific qualification plan; this decision does not implement them or
 permit replacing Linux/GCP evidence with Desktop-only tests. See the [current reuse
-guide](../qualification/HOSTED_PROJECT_QUOTA_REUSE.md#development-versus-native-qualification).
+guide](../qualification/reports/HOSTED_MVP_H02_11_HANDOFF.md#development-versus-native-qualification).
 
 ## Trust and persistence composition
 
@@ -261,7 +261,7 @@ H01 defines these states; H03/H04 implement and test the actual screens:
 
 ## Proof plans and remaining implementation gates
 
-[Imported project-quota qualification inputs](../qualification/HOSTED_PROJECT_QUOTA_REUSE.md) are available for H02 design. Reuse is selective: low-level primitives/sandbox/harness and original reports only. Current source differs from three historical pins; re-prove the complete boundary under Docker/GCP before runtime activation.
+[Imported project-quota qualification inputs](../qualification/reports/HOSTED_MVP_H02_11_HANDOFF.md) are available for H02 design. Reuse is selective: low-level primitives/sandbox/harness and original reports only. Current source differs from three historical pins; re-prove the complete boundary under Docker/GCP before runtime activation.
 
 
 | Proof | Reproducible setup and pass criteria | Owner |
@@ -291,7 +291,7 @@ complete any H02–H05 feature or authorize a live deployment.
 
 ### H01.1 — Pin the implementation baseline and ownership inventory
 
-Delivered November 10, 2026: [baseline, hashes and ownership checklist](../qualification/reports/HOSTED_MVP_H01_1_BASELINE_2026-11-10.md).
+Delivered November 10, 2026: [baseline, hashes and ownership checklist](../qualification/reports/HOSTED_MVP_H01_7_HANDOFF_2026-11-11.md).
 Only inventory/evidence work is complete; later contract and feature gates remain open.
 
 Record the implementation-start commit, clean/dirty state and relevant source hashes
@@ -311,7 +311,7 @@ listed rather than inferred from old tests or the imported `hosted_admin` namesp
 
 ### H01.2 — Establish independent schema-resource scaffolding
 
-Delivered November 10, 2026: [resource and failure-contract evidence](../qualification/reports/HOSTED_MVP_H01_2_RESOURCES_2026-11-10.md).
+Delivered November 10, 2026: [resource and failure-contract evidence](../qualification/reports/HOSTED_MVP_H01_7_HANDOFF_2026-11-11.md).
 All five resource sets remain deliberately unavailable for initialization; no owning
 tables, production runner, resource packaging or runtime rewiring is delivered here.
 
@@ -342,7 +342,7 @@ and actual fresh-store proofs remain H02–H05 acceptance obligations.
 
 ### H01.3 — Implement bounded shared values and operation envelopes
 
-Delivered November 10, 2026: [contract implementation and focused evidence](../qualification/reports/HOSTED_MVP_H01_3_CONTRACTS_2026-11-10.md).
+Delivered November 10, 2026: [contract implementation and focused evidence](../qualification/reports/HOSTED_MVP_H01_7_HANDOFF_2026-11-11.md).
 These are shared values and pure comparison helpers, not durable deduplication,
 owning action payloads, authorization or production transport integration.
 
@@ -370,7 +370,7 @@ claiming a durable operation repository or actual host-effect deduplication exis
 
 ### H01.4 — Define owning application ports and compatibility manifests
 
-Delivered November 11, 2026: [typed-port and compatibility evidence](../qualification/reports/HOSTED_MVP_H01_4_PORTS_2026-11-10.md).
+Delivered November 11, 2026: [typed-port and compatibility evidence](../qualification/reports/HOSTED_MVP_H01_7_HANDOFF_2026-11-11.md).
 No production adapter, authentication proof, schema readiness or effect deduplication
 is established by these contract fixtures.
 
@@ -398,7 +398,7 @@ unsupported pairings and caller-selected paths/images fail before effect dispatc
 
 ### H01.5 — Specify proof inputs, reports and packaging handoff
 
-Delivered November 11, 2026: [proof specifications and report/harness evidence](../qualification/reports/HOSTED_MVP_H01_5_PROOFS_2026-11-11.md).
+Delivered November 11, 2026: [proof specifications and report/harness evidence](../qualification/reports/HOSTED_MVP_H01_7_HANDOFF_2026-11-11.md).
 The [six proof specifications](../qualification/specifications/README.md) cover all
 families above; executable report validation does not perform target qualification.
 
@@ -426,7 +426,7 @@ owner; the register still shows native/cloud/end-user acceptance as not establis
 
 ### H01.6 — Freeze UI/API state fixtures and delivery mapping
 
-Delivered November 11, 2026: [fixture validation and delivery evidence](../qualification/reports/HOSTED_MVP_H01_6_UI_CONTRACTS_2026-11-11.md).
+Delivered November 11, 2026: [fixture validation and delivery evidence](../qualification/reports/HOSTED_MVP_H01_7_HANDOFF_2026-11-11.md).
 The [24 strict synthetic snapshots](../qualification/fixtures/README.md) and
 [action-to-port mapping](../qualification/fixtures/ACTION_MAP.md) freeze states,
 field defaults and UI delivery obligations, not rendered workflows or live grants.

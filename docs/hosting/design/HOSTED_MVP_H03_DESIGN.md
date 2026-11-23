@@ -3,16 +3,16 @@
 [Delivery plan](mvp/delivery-plan.md#implementation-slices) · [Architecture](mvp/architecture-and-access.md) · [Identity schema](../../database/admin-identity.md) · [Source access schema](../../database/operator-access.md)
 
 Status: D1–D16 accepted November 13, 2026; H03.1 contracts and H03.2 identity persistence delivered November 14, 2026. H03.3 provider adapters are delivered. H03.4 Admin identity implementation and local validation are delivered. H03.5 central identity implementation and local validation are delivered. H03.6 gateway and relay foundations and focused local validation are delivered. H03.7 handoff implementation and focused local validation are delivered. H03.8 source session lifecycle implementation and focused local validation are delivered. H03.9 Operator session and device workflows and focused local validation are delivered. H03.10 managed business and draft admission and focused local validation are delivered. H03.11 candidate packaging, scoped credential delivery, and private GCP shared and Operator source registrations are validated. Public identity activation and interactive qualification remain in H03.12.
-[H03.3 continuation checkpoint](HOSTED_MVP_H03_3_CHECKPOINT.md) records component evidence and the handoff to later slices.
-[H03.4 checkpoint](HOSTED_MVP_H03_4_CHECKPOINT.md) records Admin implementation, local validation and the deployed qualification handoff.
-[H03.5 checkpoint](HOSTED_MVP_H03_5_CHECKPOINT.md) records durable attempts, claim receipts, central UI, continuation pairing and the later source-side dependencies.
-[H03.6 checkpoint](HOSTED_MVP_H03_6_CHECKPOINT.md) records gateway and private relay evidence and the handoff to later slices.
-[H03.7 checkpoint](HOSTED_MVP_H03_7_CHECKPOINT.md) records the local destination flow and its deployment dependencies.
-[H03.8 checkpoint](HOSTED_MVP_H03_8_CHECKPOINT.md) records source authority, lifecycle evidence and the handoff to later slices.
-[H03.9 checkpoint](HOSTED_MVP_H03_9_CHECKPOINT.md) records the browser workflows, focused evidence and deployment boundaries.
-[H03.10 checkpoint](HOSTED_MVP_H03_10_CHECKPOINT.md) records managed business admission, lease enforcement and local validation.
-[H03.11 checkpoint](HOSTED_MVP_H03_11_CHECKPOINT.md) records installed candidate progress and the remaining provider and deployment gates.
-[H03.12 checkpoint](HOSTED_MVP_H03_12_CHECKPOINT.md) records component results and the remaining native and deployed qualification sequence.
+[H03.3 continuation checkpoint](../qualification/reports/HOSTED_MVP_H03_12_EXIT_REVIEW_2026-11-22.md) records component evidence and the handoff to later slices.
+[H03.4 checkpoint](../qualification/reports/HOSTED_MVP_H03_12_EXIT_REVIEW_2026-11-22.md) records Admin implementation, local validation and the deployed qualification handoff.
+[H03.5 checkpoint](../qualification/reports/HOSTED_MVP_H03_12_EXIT_REVIEW_2026-11-22.md) records durable attempts, claim receipts, central UI, continuation pairing and the later source-side dependencies.
+[H03.6 checkpoint](../qualification/reports/HOSTED_MVP_H03_12_EXIT_REVIEW_2026-11-22.md) records gateway and private relay evidence and the handoff to later slices.
+[H03.7 checkpoint](../qualification/reports/HOSTED_MVP_H03_12_EXIT_REVIEW_2026-11-22.md) records the local destination flow and its deployment dependencies.
+[H03.8 checkpoint](../qualification/reports/HOSTED_MVP_H03_12_EXIT_REVIEW_2026-11-22.md) records source authority, lifecycle evidence and the handoff to later slices.
+[H03.9 checkpoint](../qualification/reports/HOSTED_MVP_H03_12_EXIT_REVIEW_2026-11-22.md) records the browser workflows, focused evidence and deployment boundaries.
+[H03.10 checkpoint](../qualification/reports/HOSTED_MVP_H03_12_EXIT_REVIEW_2026-11-22.md) records managed business admission, lease enforcement and local validation.
+[H03.11 checkpoint](../qualification/reports/HOSTED_MVP_H03_12_EXIT_REVIEW_2026-11-22.md) records installed candidate progress and the remaining provider and deployment gates.
+[H03.12 checkpoint](../qualification/reports/HOSTED_MVP_H03_12_EXIT_REVIEW_2026-11-22.md) records component results and the remaining native and deployed qualification sequence.
 The [resolved decisions](#resolved-design-decisions) define the implementation defaults.
 H03.1 supplies contracts and component fixtures only; no provider configuration, host
 changes, real invitation or release promotion. See the [contract baseline](../foundation/identity-contracts.md)

@@ -13,7 +13,7 @@ Use this document for accepted architecture and boundaries. The
 [foundation guides](../foundation/README.md) consolidate implementation, commands,
 measured limits and evidence by topic. Schema dictionaries remain column authorities;
 executable runbooks remain command authorities. The earlier ordered plan is
-[archived](../archive/HOSTED_MVP_H02_PLANNING_2026-11-13.md), not a required reading path.
+[archived](HOSTED_MVP_H02_DESIGN.md), not a required reading path.
 
 ## Scope, dependencies and completion
 
@@ -32,7 +32,7 @@ identities/workspaces are permitted during H02. Customer ingress stays held clos
 | --- | --- |
 | [H01 design/contracts](HOSTED_MVP_H01_DESIGN.md), `app.platform.hosted_contracts`, `modules/host_agent/application/contracts.py` | Shared values, manifests and scope/hash/outcome contracts support the typed ingress/fence/receipt boundary; type validation is not live authority. |
 | [Schema resources](../../database/schema-resources.md), `app.platform.schema_resources` | The owning resources implement the complete main-Admin structural baseline under D1 and the inventory baseline/runner. The other three hosted sets still reject initialization. Missing access/recovery resources stay explicitly unavailable until their owners deliver them. |
-| [Selective quota reuse](../qualification/HOSTED_PROJECT_QUOTA_REUSE.md) | Ext4 primitives and adversarial workloads require new proof where imported pins differ; current scoped native/Docker/GCP results are indexed by topic. |
+| [Selective quota reuse](../qualification/reports/HOSTED_MVP_H02_11_HANDOFF.md) | Ext4 primitives and adversarial workloads require new proof where imported pins differ; current scoped native/Docker/GCP results are indexed by topic. |
 | [Old hosted composition](../../../application/apps/server/app/bootstrap/hosted_access.py), [configuration](../../../application/apps/server/app/modules/hosted_access/application/configuration.py) | Old expiry, `hosted_demo`, Cloudflare Access identity and loop-image assumptions cannot serve as the fresh composition. Do not expose local routes by relaxing transport middleware. |
 | [Workspace runtime](../../../application/apps/server/app/modules/workspace/application/runtime.py) | Reuse writer-lock semantics; provide a protected stable lock location for hosted use. Its current parent-directory lock must not become an unbounded or changing path across business-tree replacement. |
 | [Schema staging](../../../application/scripts/stage_schema_resources.py), [installation verification](../../../application/scripts/verify_installation.py) | Explicit per-component staging/verification and installed OCI/bundle checks; default local wheel installation remains business-only. |

@@ -84,7 +84,7 @@ The bundled [release_demo.py](../../application/scripts/release_demo.py) helper 
 checkpoints and stopped configuration switching; invoke it through the wizards.
 
 Sources: [Mac](../../application/scripts/epm-release-mac.sh), [VM](../../application/scripts/epm-release-vm.sh).
-Use the [ongoing runbook](../hosting/operations/GOOGLE_CLOUD_ONGOING_RUNBOOK.md#interactive-wizards-recommended)
+Use the [hosting deployment runbooks](../hosting/deployment/README.md)
 for prerequisites, saved selections, safeguards and recovery limitations. Both scripts
 accept `--help`. Do not run them through a pipe or run the VM wizard as root.
 
@@ -98,7 +98,7 @@ running processes, standard systemd/cron/EPM configuration references, checkpoin
 owners/references and explicitly retained rollback releases are protected.
 Checkpoint retirement is a separate manual decision; this wizard has no override
 for those protections. It does not delete workspace data, backups or uploaded
-artifacts. See the [cleanup runbook](../hosting/operations/GOOGLE_CLOUD_ONGOING_RUNBOOK.md#clean-up-unused-installed-releases)
+artifacts. See the [hosting operations runbooks](../hosting/operations/README.md)
 for upload and invocation commands, limits and validation.
 
 ### `stage_schema_resources.py`

@@ -78,7 +78,7 @@ exact assets, firewall isolation, and trusted forwarding before publishing a
 public route. Keep business ingress closed until the H04/H05 owners supply
 their readiness evidence. [Firebase custom authentication domain guidance](https://firebase.google.com/docs/auth/web/redirect-best-practices)
 
-Use the [H03.11 checkpoint](../design/HOSTED_MVP_H03_11_CHECKPOINT.md) for
+Use the [H03.11 checkpoint](../qualification/reports/HOSTED_MVP_H03_12_EXIT_REVIEW_2026-11-22.md) for
 executed local checks and the deployment work still open.
 
 ## Native shared registration

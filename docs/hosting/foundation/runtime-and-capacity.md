@@ -111,7 +111,7 @@ All six actors preserved acknowledged SQLite rows through saturation/reopen, enf
 byte/inode/deleted-open/PID/FD/shm bounds and survived a bounded OOM-killed child.
 Logs retained three files/about 4.38 MB each. Every fixture container stopped afterward.
 
-The [full measurement](../qualification/reports/HOSTED_MVP_H02_10_VALIDATION.json)
+The [full measurement](../qualification/reports/HOSTED_MVP_H02_11_VALIDATION.json)
 retains CPU/throttling and source/policy/image identities; private evidence retains
 IO/PSI and independent samples. An earlier trial refused the extra runtime because
 unexplained host memory use exceeded shared reserve. That cause remains unresolved;

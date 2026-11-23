@@ -43,4 +43,4 @@ Verify its retained criteria against implementation and focused tests, update th
 
 ## Historical hosted references
 
-Earlier [synthetic demo qualification](../hosting/qualification/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md) and [Admin proposal](../hosting/design/HOSTED_DEMO_ADMIN_DESIGN.md) retain their named topology and evidence. They are superseded as implementation direction; use HOSTED-001, not their A/B layouts, activation or manual entitlement assumptions.
+Earlier October 2026 hosted-demo proposals are superseded; use [HOSTED-001](../hosting/README.md) and the [Hosted MVP design](../hosting/design/HOSTED_MVP_DESIGN.md) for current hosting scope and status.

@@ -7,7 +7,7 @@ acceptance, native/cloud qualification, a usable hosted workflow or release appr
 ## Source and evidence identity
 
 - H01 implementation baseline: `f9d3707b966f664fe8037b5f1b557f72f74245ed`, clean at
-  H01.1 start; the [baseline inventory](HOSTED_MVP_H01_1_BASELINE_2026-11-10.md) and
+  H01.1 start; the [baseline inventory](HOSTED_MVP_H01_7_HANDOFF_2026-11-11.md) and
   its 78 original input pins remain historical evidence.
 - H01.7 start: clean `46462673cb92df7bdc2e58e4b56d715ce381eadc` on `hosted_mvp`.
 - [Machine-readable validation evidence](HOSTED_MVP_H01_7_VALIDATION_2026-11-11.json)
@@ -112,7 +112,7 @@ H02 may begin its **detailed design after H01 contract review acceptance**. This
 implementation/validation task does not supply or assert that external acceptance.
 H02 implementation still requires its own completed detailed design and safe setup.
 Use the [proof specifications and packaging handoff](../specifications/README.md)
-and [selective quota reuse boundary](../HOSTED_PROJECT_QUOTA_REUSE.md); do not import
+and [selective quota reuse boundary](HOSTED_MVP_H02_11_HANDOFF.md); do not import
 or activate the older Admin stack merely because its namespace/primitives exist.
 
 | Owner | Required next delivery before enabling its capability |

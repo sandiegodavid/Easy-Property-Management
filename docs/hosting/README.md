@@ -1,67 +1,39 @@
 # Hosting documentation
 
-Updated November 13, 2026. Start with the confirmed fresh hosted-MVP direction.
-Documentation describes requirements and evidence separately; it does not establish
-implementation or permission to deploy, charge or admit real customer data.
+Updated November 22, 2026. Single entry point for the **HOSTED-001** hosted-MVP
+architecture, implementation designs, infrastructure runbooks, and qualification evidence.
 
-## Current direction
+## Current Delivery Status
 
-- [Hosted MVP design](design/HOSTED_MVP_DESIGN.md): accepted architecture, product
-  plans, Admin/operator workflows, identity/subdomains, subscriptions, recovery,
-  independent updates, budgets and validation gates.
-- [Hosting Plan](Hosting_Plan.md): concise overview and product/delivery boundaries.
-- [MVP acceptance register](qualification/HOSTED_MVP_ACCEPTANCE.md): current target's
-  implementation and release-proof gates. No completed MVP qualification is inferred
-  from the previous demo.
+**Pilot 0 releases at H06** (invited Free operators within qualified capacity, Admin-lite,
+nightly verified off-host backups and rehearsed restore, warm containers, one announced
+maintenance window; no Stripe, idle-wake, or per-operator update scheduling).
 
-Initial platform: Google Compute Engine/Docker/persistent SQLite and files,
-Cloudflare edge/Tunnel/R2, managed identity and Stripe subscriptions. Admin chooses
-operator count within qualified capacity; Empty workspace is the default. Imports
-are deferred but available to all tiers when implemented; tenant/owner portals follow hosting in the immediate backlog.
-Launch and 100-operator gross budget targets are $250 and $300/month before credits.
+| Slice | Scope | Status & Latest Evidence |
+| --- | --- | --- |
+| **H01** | Baseline, store ownership, schema resources, contracts, proof specs | **Done** — [Design](design/HOSTED_MVP_H01_DESIGN.md) · [Handoff](qualification/reports/HOSTED_MVP_H01_7_HANDOFF_2026-11-11.md) |
+| **H02** | Container, ext4 `prjquota` storage, and Cloudflare gateway foundation | **Done** — [Design](design/HOSTED_MVP_H02_DESIGN.md) · [Foundation guides](foundation/README.md) · [Handoff](qualification/reports/HOSTED_MVP_H02_11_HANDOFF.md) |
+| **H03** | Managed identity, Admin Google+TOTP MFA, central-login handoff, sessions & draft fencing | **Done** — [Design](design/HOSTED_MVP_H03_DESIGN.md) · [Exit review](qualification/reports/HOSTED_MVP_H03_12_EXIT_REVIEW_2026-11-22.md) |
+| **H04** | Admin-lite UI/API, manual provisioning, Free 50 MB logical + physical `prjquota` sizing, Operator Settings | **Done** — [Design](design/HOSTED_MVP_H04_DESIGN.md) · [Exit review](qualification/reports/HOSTED_MVP_H04_10_EXIT_REVIEW_2026-11-22.md) |
+| **H05** | Nightly verified off-host recovery, separate Admin recovery DB, operator-authorized restore | **Next** — [Recovery spec](design/mvp/recovery.md) |
+| **H06–H12** | Pilot 0 release, provisioning automation, paid tiers/Stripe, independent updates, idle wake, paid pilot | **Planned** — [Delivery plan](design/mvp/delivery-plan.md) |
 
-## Foundation and remaining delivery
+> Business ingress for Operator workspaces remains **closed (`held`)** and backup protection
+> remains honestly **`unavailable`** until H05 supplies the verified recovery-point gate.
 
-The [topic-based infrastructure guides](foundation/README.md) consolidate delivered
-container/storage/gateway behavior, setup/development procedures, measured capacity
-and qualification limits. Use these instead of following completed implementation
-steps. Exact reports retain their original dates and source/artifact identities.
+## Navigation
 
-The [delivery plan](design/mvp/delivery-plan.md#implementation-slices) keeps managed
-identity, real admission/usage and recovery with their owners. Pilot 0 releases at
-H06 only after those gates: invited Free operators within qualified capacity,
-Admin-lite, verified nightly off-host backups/rehearsed restore, warm runtimes, one
-maintenance window and recorded manual cost. No Stripe, idle-wake or per-operator
-scheduling. Later features deliver that automation; [portal work](../active/PORTALS_IMPLEMENTATION_PLAN.md)
-follows hosting. Scoped foundation delivery is not release promotion or customer access.
-
-## Find the right document
-
-| Area | Use |
+| Area | Purpose |
 | --- | --- |
-| [Design index](design/README.md) | Current MVP specification and clearly superseded demo designs |
-| [Foundation guides](foundation/README.md) | Current infrastructure implementation, operating procedures and evidence by topic |
-| [Deployment index](deployment/README.md) | Fresh-target prerequisites versus older release-specific procedures |
-| [Operations index](operations/README.md) | Current intended workflows and limitations of older executable runbooks |
-| [Qualification index](qualification/README.md) | New acceptance gates versus dated reports/raw evidence |
-| [SQLite upgrade research](research/SQLITE_SCHEMA_UPGRADE_WORKFLOW_2026-10-31.md) | Technical research to evaluate under current release/recovery rules; not independently adopted |
-| [Archive](archive/README.md) | Preserved original plans and historical exports |
+| [Design index](design/README.md) | Accepted MVP architecture (`mvp/`), slice designs (H01–H04), and delivery plan |
+| [Foundation guides](foundation/README.md) | Delivered H02 container, storage, gateway, identity-contract, and capacity reference by topic |
+| [Deployment runbooks](deployment/README.md) | Image packaging, offline agent installation, protected launch, Linux labs, and GCP host setup |
+| [Operations runbooks](operations/README.md) | Runtime supervision, gateway/egress services, identity qualification, and Admin account recovery |
+| [Qualification & evidence](qualification/README.md) | Acceptance register, proof specifications, UI contract fixtures, and latest exit reviews |
+| [Database schema master](../database/overview.md) | Store ownership and per-store SQLite dictionaries (business, Admin, access, inventory) |
+| [SQLite upgrade research](research/SQLITE_SCHEMA_UPGRADE_WORKFLOW_2026-10-31.md) | Technical input for H10 release upgrades (subordinate to current one-writer and recovery rules) |
 
-## Historical deployment and evidence
-
-The October A/B process/Unix-user/loop-image installation, Cloudflare Access
-customer login, manual backups and invitation/expiry procedures describe a different
-release/topology. Their counts, prices, paths, quotas and test outcomes are historical,
-not current operator limits or deployable MVP instructions. Inspect an actual host
-before drawing conclusions about its present state; old prose is not live inventory.
-
-[Deployment record](operations/CLOUDFLARE_OPERATIONS.md),
-[demo checkpoint](qualification/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md),
-[supporting reports](qualification/reports/README.md) and [raw evidence](evidence)
-remain available with their original tested scope. Do not silently relabel evidence
-or alter historical fixtures to make them match the new design.
-
-Maintain the MVP design for accepted requirements, the acceptance register for new
-proof and limitations, and dated records for actual deployment results. Preserve
-sensitive configuration/credentials outside documentation. Backlog changes require
-separate authorization; this alignment changes documentation only.
+Initial platform: Google Compute Engine (`epm-h02-host`, stopped when not qualifying),
+Docker with persistent ext4 `prjquota` trees, Cloudflare edge/Tunnel/R2, Firebase/Google
+managed identity, and Stripe (H09). Launch and 100-operator gross budget targets are
+\$250 and \$300/month before credits.

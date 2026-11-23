@@ -103,7 +103,7 @@ Retain the separate Lima ARM64 `epm-quota-test` VM as the isolated native Linux
 qualification lab for filesystem quotas, privileged host-agent boundaries, sandbox
 escape tests and actual reboot persistence. Keep it stopped when unused. No extra VM
 is needed for ordinary portal work, and Docker Desktop tests do not replace native
-quota or exact Google-host qualification. See the [quota reuse guide](../../qualification/HOSTED_PROJECT_QUOTA_REUSE.md#development-versus-native-qualification).
+quota or exact Google-host qualification. See the [quota reuse guide](../../qualification/reports/HOSTED_MVP_H02_11_HANDOFF.md#development-versus-native-qualification).
 
 Preserve upstream evidence/source pins and existing lab trees. Before installing
 Docker, changing the kernel/filesystem/tooling or otherwise altering the retained lab,

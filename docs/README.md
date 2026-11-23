@@ -57,7 +57,7 @@ For a specific change, read its owning module, relevant shared platform contract
 
 [Decisions](DECISIONS.md) preserves agreed rationale, including future product decisions. [Roadmap](ROADMAP.md) groups intended delivery. [Research](research/README.md) contains dated external investigations and experiments; findings need verification before implementing a changing provider/runtime capability.
 
-[Hosting](hosting) contains the [review index](hosting/README.md), [topic-based infrastructure guides](hosting/foundation/README.md), current MVP design and the [earlier Google Cloud demo runbook](hosting/deployment/GOOGLE_CLOUD_DEMO_DEPLOYMENT.md). Current behavior, exact qualification evidence, remaining feature gates and historical procedures remain distinct.
+[Hosting](hosting/README.md) contains the **HOSTED-001** status index, [topic-based infrastructure guides](hosting/foundation/README.md), [Hosted MVP design](hosting/design/HOSTED_MVP_DESIGN.md), [deployment](hosting/deployment/README.md) and [operations](hosting/operations/README.md) runbooks, and [latest qualification evidence](hosting/qualification/README.md).
 
 ## Historical material and traceability
 

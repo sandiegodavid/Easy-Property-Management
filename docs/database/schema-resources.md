@@ -135,7 +135,7 @@ may ship. H02.4 implements explicit `--component` staging/installation verificat
 per-component file/hash manifests and actual installed OCI/agent-bundle checks. The
 default local script modes and wheel metadata remain unchanged. See the
 [candidate build runbook](../hosting/deployment/packaging-and-installation.md) and
-[scoped evidence](../hosting/qualification/reports/HOSTED_MVP_H02_4_HANDOFF.md).
+[scoped evidence](../hosting/qualification/reports/HOSTED_MVP_H02_11_HANDOFF.md).
 Shipping declared unavailable resource sets does not establish readiness or qualify a release.
 
 ## Store-specific resource notes
@@ -158,7 +158,7 @@ wheel staging alone is not hosted-image qualification.
 
 ### Host inventory
 
-[Resources](../../application/database/host-inventory-migrations/) · [Dictionary](host-inventory.md) · [Original structural proof](../hosting/qualification/reports/HOSTED_MVP_H02_2_HANDOFF.md)
+[Resources](../../application/database/host-inventory-migrations/) · [Dictionary](host-inventory.md) · [H02 handoff](../hosting/qualification/reports/HOSTED_MVP_H02_11_HANDOFF.md)
 
 `host_inventory_0001_initial` contains six tables for host identity, operator
 principals, resource/project allocations, ingress and child-effect receipts. Schema

@@ -6,7 +6,6 @@ Reviewed November 22, 2026, following completion of all H04 implementation slice
 - H04.9 Free Physical Sizing Report: [HOSTED_MVP_H04_9_FREE_SIZING.json](HOSTED_MVP_H04_9_FREE_SIZING.json) (`sha256: a8662dfb000974771d7a591281ee60fbb35796e01c09b208ccd624b5cb2e13ff`)
 - H04.9 Native Evidence: [HOSTED_MVP_H04_9_EVIDENCE.json](HOSTED_MVP_H04_9_EVIDENCE.json)
 - H04.10 Native GCP Handoff Report: [HOSTED_MVP_H04_10_HANDOFF.json](HOSTED_MVP_H04_10_HANDOFF.json)
-- H04.10 Checkpoint: [HOSTED_MVP_H04_10_CHECKPOINT.md](../../design/HOSTED_MVP_H04_10_CHECKPOINT.md)
 
 ---
 
