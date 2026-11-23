@@ -31,8 +31,11 @@ For a first read: **scope → architecture and access → delivery plan**. For i
 ## Related references
 
 - [Database schema catalog](../../database/overview.md): owning stores and complete table/column definitions.
-- [H01 detailed design and implementation plan](HOSTED_MVP_H01_DESIGN.md).
-- [Infrastructure design](HOSTED_MVP_H02_DESIGN.md) and [topic-based foundation guides](../foundation/README.md): delivered scoped container/storage/gateway behavior, operating procedures, exact evidence and remaining release gates.
+- [H01 detailed design and implementation plan](HOSTED_MVP_H01_DESIGN.md) ([H01.7 handoff](../qualification/reports/HOSTED_MVP_H01_7_HANDOFF_2026-11-11.md)).
+- [H02 infrastructure design](HOSTED_MVP_H02_DESIGN.md), [topic-based foundation guides](../foundation/README.md), and [H02.11 handoff](../qualification/reports/HOSTED_MVP_H02_11_HANDOFF.md): delivered container/storage/gateway behavior, operating procedures, and capacity baseline.
+- [H03 managed identity design](HOSTED_MVP_H03_DESIGN.md) and [H03.12 exit review](../qualification/reports/HOSTED_MVP_H03_12_EXIT_REVIEW_2026-11-22.md): delivered Google/email-link login, Admin MFA, central-login handoff, sessions, and draft fencing.
+- [H04 Admin-lite and Free usage design](HOSTED_MVP_H04_DESIGN.md), [H04.9 Free sizing](../qualification/reports/HOSTED_MVP_H04_9_FREE_SIZING.json), and [H04.10 exit review](../qualification/reports/HOSTED_MVP_H04_10_EXIT_REVIEW_2026-11-22.md): delivered Admin-lite control plane/UI, manual provisioning, Free 50 MB logical + physical `prjquota` sizing, Operator Settings, and closed H04/H05 handoff.
+- [H05 nightly verified off-host recovery design](HOSTED_MVP_H05_DESIGN.md) (accepted 2026-11-22; D1–D12 resolved): off-host R2 + Cloud KMS backup engine, operator-authorized recovery mode, separate Admin recovery DB, clean-runtime repair, H05 reserve sizing, and joint H04/H05 positive workspace handoff.
 - [Acceptance register](../qualification/HOSTED_MVP_ACCEPTANCE.md): actual proof status, separate from design requirements.
 - [Feature backlog](../../FEATURE_BACKLOG.md): feature scope and priority.
 

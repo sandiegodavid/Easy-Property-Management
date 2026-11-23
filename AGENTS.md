@@ -52,6 +52,7 @@ On each turn, continue through checkpoints until complete. Unless instructed oth
 - When designing a backlog, if not already read, read [PRODUCT_BRIEF.md](docs/PRODUCT_BRIEF.md), [ARCHITECTURE.md](docs/ARCHITECTURE.md), [UI-001_DESIGN.md](docs/active/UI-001_DESIGN.md) and [FEATURE_BACKLOG.md](docs/FEATURE_BACKLOG.md). If missing decisions are encountered, also read [DECISIONS.md](docs/DECISIONS.md).
 - When designing, do not write code.
 - When designing or planning, create a design doc for review.
+- When creating a new design doc, update its owning index and linking docs (such as `docs/hosting/README.md`, `docs/hosting/design/README.md`, `docs/hosting/design/HOSTED_MVP_DESIGN.md`, `docs/hosting/design/mvp/delivery-plan.md`, or `docs/active/README.md`) to link to it.
 
 ## MVP greenfield scope
 
