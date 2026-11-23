@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "revision": 4,
+  "revision": 5,
   "configuration_state": "verified",
   "realm": {
     "version": 1,
@@ -31,6 +31,6 @@
   "rate_key_ref": "identity-rate-hmac-v1",
   "rate_key_rotation_ms": 86400000,
   "rate_retention_ms": 90000000,
-  "deployment_sends_per_day": 9,
-  "provider_sends_per_day": 10
+  "deployment_sends_per_day": 90,
+  "provider_sends_per_day": 100
 }

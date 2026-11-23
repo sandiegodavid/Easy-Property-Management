@@ -126,8 +126,8 @@ Always return `epm-h02-host` to `TERMINATED` when interactive qualification is n
 - Record sanitized readback evidence (project ID, enabled providers, authorized domains, Testing status, and allowlist count — never raw tokens or private credentials).
 
 ### Mail Quota & Resend Cooldown
-- Configured provider daily allowance: **10 sends/day** (billing enabled).
-- Tracked application ceiling: **9 sends / rolling 24 hours** (`deployment_sends_per_day: 9` in `application/deploy/hosted-mvp/identity/selection.json`).
+- Configured provider daily allowance: **100 sends/day** (Google confirmed 2026-11-23; billing enabled; originally 10 sends/day during H03).
+- Tracked application ceiling: **90 sends / rolling 24 hours** (`deployment_sends_per_day: 90`, `provider_sends_per_day: 100` in `application/deploy/hosted-mvp/identity/selection.json`; re-seal `provider_config_sha256` on `epm-h02-host` when updating `provider_email_sends_per_day: 100`).
 - Per-destination resend cooldown: **60 seconds**; per-destination hourly cap: **5/hour**; per-network hourly cap: **20/hour**.
 - Never test with real customer addresses; use only dedicated test accounts.
 

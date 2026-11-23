@@ -55,9 +55,11 @@ Each Operator is mounted only its own return socket at
 must have the owning principal and expected modes before the service starts.
 
 Use the selected project’s effective daily **email-link sign-in sends** to
-set the application ceiling. The project owner confirmed 10 sends per day,
-and the application ceiling is 9 sends per rolling 24 hours. The
-verification-code metric measures a different operation. [Google Identity Platform quotas](https://docs.cloud.google.com/identity-platform/quotas)
+set the application ceiling. Google confirmed **100 sends per day** (updated
+2026-11-23), and `selection.json` sets the application ceiling to **90 sends
+per rolling 24 hours** (re-seal `provider_config_sha256` on the host after
+updating `provider_email_sends_per_day: 100`). The verification-code metric
+measures a different operation. [Google Identity Platform quotas](https://docs.cloud.google.com/identity-platform/quotas)
 
 On the qualification VM, use the attached VM identity to mint a 600-second
 Identity Toolkit–scoped access token for `epm-h03-central`. The VM has

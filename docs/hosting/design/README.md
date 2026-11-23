@@ -19,6 +19,7 @@ focused guides in `mvp/`:
 
 ## Next Up
 
-- **H05 (Nightly verified off-host recovery)**: [HOSTED_MVP_H05_DESIGN.md](HOSTED_MVP_H05_DESIGN.md) (accepted 2026-11-22; D1–D12 resolved; ready for H05.1 implementation); see [recovery requirements](mvp/recovery.md) and [H04/H05 handoff gates](../qualification/reports/HOSTED_MVP_H04_10_EXIT_REVIEW_2026-11-22.md#handoff-to-h05).
+- **H05 (Nightly verified off-host recovery)**: [HOSTED_MVP_H05_DESIGN.md](HOSTED_MVP_H05_DESIGN.md) (component proof complete; live GCP `epm-h02-host` execution pending before Pilot 0); see [H05.11 exit review](../qualification/reports/HOSTED_MVP_H05_11_EXIT_REVIEW.md) and [recovery runbook](../runbooks/H05_RECOVERY_OPERATIONS_RUNBOOK.md).
+- **H06 (Pilot 0 release, observability, support & operations gate)**: [HOSTED_MVP_H06_DESIGN.md](HOSTED_MVP_H06_DESIGN.md) (accepted 2026-11-23; D1–D10 resolved; ready for H06.1 implementation); see [operations & economics proof spec](../qualification/specifications/operations_economics.md).
 - **Schema reference**: [Database schema master](../../database/overview.md).
 - **Research input**: [SQLite upgrade workflow](../research/SQLITE_SCHEMA_UPGRADE_WORKFLOW_2026-10-31.md) (candidate input for H10, subordinate to one-writer and recovery rules).

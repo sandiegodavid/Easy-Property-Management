@@ -15,8 +15,9 @@ maintenance window; no Stripe, idle-wake, or per-operator update scheduling).
 | **H02** | Container, ext4 `prjquota` storage, and Cloudflare gateway foundation | **Done** — [Design](design/HOSTED_MVP_H02_DESIGN.md) · [Foundation guides](foundation/README.md) · [Handoff](qualification/reports/HOSTED_MVP_H02_11_HANDOFF.md) |
 | **H03** | Managed identity, Admin Google+TOTP MFA, central-login handoff, sessions & draft fencing | **Done** — [Design](design/HOSTED_MVP_H03_DESIGN.md) · [Exit review](qualification/reports/HOSTED_MVP_H03_12_EXIT_REVIEW_2026-11-22.md) |
 | **H04** | Admin-lite UI/API, manual provisioning, Free 50 MB logical + physical `prjquota` sizing, Operator Settings | **Done** — [Design](design/HOSTED_MVP_H04_DESIGN.md) · [Exit review](qualification/reports/HOSTED_MVP_H04_10_EXIT_REVIEW_2026-11-22.md) |
-| **H05** | Nightly verified off-host recovery, separate Admin recovery DB, operator-authorized restore | **Design accepted (D1–D12)** — [Design](design/HOSTED_MVP_H05_DESIGN.md) · [Recovery spec](design/mvp/recovery.md) |
-| **H06–H12** | Pilot 0 release, provisioning automation, paid tiers/Stripe, independent updates, idle wake, paid pilot | **Planned** — [Delivery plan](design/mvp/delivery-plan.md) |
+| **H05** | Nightly verified off-host recovery, separate Admin recovery DB, operator-authorized restore | **Component proof done (live GCP pending)** — [Design](design/HOSTED_MVP_H05_DESIGN.md) · [Exit review](qualification/reports/HOSTED_MVP_H05_11_EXIT_REVIEW.md) · [Runbook](runbooks/H05_RECOVERY_OPERATIONS_RUNBOOK.md) |
+| **H06** | Pilot 0 release, observability, support, maintenance window, and operations/economics gate | **Design accepted (D1–D10)** — [Design](design/HOSTED_MVP_H06_DESIGN.md) · [Operations proof spec](qualification/specifications/operations_economics.md) |
+| **H07–H12** | Provisioning automation, paid tiers/Stripe, independent updates, idle wake, paid pilot | **Planned** — [Delivery plan](design/mvp/delivery-plan.md) |
 
 > Business ingress for Operator workspaces remains **closed (`held`)** and backup protection
 > remains honestly **`unavailable`** until H05 supplies the verified recovery-point gate.

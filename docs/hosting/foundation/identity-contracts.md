@@ -30,7 +30,7 @@ contains no credential. It must not be passed off as a configured or qualified s
 | Signing | Ed25519, explicit key IDs; central key delivered only to central identity, each source key only to its source. The protected source registry supplies public verification keys. No private keys in gateway, relay, browser, images, Git or business exports. |
 | Fixed grant audiences | `epm:central-identity:v1` for source pairing; `epm:owning-source:v1` for central handoff/status. Exact deployment/workspace/binding/generation/assignment/epoch/target and request hash still required. |
 | Rate admission | Central durable atomic buckets, before send, shared across workers/restart. Hash recipient/network keys with the protected HMAC key. Rotate daily, retain the previous key through the full active hourly window, retain buckets 25 hours, clean in bounded batches. |
-| Initial mail ceilings | Deployment ceiling of 9 sends per rolling 24 hours against the owner-confirmed project allowance of 10 sends per day. Destination 5/hour, network 20/hour, and resend cooldown of 60 seconds apply independently. Unknown sends count. |
+| Mail ceilings | Google confirmed **100 sends/day** for Identity Platform email-link sign-in (2026-11-23). H03 initially pinned a deployment ceiling of 9 sends per rolling 24 hours (against an initial 10/day estimate); H06 raises the Pilot 0 application ceiling to 90 sends per rolling 24 hours. Destination 5/hour, network 20/hour, and resend cooldown of 60 seconds apply independently. Unknown sends count. |
 
 `provider_config_sha256` remains null because provider configuration was not inspected.
 `require_verified_setup()` rejects the selected manifest. Before enabling a provider
