@@ -141,6 +141,7 @@ test("Admin-lite directory, add operator preservation on 409, and detail invitat
     route.fulfill({
       json: {
         operator: READY_OPERATOR,
+        operatorRevision: 3,
         readiness: {
           state: "ready",
           data: {
@@ -160,11 +161,15 @@ test("Admin-lite directory, add operator preservation on 409, and detail invitat
     }),
   );
 
-  await page.route(`**/api/admin/operators/${OPERATOR_ID}/refresh`, (route) =>
-    route.fulfill({ json: { state: "succeeded" } }),
-  );
-  await page.route(`**/api/admin/operators/${OPERATOR_ID}/invitations`, (route) =>
-    route.fulfill({
+  await page.route(`**/api/admin/operators/${OPERATOR_ID}/refresh`, (route) => {
+    const body = route.request().postDataJSON() as { expectedRevision?: number };
+    expect(body.expectedRevision).toBe(3);
+    return route.fulfill({ json: { state: "succeeded" } });
+  });
+  await page.route(`**/api/admin/operators/${OPERATOR_ID}/invitations`, (route) => {
+    const body = route.request().postDataJSON() as { expectedRevision?: number };
+    expect(body.expectedRevision).toBe(3);
+    return route.fulfill({
       status: 201,
       json: {
         outcome: READY_OPERATOR.operation,
@@ -172,8 +177,8 @@ test("Admin-lite directory, add operator preservation on 409, and detail invitat
         token: "one-time-claim-token",
         expiresAt: Date.now() + 86_400_000,
       },
-    }),
-  );
+    });
+  });
   await page.route(
     `**/api/admin/operators/${OPERATOR_ID}/invitations/${INVITATION_ID}/delivered`,
     (route) => route.fulfill({ json: { invitationId: INVITATION_ID, revision: 2, state: "sent" } }),
@@ -210,7 +215,9 @@ test("Admin-lite directory, add operator preservation on 409, and detail invitat
   await expect(page.getByText("Source observation refreshed.")).toBeVisible();
 
   await page.getByRole("button", { name: "Issue / reissue invitation" }).click();
-  await expect(page.getByText("one-time-claim-token")).toBeVisible();
+  await expect(
+    page.getByText(`/auth/start#invitation=${INVITATION_ID}&token=one-time-claim-token`),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Mark delivered" }).click();
   await expect(page.getByText("Delivery confirmed.")).toBeVisible();
 });

@@ -174,7 +174,7 @@ def _registry():
 def _capacity():
     op.create_table(
         "capacity_profiles",
-        f("profile_ref", "REF", primary=True),
+        f("profile_ref", "REF"),
         f("profile_revision", "REV"),
         f("measurement_sha256", "HASH"),
         f("source_sha256", "HASH"),
@@ -184,7 +184,7 @@ def _capacity():
         f("recovery_reserve_json", "JSON"),
         f("free_budget_json", "JSON"),
         f("created_at", "TIME"),
-        sa.UniqueConstraint("profile_ref", "profile_revision"),
+        sa.PrimaryKeyConstraint("profile_ref", "profile_revision"),
     )
     op.create_table(
         "capacity_snapshots",

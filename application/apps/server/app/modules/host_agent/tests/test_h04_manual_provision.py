@@ -138,9 +138,9 @@ def test_manual_provision_empty_workspace_and_idempotent_retry(env, tmp_path):
         ),
     )
 
-    # First run fails during start_container -> needs_attention, commitment retained as pending.
+    # First run fails during start_container (external host effect) -> unknown state & commitment.
     first = provisioner.provision(op_id)
-    assert first.state == "needs_attention"
+    assert first.state == "unknown"
     assert first.error_code == "provision_failed"
     with env["engine"].connect() as conn:
         assert (
@@ -155,7 +155,7 @@ def test_manual_provision_empty_workspace_and_idempotent_retry(env, tmp_path):
                 text("SELECT state FROM main.capacity_commitments WHERE operator_id = :id"),
                 {"id": operator_id},
             ).scalar_one()
-            == "pending"
+            == "unknown"
         )
 
     # Retry succeeds idempotently (replaying initialize_binding without error).

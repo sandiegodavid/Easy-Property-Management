@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+from pydantic import TypeAdapter
 
 from app.modules.host_agent.application.auth_routes import IdentityCookiePolicy
 from app.modules.hosted_access.application.managed_provider import (
@@ -25,6 +26,9 @@ from app.platform.hosted_contracts.ui_states import (
     Section,
     UIAction,
 )
+from app.platform.hosted_contracts.values import EmailAddress
+
+_EMAIL_ADAPTER = TypeAdapter(EmailAddress)
 
 SETTINGS_ROUTE = "/api/hosted/settings"
 HEADERS = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
@@ -56,6 +60,9 @@ class OperatorSettingsInputs:
     support_contact: str
     protection_reader: Callable[[], Section[Protection]] | None = None
     maintenance_reader: Callable[[], Section[MaintenanceNotice]] | None = None
+
+    def __post_init__(self) -> None:
+        _EMAIL_ADAPTER.validate_python(self.support_contact)
 
 
 def operator_settings_router(sessions, inputs: OperatorSettingsInputs) -> APIRouter:

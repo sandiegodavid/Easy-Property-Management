@@ -149,10 +149,10 @@ class UsageAccountingStore:
             )
 
     def refresh_usage_state(self, *, business_revision: str | None = None) -> UsageSnapshot:
-        """Re-measure business DB + retained files outside the access lock, then commit."""
-        measured = measure_logical_usage(self.business_engine)
-        rev_label = business_revision or measured.business_revision
+        """Re-measure business DB + retained files serialized under the access write lock."""
         with immediate_transaction(self.access_engine) as connection:
+            measured = measure_logical_usage(self.business_engine)
+            rev_label = business_revision or measured.business_revision
             now = self.clock()
             meta = (
                 connection.execute(text("SELECT usable_bytes FROM main.access_meta WHERE id = 1"))
@@ -335,10 +335,10 @@ class UsageAccountingStore:
     def settle_commit(
         self, reservation_id: str, *, result_revision: str | None = None
     ) -> UsageSnapshot:
-        """Re-measure post-commit logical usage and mark the reservation committed."""
-        measured = measure_logical_usage(self.business_engine)
-        rev_label = result_revision or measured.business_revision
+        """Re-measure post-commit logical usage under the access lock and mark committed."""
         with immediate_transaction(self.access_engine) as connection:
+            measured = measure_logical_usage(self.business_engine)
+            rev_label = result_revision or measured.business_revision
             now = self.clock()
             meta = (
                 connection.execute(text("SELECT usable_bytes FROM main.access_meta WHERE id = 1"))
@@ -372,7 +372,8 @@ class UsageAccountingStore:
             connection.execute(
                 text(
                     "UPDATE main.usage_reservations SET "
-                    "state = 'committed', updated_at = :now, result_revision = :rev "
+                    "state = 'committed', updated_at = MAX(created_at, :now), "
+                    "result_revision = :rev "
                     "WHERE reservation_id = :res_id AND state IN ('held', 'unknown')"
                 ),
                 {"now": now, "rev": rev_label, "res_id": reservation_id},
@@ -401,7 +402,8 @@ class UsageAccountingStore:
         with immediate_transaction(self.access_engine) as connection:
             connection.execute(
                 text(
-                    "UPDATE main.usage_reservations SET state = 'released', updated_at = :now "
+                    "UPDATE main.usage_reservations "
+                    "SET state = 'released', updated_at = MAX(created_at, :now) "
                     "WHERE reservation_id = :res_id AND state = 'held'"
                 ),
                 {"now": self.clock(), "res_id": reservation_id},
@@ -411,17 +413,18 @@ class UsageAccountingStore:
         with immediate_transaction(self.access_engine) as connection:
             connection.execute(
                 text(
-                    "UPDATE main.usage_reservations SET state = 'unknown', updated_at = :now "
+                    "UPDATE main.usage_reservations "
+                    "SET state = 'unknown', updated_at = MAX(created_at, :now) "
                     "WHERE reservation_id = :res_id AND state = 'held'"
                 ),
                 {"now": self.clock(), "res_id": reservation_id},
             )
 
     def reconcile_unknown(self, *, include_held: bool = False) -> tuple[UsageSnapshot, int]:
-        """Re-measure actual logical usage and release uncertain reservations safely."""
-        measured = measure_logical_usage(self.business_engine)
+        """Re-measure actual logical usage under the access lock and release safely."""
         target_states = "('held', 'unknown')" if include_held else "('unknown')"
         with immediate_transaction(self.access_engine) as connection:
+            measured = measure_logical_usage(self.business_engine)
             now = self.clock()
             meta = (
                 connection.execute(text("SELECT usable_bytes FROM main.access_meta WHERE id = 1"))
@@ -454,7 +457,8 @@ class UsageAccountingStore:
             )
             updated = connection.execute(
                 text(
-                    "UPDATE main.usage_reservations SET state = 'released', updated_at = :now "
+                    "UPDATE main.usage_reservations "
+                    "SET state = 'released', updated_at = MAX(created_at, :now) "
                     f"WHERE state IN {target_states}"
                 ),
                 {"now": now},

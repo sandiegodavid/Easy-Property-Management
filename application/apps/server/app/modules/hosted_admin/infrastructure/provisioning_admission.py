@@ -25,6 +25,8 @@ from app.platform.sqlite_engine import immediate_transaction
 
 DEFAULT_ADMISSION_TTL_MS = 60_000
 ADMITTABLE_STATES = frozenset({"pending", "running", "needs_attention", "unknown"})
+STARTABLE_STATES = frozenset({"pending", "needs_attention", "unknown"})
+TERMINAL_SETUP_STATES = frozenset({"active", "retired"})
 
 
 @dataclass(frozen=True)
@@ -138,6 +140,7 @@ class AdminEffectAdmission:
                         "  op.request_hash, op.request_json, op.access_epoch, "
                         "  o.operator_id, o.workspace_id, o.workspace_slug, o.email_key, "
                         "  o.issuer, o.desired_policy_id, o.desired_access, "
+                        "  o.access_epoch AS operator_access_epoch, o.setup_state, "
                         "  cd.component_deployment_id, cd.desired_release_id, "
                         "  r.artifact_digest, r.state AS release_state, r.component AS rel_comp, "
                         "  cm.deployment_id, cm.public_base_domain "
@@ -158,6 +161,8 @@ class AdminEffectAdmission:
                 row is None
                 or row["kind"] != "provision"
                 or row["desired_access"] != "enabled"
+                or row["operator_access_epoch"] != row["access_epoch"]
+                or row["setup_state"] in TERMINAL_SETUP_STATES
                 or row["rel_comp"] != "operator"
                 or row["release_state"] != "qualified"
             ):
@@ -257,15 +262,26 @@ class AdminEffectAdmission:
             row = (
                 connection.execute(
                     text(
-                        "SELECT operator_id, component_deployment_id, state "
-                        "FROM main.operations WHERE operation_id = :op_id"
+                        "SELECT op.operator_id, op.component_deployment_id, op.state, op.kind, "
+                        "op.access_epoch, o.desired_access, o.access_epoch AS op_access_epoch, "
+                        "o.setup_state "
+                        "FROM main.operations op "
+                        "JOIN main.operators o ON o.operator_id = op.operator_id "
+                        "WHERE op.operation_id = :op_id"
                     ),
                     {"op_id": operation_id},
                 )
                 .mappings()
                 .one_or_none()
             )
-            if row is None or row["state"] not in ADMITTABLE_STATES:
+            if (
+                row is None
+                or row["kind"] != "provision"
+                or row["state"] not in STARTABLE_STATES
+                or row["desired_access"] != "enabled"
+                or row["op_access_epoch"] != row["access_epoch"]
+                or row["setup_state"] in TERMINAL_SETUP_STATES
+            ):
                 raise HostAgentDenied()
             connection.execute(
                 text(
@@ -309,8 +325,9 @@ class AdminEffectAdmission:
             row = (
                 connection.execute(
                     text(
-                        "SELECT op.operator_id, op.component_deployment_id, op.state, "
+                        "SELECT op.operator_id, op.component_deployment_id, op.state, op.kind, "
                         "op.access_epoch, o.workspace_id, o.revision AS op_rev, "
+                        "o.desired_access, o.access_epoch AS op_access_epoch, o.setup_state, "
                         "cd.desired_release_id "
                         "FROM main.operations op "
                         "JOIN main.operators o ON o.operator_id = op.operator_id "
@@ -323,7 +340,14 @@ class AdminEffectAdmission:
                 .mappings()
                 .one_or_none()
             )
-            if row is None or row["state"] not in ADMITTABLE_STATES:
+            if (
+                row is None
+                or row["kind"] != "provision"
+                or row["state"] not in ADMITTABLE_STATES
+                or row["desired_access"] != "enabled"
+                or row["op_access_epoch"] != row["access_epoch"]
+                or row["setup_state"] in TERMINAL_SETUP_STATES
+            ):
                 raise HostAgentDenied()
             next_op_rev = row["op_rev"] + 1
             result = AdminResult(
@@ -445,15 +469,26 @@ class AdminEffectAdmission:
             row = (
                 connection.execute(
                     text(
-                        "SELECT operator_id, component_deployment_id, state "
-                        "FROM main.operations WHERE operation_id = :op_id"
+                        "SELECT op.operator_id, op.component_deployment_id, op.state, op.kind, "
+                        "op.access_epoch, o.desired_access, o.access_epoch AS op_access_epoch, "
+                        "o.setup_state "
+                        "FROM main.operations op "
+                        "JOIN main.operators o ON o.operator_id = op.operator_id "
+                        "WHERE op.operation_id = :op_id"
                     ),
                     {"op_id": operation_id},
                 )
                 .mappings()
                 .one_or_none()
             )
-            if row is None or row["state"] not in ADMITTABLE_STATES:
+            if (
+                row is None
+                or row["kind"] != "provision"
+                or row["state"] not in ADMITTABLE_STATES
+                or row["desired_access"] != "enabled"
+                or row["op_access_epoch"] != row["access_epoch"]
+                or row["setup_state"] in TERMINAL_SETUP_STATES
+            ):
                 raise HostAgentDenied()
             op_state = "unknown" if unknown else "needs_attention"
             commit_state = "unknown" if unknown else "pending"

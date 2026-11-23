@@ -268,8 +268,8 @@ without hard-coding an arbitrary operator cap.
 
 | Column | Type | Nullable | Default | Description / column rules |
 | --- | --- | --- | --- | --- |
-| `profile_ref` | `REF` | No | — | PK; logical qualified profile reference. |
-| `profile_revision` | `REV` | No | — | Monotonic profile revision; UNIQUE with `profile_ref`. |
+| `profile_ref` | `REF` | No | — | Composite PK (`profile_ref`, `profile_revision`); logical qualified profile reference. |
+| `profile_revision` | `REV` | No | — | Composite PK (`profile_ref`, `profile_revision`); monotonic profile revision. |
 | `measurement_sha256` | `HASH` | No | — | SHA-256 of pinned native capacity measurements. |
 | `source_sha256` | `HASH` | No | — | SHA-256 of pinned source inputs. |
 | `runtime_policy_sha256` | `HASH` | No | — | SHA-256 of pinned runtime policy inputs. |

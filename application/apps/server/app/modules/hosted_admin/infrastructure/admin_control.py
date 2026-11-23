@@ -75,6 +75,7 @@ from app.platform.sqlite_engine import immediate_transaction
 RECENT_MFA_WINDOW_MS = 900_000
 INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000
 CURSOR_POSITION_PARTS = 2
+MAX_SQLITE_INT = (1 << 63) - 1
 RESERVED_SLUGS = frozenset(
     {"admin", "login", "api", "www", "mail", "static", "assets", "support", "status"}
 )
@@ -278,15 +279,19 @@ def _cursor_filter(
         raise AdminConflictError("cursor_context_changed", str(error)) from error
     if (
         len(query.cursor.position) != CURSOR_POSITION_PARTS
+        or not query.cursor.position[0].isascii()
         or not query.cursor.position[0].isdigit()
     ):
+        raise AdminConflictError("cursor_invalid", "Invalid continuation position.")
+    cursor_ts = int(query.cursor.position[0])
+    if not 0 <= cursor_ts <= MAX_SQLITE_INT:
         raise AdminConflictError("cursor_invalid", "Invalid continuation position.")
     clause = (
         " AND (o.created_at > :cursor_created_at "
         "OR (o.created_at = :cursor_created_at AND o.operator_id > :cursor_operator_id))"
     )
     params = {
-        "cursor_created_at": int(query.cursor.position[0]),
+        "cursor_created_at": cursor_ts,
         "cursor_operator_id": query.cursor.position[1],
     }
     return query.cursor.context.as_of, clause, params
@@ -988,6 +993,42 @@ class AdminControlService:
             )
         return str(params["freshness_state"])
 
+    def _load_refresh_target(
+        self, connection: Connection, scope: WorkspaceScope, command: AdminCommand
+    ):
+        payload: RefreshSource = command.intent.payload
+        operator = (
+            connection.execute(
+                text("SELECT * FROM main.operators WHERE operator_id = :id"),
+                {"id": scope.operator_id},
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if operator is None or operator["workspace_id"] != scope.workspace_id:
+            raise AdminNotFoundError("operator_not_found", "Operator was not found.")
+        if operator["revision"] != command.intent.expected_revision:
+            raise AdminConflictError("operator_revision_conflict", "Operator record changed.")
+        if operator["access_epoch"] != command.intent.access_epoch:
+            raise AdminConflictError("operator_epoch_conflict", "Access epoch changed.")
+        deployment = (
+            connection.execute(
+                text(
+                    "SELECT component_deployment_id FROM main.component_deployments "
+                    "WHERE component_deployment_id = :cd AND operator_id = :op "
+                    "AND component = 'operator'"
+                ),
+                {"cd": payload.assignment_id, "op": scope.operator_id},
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if deployment is None:
+            raise AdminConflictError(
+                "assignment_not_found", "Assignment does not belong to this operator."
+            )
+        return operator
+
     def _refresh_source(
         self, actor: AdminAuthority, command: AdminCommand
     ) -> OperationOutcome[AdminResult]:
@@ -999,20 +1040,7 @@ class AdminControlService:
             retained = self._lookup_operation(connection, command.reference())
             if retained is not None:
                 return retained
-            operator = (
-                connection.execute(
-                    text("SELECT * FROM main.operators WHERE operator_id = :id"),
-                    {"id": scope.operator_id},
-                )
-                .mappings()
-                .one_or_none()
-            )
-            if operator is None or operator["workspace_id"] != scope.workspace_id:
-                raise AdminNotFoundError("operator_not_found", "Operator was not found.")
-            if operator["revision"] != command.intent.expected_revision:
-                raise AdminConflictError("operator_revision_conflict", "Operator record changed.")
-            if operator["access_epoch"] != command.intent.access_epoch:
-                raise AdminConflictError("operator_epoch_conflict", "Access epoch changed.")
+            self._load_refresh_target(connection, scope, command)
 
         # Phase 2: source inspection runs strictly outside any SQLite transaction.
         reading: SourceObservationReading | None = None
@@ -1031,18 +1059,7 @@ class AdminControlService:
             retained = self._lookup_operation(connection, command.reference())
             if retained is not None:
                 return retained
-            operator = (
-                connection.execute(
-                    text("SELECT * FROM main.operators WHERE operator_id = :id"),
-                    {"id": scope.operator_id},
-                )
-                .mappings()
-                .one_or_none()
-            )
-            if operator is None or operator["workspace_id"] != scope.workspace_id:
-                raise AdminNotFoundError("operator_not_found", "Operator was not found.")
-            if operator["access_epoch"] != command.intent.access_epoch:
-                raise AdminConflictError("operator_epoch_conflict", "Access epoch changed.")
+            operator = self._load_refresh_target(connection, scope, command)
 
             freshness_state = self._upsert_source_observation(
                 connection,
@@ -1139,13 +1156,15 @@ class AdminControlService:
             raise AdminDeniedError(
                 "admin_scope_invalid", "Admin observations use deployment scope."
             )
-        admin_list = self.list_operators(actor, query, AdminFilters())
+        admin_list, operator_revisions = self._list_operators_with_revisions(
+            actor, query, AdminFilters()
+        )
         page = admin_list.directory.data
         assert page is not None
         items = tuple(
             AdminObservation(
                 resource_id=item.operator_id,
-                revision=item.operation.revision if item.operation else 1,
+                revision=operator_revisions[item.operator_id],
                 freshness=page.freshness,
                 display_name=item.display_name,
                 setup_state=item.setup_state,
@@ -1177,6 +1196,15 @@ class AdminControlService:
         filters: AdminFilters | None = None,
     ) -> AdminList:
         """Strictly set-based Admin directory read with bounded keyset pagination."""
+        admin_list, _ = self._list_operators_with_revisions(actor, query, filters)
+        return admin_list
+
+    def _list_operators_with_revisions(
+        self,
+        actor: AdminAuthority,
+        query: ObservationQuery,
+        filters: AdminFilters | None = None,
+    ) -> tuple[AdminList, dict[str, int]]:
         active_filters = filters or AdminFilters()
         if query.scope.kind != "deployment" or query.deployment_id != actor.deployment_id:
             raise AdminDeniedError("admin_scope_invalid", "Admin list requires deployment scope.")
@@ -1285,17 +1313,28 @@ class AdminControlService:
             freshness=freshness,
             continuation=continuation,
         )
-        return AdminList(
-            query=query,
-            filters=active_filters,
-            directory=Section[ObservationPage[OperatorSummary]](
-                state="ready", data=page, freshness=freshness
+        operator_revisions = {str(row["operator_id"]): int(row["revision"]) for row in page_rows}
+        return (
+            AdminList(
+                query=query,
+                filters=active_filters,
+                directory=Section[ObservationPage[OperatorSummary]](
+                    state="ready", data=page, freshness=freshness
+                ),
+                actions=(ActionState(action=UIAction.CREATE_ASSIGNMENT, enabled=True),),
             ),
-            actions=(ActionState(action=UIAction.CREATE_ASSIGNMENT, enabled=True),),
+            operator_revisions,
         )
 
     def detail_operator(self, actor: AdminAuthority, operator_id: str) -> AdminDetail:
         """Bounded set-based Admin detail read for one operator."""
+        detail, _ = self.detail_operator_with_revision(actor, operator_id)
+        return detail
+
+    def detail_operator_with_revision(
+        self, actor: AdminAuthority, operator_id: str
+    ) -> tuple[AdminDetail, int]:
+        """Bounded set-based Admin detail read returning both AdminDetail and operator revision."""
         with self.engine.connect() as connection:
             now = self.clock()
             meta = self._verify_actor(connection, actor, now=now, sensitive=False)
@@ -1363,13 +1402,16 @@ class AdminControlService:
             source_revision=f"operator:{row['revision']}",
         )
         refresh_operation = _prefixed_operation(row, "rf", deployment_id=meta["deployment_id"])
-        return AdminDetail(
-            operator=summary,
-            readiness=Section[Readiness](
-                state="ready", data=readiness, freshness=readiness_freshness
+        return (
+            AdminDetail(
+                operator=summary,
+                readiness=Section[Readiness](
+                    state="ready", data=readiness, freshness=readiness_freshness
+                ),
+                refresh_operation=refresh_operation,
+                actions=summary.actions,
             ),
-            refresh_operation=refresh_operation,
-            actions=summary.actions,
+            int(row["revision"]),
         )
 
     def _summary_from_row(self, row, *, deployment_id: str, now: int) -> OperatorSummary:

@@ -54,7 +54,13 @@ class _OfflineAsgiClient:
     def __enter__(self) -> _OfflineAsgiClient:
         self._loop = asyncio.new_event_loop()
         self._lifespan_cm = self._app.router.lifespan_context(self._app)
-        self._loop.run_until_complete(self._lifespan_cm.__aenter__())
+        try:
+            self._loop.run_until_complete(self._lifespan_cm.__aenter__())
+        except BaseException:
+            self._loop.close()
+            self._loop = None
+            self._lifespan_cm = None
+            raise
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:

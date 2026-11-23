@@ -259,7 +259,11 @@ class _AdminLiteHandlers:
             raw_limit = request.query_params.get("limit")
             if raw_limit is None:
                 limit = DEFAULT_PAGE_LIMIT
-            elif raw_limit.isdigit() and 1 <= int(raw_limit) <= MAX_PAGE_LIMIT:
+            elif (
+                raw_limit.isascii()
+                and raw_limit.isdigit()
+                and 1 <= int(raw_limit) <= MAX_PAGE_LIMIT
+            ):
                 limit = int(raw_limit)
             else:
                 raise AdminControlError("invalid_limit", "Limit must be 1..50.", status=400)
@@ -290,7 +294,7 @@ class _AdminLiteHandlers:
 
     async def create_operator(self, request: Request) -> JSONResponse:
         try:
-            actor = self._authenticate(request, write=True, sensitive=True)
+            actor = await run_in_threadpool(self._authenticate, request, write=True, sensitive=True)
             data = await self.read_body(request)
             idempotency_key = data.get("idempotencyKey")
             expected_revision = data.get("expectedRevision")
@@ -335,7 +339,7 @@ class _AdminLiteHandlers:
                 intent=intent,
                 request_hash=semantic_hash(intent),
             )
-            outcome = self.control.execute(actor, command)
+            outcome = await run_in_threadpool(self.control.execute, actor, command)
             return JSONResponse(outcome.model_dump(mode="json"), status_code=201)
         except (AdminControlError, SemanticConflict, ValidationError) as error:
             return _error_response(error)
@@ -344,15 +348,19 @@ class _AdminLiteHandlers:
         try:
             canonical_id = _canonical_uuid(operator_id)
             actor = self._authenticate(request, write=False, sensitive=False)
-            detail = self.control.detail_operator(actor, canonical_id)
-            return JSONResponse(detail.model_dump(mode="json"))
+            detail, operator_revision = self.control.detail_operator_with_revision(
+                actor, canonical_id
+            )
+            payload = detail.model_dump(mode="json")
+            payload["operatorRevision"] = operator_revision
+            return JSONResponse(payload)
         except (AdminControlError, SemanticConflict, ValidationError) as error:
             return _error_response(error)
 
     async def issue_invitation(self, operator_id: str, request: Request) -> JSONResponse:
         try:
             canonical_id = _canonical_uuid(operator_id)
-            actor = self._authenticate(request, write=True, sensitive=True)
+            actor = await run_in_threadpool(self._authenticate, request, write=True, sensitive=True)
             data = await self.read_body(request)
             idempotency_key = data.get("idempotencyKey")
             expected_revision = data.get("expectedRevision")
@@ -362,8 +370,8 @@ class _AdminLiteHandlers:
                     "idempotencyKey and expectedRevision are required.",
                     status=400,
                 )
-            workspace_id, assignment_id, _, access_epoch = _workspace_context(
-                self.control, canonical_id
+            workspace_id, assignment_id, _, access_epoch = await run_in_threadpool(
+                _workspace_context, self.control, canonical_id
             )
             intent = CommandIntent[ReissueInvitation](
                 deployment_id=actor.deployment_id,
@@ -382,7 +390,9 @@ class _AdminLiteHandlers:
                 intent=intent,
                 request_hash=semantic_hash(intent),
             )
-            issued = self.control.issue_invitation_with_token(actor, command)
+            issued = await run_in_threadpool(
+                self.control.issue_invitation_with_token, actor, command
+            )
             response_body: dict[str, Any] = {
                 "outcome": issued.outcome.model_dump(mode="json"),
                 "invitationId": issued.invitation_id,
@@ -399,14 +409,15 @@ class _AdminLiteHandlers:
         try:
             canonical_op = _canonical_uuid(operator_id)
             canonical_inv = _canonical_uuid(invitation_id)
-            actor = self._authenticate(request, write=True, sensitive=True)
+            actor = await run_in_threadpool(self._authenticate, request, write=True, sensitive=True)
             data = await self.read_body(request)
             expected_revision = data.get("expectedRevision")
             if type(expected_revision) is not int:
                 raise AdminControlError(
                     "invalid_request", "expectedRevision is required.", status=400
                 )
-            next_revision = self.control.mark_invitation_sent(
+            next_revision = await run_in_threadpool(
+                self.control.mark_invitation_sent,
                 actor,
                 operator_id=canonical_op,
                 invitation_id=canonical_inv,
@@ -421,7 +432,9 @@ class _AdminLiteHandlers:
     async def refresh_operator_source(self, operator_id: str, request: Request) -> JSONResponse:
         try:
             canonical_id = _canonical_uuid(operator_id)
-            actor = self._authenticate(request, write=True, sensitive=False)
+            actor = await run_in_threadpool(
+                self._authenticate, request, write=True, sensitive=False
+            )
             data = await self.read_body(request)
             idempotency_key = data.get("idempotencyKey")
             expected_revision = data.get("expectedRevision")
@@ -431,8 +444,8 @@ class _AdminLiteHandlers:
                     "idempotencyKey and expectedRevision are required.",
                     status=400,
                 )
-            workspace_id, assignment_id, _, access_epoch = _workspace_context(
-                self.control, canonical_id
+            workspace_id, assignment_id, _, access_epoch = await run_in_threadpool(
+                _workspace_context, self.control, canonical_id
             )
             intent = CommandIntent[RefreshSource](
                 deployment_id=actor.deployment_id,

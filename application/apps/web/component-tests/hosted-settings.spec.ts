@@ -18,14 +18,17 @@ const READY_SETTINGS = {
       used_bytes: 12_500_000,
     },
     freshness: {
-      observed_at: "2026-11-22T20:00:00+00:00",
+      state: "known",
+      as_of: 1795377600000,
+      source_revision: "usage:1",
     },
   },
   protection: {
     state: "unavailable",
     data: null,
     freshness: {
-      reason: "backup_protection_not_enabled",
+      state: "unavailable",
+      error_code: "backup_protection_unavailable",
     },
   },
   support_contact: "pilot-support@example.com",
@@ -33,7 +36,8 @@ const READY_SETTINGS = {
     state: "unavailable",
     data: null,
     freshness: {
-      reason: "no_scheduled_maintenance",
+      state: "unavailable",
+      error_code: "no_announced_maintenance",
     },
   },
   actions: [{ action: "operator_read_settings", enabled: true }],
@@ -60,7 +64,7 @@ test("hosted mode displays Free pilot plan, usage, unavailable protection, suppo
     page.getByText("12.50 MB of 50.00 MB used (25%) — 37.50 MB remaining."),
   ).toBeVisible();
   await expect(page.getByText("Database: 2.50 MB · Retained files: 10.00 MB")).toBeVisible();
-  await expect(page.getByText("Observed at 2026-11-22T20:00:00+00:00")).toBeVisible();
+  await expect(page.getByText("Observed at 2026-11-22T20:00:00.000Z")).toBeVisible();
   await expect(page.getByText("Unavailable — backup protection is not yet active.")).toBeVisible();
   await expect(page.getByText("pilot-support@example.com")).toBeVisible();
 
@@ -80,7 +84,11 @@ test("hosted mode reports unavailable storage usage honestly without fabricating
         usage: {
           state: "unavailable",
           data: null,
-          freshness: { reason: "usage_state_unreadable" },
+          freshness: { state: "unavailable", error_code: "usage_state_unreadable" },
+        },
+        protection: {
+          state: "ready",
+          data: { status: "degraded", last_verified_at: 1795377600000 },
         },
         usageBreakdown: null,
         maintenance: {
@@ -94,6 +102,9 @@ test("hosted mode reports unavailable storage usage honestly without fabricating
   await page.goto(`${fixture}?mode=hosted`);
 
   await expect(page.getByText("Unavailable (usage_state_unreadable).")).toBeVisible();
+  await expect(
+    page.getByText("Degraded — latest verified point: 2026-11-22T20:00:00.000Z"),
+  ).toBeVisible();
   await expect(page.getByRole("progressbar")).toHaveCount(0);
   await expect(page.getByText("Planned maintenance Sunday 02:00 UTC.")).toBeVisible();
 });

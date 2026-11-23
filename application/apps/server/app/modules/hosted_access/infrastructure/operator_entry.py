@@ -3,6 +3,7 @@
 import argparse
 from contextlib import contextmanager
 from ipaddress import IPv4Address
+import os
 from pathlib import Path
 from time import time_ns
 from typing import Annotated, Literal
@@ -18,7 +19,10 @@ from app.modules.hosted_access.api.managed_business import ManagedBusinessInputs
 from app.modules.hosted_access.application.identity_evidence import IdentityBinding
 from app.modules.hosted_access.application.identity_setup import HttpsOrigin
 from app.modules.hosted_access.infrastructure.admin_bootstrap import private_file
-from app.modules.hosted_access.infrastructure.free_storage_admission import FreeStorageAdmission
+from app.modules.hosted_access.infrastructure.free_storage_admission import (
+    FreeStorageAdmission,
+    PhysicalQuotaHeadroom,
+)
 from app.modules.hosted_access.infrastructure.handoff_channel import CentralHandoffClient
 from app.modules.hosted_access.infrastructure.handoff_signing import IdentitySigner
 from app.modules.hosted_access.infrastructure.operator_identity_runtime import (
@@ -34,7 +38,7 @@ from app.modules.hosted_access.infrastructure.shared_identity_entry import (
 from app.modules.hosted_access.infrastructure.tls_candidate import run_identity_tls
 from app.modules.hosted_access.infrastructure.firebase_tokens import unique_json
 from app.platform.config import application_root
-from app.platform.hosted_contracts.values import Contract, Reference
+from app.platform.hosted_contracts.values import Contract, EmailAddress, Reference
 from app.platform.hosted_schema import validate_schema
 from app.platform.hosted_writer_lock import HostedWriterLock
 from app.platform.schema_resources import HostedStore
@@ -57,7 +61,8 @@ class OperatorDeployment(Contract):
     socket_directory: Path
     gateway_address: IPv4Address
     listen_address: IPv4Address
-    support_contact: str | None = None
+    scratch_directory: Path | None = None
+    support_contact: EmailAddress | None = None
 
     def check_private_network(self):
         if any(
@@ -86,6 +91,20 @@ class TrustedSourceHTTP:
             await Response(status_code=421)(scope, receive, send)
         else:
             await self.app(scope, receive, send)
+
+
+def _read_physical_headroom(workspace: Path, control: Path, scratch: Path) -> PhysicalQuotaHeadroom:
+    ws_stat = os.statvfs(workspace)
+    ctrl_stat = os.statvfs(control)
+    scratch_stat = os.statvfs(scratch)
+    return PhysicalQuotaHeadroom(
+        workspace_available_bytes=ws_stat.f_bavail * ws_stat.f_frsize,
+        workspace_available_inodes=ws_stat.f_favail,
+        control_available_bytes=ctrl_stat.f_bavail * ctrl_stat.f_frsize,
+        control_available_inodes=ctrl_stat.f_favail,
+        scratch_available_bytes=scratch_stat.f_bavail * scratch_stat.f_frsize,
+        scratch_available_inodes=scratch_stat.f_favail,
+    )
 
 
 @contextmanager
@@ -138,8 +157,16 @@ def candidate(configuration):
         clock = lambda: time_ns() // 1_000_000
         business_engine = create_sqlite_engine(WorkspacePaths(root=workspace).database)
         try:
+            scratch = (
+                configuration.scratch_directory
+                if configuration.scratch_directory is not None
+                else (Path("/scratch") if Path("/scratch").is_dir() else control)
+            )
             usage_store = UsageAccountingStore(engine, business_engine, clock=clock)
-            storage_admission = FreeStorageAdmission(usage_store)
+            storage_admission = FreeStorageAdmission(
+                usage_store,
+                physical_headroom=lambda: _read_physical_headroom(workspace, control, scratch),
+            )
             with owned_identity_socket(
                 configuration.socket_directory, binding.scope.operator_id
             ) as listener:

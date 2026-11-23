@@ -1,0 +1,138 @@
+Response to: docs/pending_code_review_comments/HOSTED_MVP_H04_be7fc0aa_REVIEW_COMMENTS.txt
+Response date: 2026-11-22
+Branch: hosted_mvp
+
+All 21 findings (P1: #1, #4, #5, #10, #17, #18; P2: #2, #3, #6, #7, #11, #12, #13, #14, #19, #20, #21; P3: #8, #9, #15, #16) have been addressed.
+
+Summary of Changes
+------------------
+
+Host Agent, manual provisioning, and admin schema:
+
+1. [P1] Preserve ext4 prjquota and ownership on workspace_root during initialization
+   - application/apps/server/app/modules/workspace/application/service.py:74-129
+     Added `in_place: bool = False` to `WorkspaceService.initialize()` and `_initialize_in_place()`, initializing workspace layout, database, and manifest directly inside the prepared `self.paths.root` without `rmdir()`/`replace()` on the workspace root inode (default `in_place=False` preserves atomic staging for local mode).
+   - application/apps/server/app/modules/host_agent/infrastructure/manual_provision.py:114
+     Switched `ManualProvisioner` to `ws_service.initialize(in_place=True)` so files inherit the ext4 project ID and `FS_PROJINHERIT_FL` established by `prepare_resources`.
+
+2. [P2] Composite primary key on immutable `capacity_profiles`
+   - application/database/admin-migrations/versions/admin_0001_initial.py:175-188
+     Replaced single-column PK on `profile_ref` + redundant `UniqueConstraint` with composite `sa.PrimaryKeyConstraint("profile_ref", "profile_revision")`.
+   - docs/database/admin-registry.md:271-272
+     Updated `capacity_profiles` column documentation to reflect the composite PK.
+
+3. [P2] Concurrent `ManualProvisioner.provision()` guard, already-succeeded race, and `unknown=True` after external effects
+   - application/apps/server/app/modules/hosted_admin/infrastructure/provisioning_admission.py:28,259-282
+     Added `STARTABLE_STATES = frozenset({"pending", "needs_attention", "unknown"})` so `mark_running()` rejects concurrent `running -> running` transitions.
+   - application/apps/server/app/modules/host_agent/infrastructure/manual_provision.py:89-236
+     Extracted `_start_or_return_succeeded()`, `_prepare_and_seed()`, and `_finalize_succeeded()`. Handled already-succeeded `HostAgentDenied` races cleanly by returning `state="succeeded"`, tracked `external_effects_started` before `apply_auth_routes`/`start_container` to record `unknown=True` on failure after external effects begin, and moved `mark_succeeded()` out of the provisioning `try` block with uncertain-receipt handling (`unknown=True`).
+   - application/apps/server/app/modules/host_agent/tests/test_h04_manual_provision.py:141-159
+     Updated assertion for `start_container` failure to verify `state == "unknown"` and `capacity_commitments.state == "unknown"`.
+
+5. [P1] Guard `AdminEffectAdmission` transitions on `op.kind == 'provision'` and current `operators.access_epoch`
+   - application/apps/server/app/modules/hosted_admin/infrastructure/provisioning_admission.py:29,137-170,259-282,320-346,464-487
+     `load_provision_intent()` now selects `o.access_epoch` and `o.setup_state` and denies when `o.access_epoch != op.access_epoch` or `o.setup_state IN ('active', 'retired')`. `mark_running()`, `mark_succeeded()`, and `mark_needs_attention()` now join `main.operators` and enforce `op.kind = 'provision'`, `o.desired_access = 'enabled'`, `o.access_epoch = op.access_epoch`, and `o.setup_state NOT IN ('active', 'retired')`.
+
+21. [P2] Clean up users, data directory, and Docker image in `qualify_free_sizing.py`
+   - application/deploy/hosted-mvp/gcp/qualify_free_sizing.py:290-427
+     Wrapped `run_gcp_qualification()` in `try...finally` calling `_cleanup_gcp_qualification()` to run `userdel` on created system users, `docker rmi -f` on the built sizing image, and `shutil.rmtree(run_root, ignore_errors=True)`.
+
+Hosted Admin control plane and API:
+
+4. [P1] Report numeric `main.operators.revision` in `AdminObservation` and `detail_operator`
+   - application/apps/server/app/modules/hosted_admin/infrastructure/admin_control.py:1173-1228,1338-1432
+     Split `_list_operators_with_revisions()` and `detail_operator_with_revision()` so `observe()` populates `AdminObservation.revision` from `main.operators.revision` (not `operation.revision`).
+   - application/apps/server/app/modules/hosted_admin/api/router.py:348-358
+     `detail_operator` now includes numeric `operatorRevision` in the JSON response.
+   - application/apps/web/src/admin/admin-api.ts:74-83
+     Added `operatorRevision?: number` to `AdminDetailResponse`.
+   - application/apps/web/src/admin/AdminWorkspace.tsx:272,302
+     `handleRefreshSource` and `handleIssueInvitation` now send `detail.operatorRevision ?? detail.operator.operation?.revision ?? 1`.
+
+6. [P2] Validate `payload.assignment_id` and recheck `expected_revision` in `_refresh_source` Phase 3
+   - application/apps/server/app/modules/hosted_admin/infrastructure/admin_control.py:996-1064
+     Extracted `_load_refresh_target()` and invoked it in both Phase 1 and Phase 3 `immediate_transaction` to verify `payload.assignment_id` belongs to `scope.operator_id` in `main.component_deployments` and that `operator["revision"] == command.intent.expected_revision`.
+
+7. [P2] Offload blocking auth/DB calls in `hosted_admin/api/router.py` async write handlers
+   - application/apps/server/app/modules/hosted_admin/api/router.py:295-471
+     Offloaded `self._authenticate(...)`, `_workspace_context(...)`, `self.control.execute(...)`, `self.control.issue_invitation_with_token(...)`, and `self.control.mark_invitation_sent(...)` via `await run_in_threadpool(...)` across all four async write handlers.
+
+8. [P3] ASCII-only `.isdigit()` and 64-bit signed integer bounds on pagination limit and cursor
+   - application/apps/server/app/modules/hosted_admin/api/router.py:260-269
+     Enforced `raw_limit.isascii() and raw_limit.isdigit()`.
+   - application/apps/server/app/modules/hosted_admin/infrastructure/admin_control.py:78,280-296
+     Enforced `pos0.isascii() and pos0.isdigit()` and `0 <= int(pos0) <= (1 << 63) - 1`, raising `AdminConflictError("cursor_invalid", ...)` otherwise.
+
+9. [P3] Prevent asyncio event loop leak on lifespan startup error in `_OfflineAsgiClient.__enter__`
+   - application/apps/server/app/modules/hosted_admin/infrastructure/synthetic_seed.py:54-65
+     Wrapped `__aenter__()` in `try/except BaseException` to close `self._loop` and reset `_loop` and `_lifespan_cm` to `None` before re-raising.
+
+Hosted access, source lifecycle, and Free storage admission:
+
+10. [P1] Serialize logical usage measurement under `access.sqlite` write lock
+    - application/apps/server/app/modules/hosted_access/infrastructure/usage_accounting.py:151-160,335-345,422-432
+      Moved `measure_logical_usage(self.business_engine)` inside `immediate_transaction(self.access_engine)` in `refresh_usage_state()`, `settle_commit()`, and `reconcile_unknown()`, preventing stale-measurement overwrites and premature reservation releases.
+
+11. [P2] Handle `BaseException` (`asyncio.CancelledError`) and `settle_commit()` errors in `FreeStorageAdmission`
+    - application/apps/server/app/modules/hosted_access/infrastructure/free_storage_admission.py:115-134
+      Changed `except Exception:` to `except BaseException:` (after `HostedAccessError`) to call `mark_unknown()` before re-raising, and wrapped `settle_commit()` in `try/except BaseException` to mark uncertain on failure.
+
+12. [P2] Enforce `LifecycleProof` binding and expiration in `SourceLifecycle._initialize_disabled`
+    - application/apps/server/app/modules/hosted_access/infrastructure/source_lifecycle.py:217-244
+      Retained `proof` and validated `proof.binding == binding` and `proof.expires_at > now` inside `with self.mutation()` after `now = self.clock()`.
+
+13. [P2] Enforce `access_meta` scope check in `SourceLifecycle.original()` for `initialize_disabled`
+    - application/apps/server/app/modules/hosted_access/infrastructure/source_lifecycle.py:114-133
+      Queried `main.access_meta WHERE id=1`; returns `None` when uninitialized, and calls `self._scope(meta, actor, reference)` before `self._retained(connection, reference)` when initialized.
+
+14. [P2] Wire real physical headroom reader in `operator_entry.py`
+    - application/apps/server/app/modules/hosted_access/infrastructure/operator_entry.py:64,96-109,163-172
+      Added `_read_physical_headroom(workspace, control, scratch)` using `os.statvfs()` and wired it as `physical_headroom` into `FreeStorageAdmission(usage_store, physical_headroom=...)`.
+
+15. [P3] Validate `support_contact` as `EmailAddress`
+    - application/apps/server/app/modules/hosted_access/infrastructure/operator_entry.py:42,65
+      Typed `OperatorDeployment.support_contact: EmailAddress | None = None`.
+    - application/apps/server/app/modules/hosted_access/api/operator_settings.py:28-30,63-64
+      Validated `OperatorSettingsInputs.support_contact` via `TypeAdapter(EmailAddress)` in `__post_init__`.
+
+16. [P3] Guard `usage_reservations.updated_at` against backwards wall-clock steps
+    - application/apps/server/app/modules/hosted_access/infrastructure/usage_accounting.py:374-465
+      Changed all four `UPDATE main.usage_reservations` statements (`settle_commit`, `release`, `mark_unknown`, `reconcile_unknown`) to use `updated_at = MAX(created_at, :now)`.
+
+Admin-lite UI and Operator Settings UI:
+
+17. [P1] Use fragment capability URL for invitation claim link and scrub on central login
+    - application/apps/web/src/admin/AdminWorkspace.tsx:479-481
+      Changed claim URL from query string to fragment: `https://${op.slug}.${bootstrap.publicBaseDomain}/auth/start#invitation=...&token=...` (accepted by `GET /auth/start` without 401 and never sent to proxy/server logs).
+    - application/apps/web/src/central/main.tsx:29-38
+      Read and immediately scrubbed `#invitation=...&token=...` from `location.hash` via `history.replaceState` on central login load.
+
+18. [P1] Align `HostedSettings` with backend `/api/hosted/settings` contract
+    - application/apps/web/src/app/hosted-settings.tsx:4-22,72-76,196-232
+      Updated types and rendering to read `freshness.as_of`, `freshness.error_code`, `protection.data.status` (`"Protected"` vs `"Degraded"`, never misreporting `"degraded"` as `"Active"`), and `protection.data.last_verified_at`.
+    - application/apps/web/component-tests/hosted-settings.spec.ts:20-110
+      Aligned fixture payloads with the backend contract and added assertion for `"Degraded"` protection rendering.
+
+19. [P2] Recover `AdminWorkspace` from stale `registryGeneration` or transient bootstrap failure
+    - application/apps/web/src/admin/AdminWorkspace.tsx:241-243,366-373,618-645
+      Reloads `loadBootstrap()` when opening "Add operator", clicking "Refresh list", or receiving a 409 conflict in `submitAdd`, and provides a "Retry metadata" action on `bootstrapError`.
+
+20. [P2] Clear stale operator detail immediately when switching inspected operators
+    - application/apps/web/src/admin/AdminWorkspace.tsx:739-747
+      Clears `detail` and `detailError` and sets `detailBusy(true)` before transitioning to the newly inspected operator.
+
+Validation Results
+------------------
+- Focused Python H04 & regression suites:
+  - `pytest application/apps/server/app/modules/hosted_admin/tests/ application/apps/server/app/modules/hosted_access/tests/test_h04_source_usage_settings.py application/apps/server/app/modules/hosted_access/tests/test_h04_hosted_business_composition.py application/scripts/tests/test_h04_free_sizing_qualification.py application/scripts/tests/test_h04_handoff_qualification.py -q`: 71 passed.
+  - `pytest application/apps/server/app/modules/host_agent/tests/test_h04_manual_provision.py -q`: 3 passed.
+  - `pytest application/apps/server/app/modules/hosted_access/tests/test_admin_lifecycle.py application/apps/server/app/modules/hosted_access/tests/test_composition.py -q`: 13 passed.
+  - `pytest application/apps/server/app/modules/workspace/tests/ -q`: 77 passed.
+- Python lint & format (`application/pyproject.toml`):
+  - `ruff check` on all changed H04 Python files: All checks passed.
+  - `ruff format --check` on all 14 changed Python files: 14 files already formatted.
+- Frontend lint, typecheck, format & Playwright component specs:
+  - `npm run lint` (`eslint . --max-warnings 0`): passed.
+  - `npm run typecheck`: passed (208 source files).
+  - `npx prettier --check` on all 6 changed frontend files: All matched files use Prettier code style.
+  - `npx playwright test --config=playwright.components.config.ts apps/web/component-tests/admin-lite.spec.ts apps/web/component-tests/hosted-settings.spec.ts apps/web/component-tests/central-identity.spec.ts`: 10 passed (3.1s).

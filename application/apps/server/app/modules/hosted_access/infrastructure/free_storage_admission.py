@@ -117,7 +117,7 @@ class FreeStorageAdmission:
         except HostedAccessError:
             self.usage_store.release(reservation.reservation_id)
             raise
-        except Exception:
+        except BaseException:
             self.usage_store.mark_unknown(reservation.reservation_id)
             raise
         else:
@@ -127,7 +127,11 @@ class FreeStorageAdmission:
             elif status >= HTTP_ERROR_THRESHOLD:
                 self.usage_store.release(reservation.reservation_id)
             else:
-                self.usage_store.settle_commit(reservation.reservation_id)
+                try:
+                    self.usage_store.settle_commit(reservation.reservation_id)
+                except BaseException:
+                    self.usage_store.mark_unknown(reservation.reservation_id)
+                    raise
 
     @contextmanager
     def reserve(self, body_bytes: int, *, write: bool):

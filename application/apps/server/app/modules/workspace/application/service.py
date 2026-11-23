@@ -71,7 +71,7 @@ class WorkspaceService:
     def from_local_config(cls, config_path: Path | None) -> "WorkspaceService":
         return cls(load_local_config(config_path))
 
-    def initialize(self) -> WorkspaceManifest:
+    def initialize(self, *, in_place: bool = False) -> WorkspaceManifest:
         """Explicitly create a new workspace or validate the one already at this path."""
         self._validate_external_location()
         if self.paths.manifest.exists():
@@ -89,6 +89,8 @@ class WorkspaceService:
             created_at=datetime.now(UTC),
             database_path="database/property-management.sqlite",
         )
+        if in_place:
+            return self._initialize_in_place(manifest)
         staging_paths = WorkspacePaths(root=self._staging_root())
         try:
             self._create_workspace_layout(staging_paths)
@@ -100,6 +102,28 @@ class WorkspaceService:
             self._publish_staging_workspace(staging_paths)
         except (OSError, WorkspaceDatabaseError, ProductSchemaError) as error:
             self._discard_staging_workspace(staging_paths)
+            raise WorkspaceError(
+                f"Unable to initialize workspace at {self.paths.root}: {error}"
+            ) from error
+        return self.open()
+
+    def _initialize_in_place(self, manifest: WorkspaceManifest) -> WorkspaceManifest:
+        """Initialize inside an existing prepared workspace root without replacing its inode."""
+        try:
+            self._create_workspace_layout(self.paths)
+            initialize_latest_schema(self.paths.database)
+            self.workspace_store_factory(self.paths.database).persist_identity(manifest)
+            self._secure_file(self.paths.database)
+            self._write_manifest(self.paths, manifest)
+            self._validate_workspace_database(self.paths, manifest, integrity_check=True)
+            self._secure_existing_workspace_paths()
+        except (OSError, WorkspaceDatabaseError, ProductSchemaError) as error:
+            if self.paths.root.exists():
+                for child in list(self.paths.root.iterdir()):
+                    if child.is_dir() and not child.is_symlink():
+                        shutil.rmtree(child, ignore_errors=True)
+                    else:
+                        child.unlink(missing_ok=True)
             raise WorkspaceError(
                 f"Unable to initialize workspace at {self.paths.root}: {error}"
             ) from error

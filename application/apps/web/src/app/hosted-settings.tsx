@@ -2,8 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { managedHostedMode } from "./hosted-session-state";
 
 type SectionFreshness = {
-  observed_at?: string | null;
-  reason?: string | null;
+  state?: string;
+  as_of?: number | null;
+  source_revision?: string | null;
+  error_code?: string | null;
 };
 
 type UsageData = {
@@ -13,8 +15,10 @@ type UsageData = {
 };
 
 type ProtectionData = {
-  state?: string | null;
-  latest_verified_point_at?: string | null;
+  status: "protected" | "degraded";
+  last_verified_at?: number | null;
+  point_age_ms?: number | null;
+  proof_ref?: string | null;
 };
 
 type MaintenanceData = {
@@ -68,6 +72,10 @@ function formatDecimalBytes(bytes: number): string {
 function formatPlanName(plan: string): string {
   if (plan.toLowerCase() === "free") return "Free pilot";
   return plan;
+}
+
+function formatEpochMs(epochMs: number): string {
+  return new Date(epochMs).toISOString();
 }
 
 async function fetchHostedSettings(signal?: AbortSignal): Promise<HostedSettingsPayload> {
@@ -185,9 +193,9 @@ export function HostedSettings() {
                             : ""}
                         </p>
                       )}
-                      {state.payload.usage.freshness?.observed_at && (
+                      {typeof state.payload.usage.freshness?.as_of === "number" && (
                         <p className="ui-muted">
-                          Observed at {state.payload.usage.freshness.observed_at}
+                          Observed at {formatEpochMs(state.payload.usage.freshness.as_of)}
                         </p>
                       )}
                       {percent >= 90 && (
@@ -202,8 +210,8 @@ export function HostedSettings() {
               ) : (
                 <p>
                   Unavailable
-                  {state.payload.usage.freshness?.reason
-                    ? ` (${state.payload.usage.freshness.reason})`
+                  {state.payload.usage.freshness?.error_code
+                    ? ` (${state.payload.usage.freshness.error_code})`
                     : ""}
                   .
                 </p>
@@ -214,9 +222,9 @@ export function HostedSettings() {
             <dd>
               {state.payload.protection.state === "ready" && state.payload.protection.data ? (
                 <p>
-                  {state.payload.protection.data.state ?? "Active"}
-                  {state.payload.protection.data.latest_verified_point_at
-                    ? ` — latest verified point: ${state.payload.protection.data.latest_verified_point_at}`
+                  {state.payload.protection.data.status === "protected" ? "Protected" : "Degraded"}
+                  {typeof state.payload.protection.data.last_verified_at === "number"
+                    ? ` — latest verified point: ${formatEpochMs(state.payload.protection.data.last_verified_at)}`
                     : ""}
                 </p>
               ) : (

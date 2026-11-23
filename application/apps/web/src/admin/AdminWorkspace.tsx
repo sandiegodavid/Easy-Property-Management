@@ -238,6 +238,9 @@ export function AdminWorkspace({ session }: { session: AdminSession }) {
       setCursor(null);
       setView({ kind: "list" });
     } catch (error) {
+      if (error instanceof AdminApiError && error.status === 409) {
+        void loadBootstrap();
+      }
       if (error instanceof AdminApiError && error.limitingResources.length > 0) {
         setAddFeedback(
           `${error.message} Limiting resources: ${error.limitingResources.join(", ")}.`,
@@ -266,7 +269,7 @@ export function AdminWorkspace({ session }: { session: AdminSession }) {
           csrf: session.csrfToken,
           body: {
             idempotencyKey: createKey("refresh-source"),
-            expectedRevision: detail.operator.operation?.revision ?? 1,
+            expectedRevision: detail.operatorRevision ?? detail.operator.operation?.revision ?? 1,
           },
         },
       );
@@ -296,7 +299,7 @@ export function AdminWorkspace({ session }: { session: AdminSession }) {
           csrf: session.csrfToken,
           body: {
             idempotencyKey: createKey("issue-invitation"),
-            expectedRevision: detail.operator.operation?.revision ?? 1,
+            expectedRevision: detail.operatorRevision ?? detail.operator.operation?.revision ?? 1,
           },
         },
       );
@@ -360,6 +363,14 @@ export function AdminWorkspace({ session }: { session: AdminSession }) {
               : "Capacity observation unavailable"}
           </p>
         </div>
+        {bootstrapError && (
+          <div className="action-row" role="alert">
+            <span>{bootstrapError}</span>
+            <button type="button" className="secondary" onClick={() => void loadBootstrap()}>
+              Retry metadata
+            </button>
+          </div>
+        )}
         {addFeedback && <p role="alert">{addFeedback}</p>}
         <form
           onSubmit={(event) => {
@@ -467,7 +478,7 @@ export function AdminWorkspace({ session }: { session: AdminSession }) {
     const inviteAction = detail?.actions.find((a) => a.action === "admin_reissue_invitation");
     const claimUrl =
       op && issuedInvite?.invitationId && issuedInvite.token && bootstrap
-        ? `https://${op.slug}.${bootstrap.publicBaseDomain}/auth/start?invitation=${issuedInvite.invitationId}&token=${issuedInvite.token}`
+        ? `https://${op.slug}.${bootstrap.publicBaseDomain}/auth/start#invitation=${encodeURIComponent(issuedInvite.invitationId)}&token=${encodeURIComponent(issuedInvite.token)}`
         : null;
     return (
       <div className="admin-panel">
@@ -608,6 +619,7 @@ export function AdminWorkspace({ session }: { session: AdminSession }) {
             type="button"
             onClick={() => {
               setAddFeedback("");
+              void loadBootstrap();
               setView({ kind: "add" });
             }}
           >
@@ -618,6 +630,7 @@ export function AdminWorkspace({ session }: { session: AdminSession }) {
             className="secondary"
             disabled={loadingList}
             onClick={() => {
+              void loadBootstrap();
               void loadList(cursor);
             }}
           >
@@ -626,7 +639,14 @@ export function AdminWorkspace({ session }: { session: AdminSession }) {
         </div>
       </div>
 
-      {bootstrapError && <p role="status">{bootstrapError}</p>}
+      {bootstrapError && (
+        <div className="action-row" role="status">
+          <span>{bootstrapError}</span>
+          <button type="button" className="secondary" onClick={() => void loadBootstrap()}>
+            Retry metadata
+          </button>
+        </div>
+      )}
       {listError && <p role="alert">{listError}</p>}
 
       <div className="filters" role="search" aria-label="Filter operators">
@@ -717,6 +737,9 @@ export function AdminWorkspace({ session }: { session: AdminSession }) {
                       type="button"
                       className="secondary"
                       onClick={() => {
+                        setDetail(null);
+                        setDetailError("");
+                        setDetailBusy(true);
                         setIssuedInvite(null);
                         setInviteDelivered(false);
                         setDetailStatus("");

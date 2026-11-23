@@ -73,6 +73,7 @@ export interface ReadinessGate {
 
 export interface AdminDetailResponse {
   operator: OperatorSummary;
+  operatorRevision?: number;
   readiness: Section<{
     state: "pending" | "ready" | "failed" | "unavailable";
     checks: ReadinessGate[];

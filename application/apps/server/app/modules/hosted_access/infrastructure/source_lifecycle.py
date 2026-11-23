@@ -121,6 +121,14 @@ class SourceLifecycle:
                     or reference.scope.kind != "workspace"
                 ):
                     raise ProviderDenied()
+                meta = (
+                    connection.execute(text("SELECT * FROM main.access_meta WHERE id=1"))
+                    .mappings()
+                    .one_or_none()
+                )
+                if meta is None:
+                    return None
+                self._scope(meta, actor, reference)
                 return self._retained(connection, reference)
             self._scope(source_meta(connection), actor, reference)
             return self._retained(connection, reference)
@@ -206,6 +214,7 @@ class SourceLifecycle:
         intent = command.intent
         payload = intent.payload
         resolved_email = email_key
+        proof: LifecycleProof | None = None
         if resolved_email is None and self.proof_owner is not None:
             proof = self.proof_owner.verify(command, binding)
             if not isinstance(proof, LifecycleProof) or proof.request_hash != ref.request_hash:
@@ -222,6 +231,7 @@ class SourceLifecycle:
             if (
                 existing is not None
                 or self.binding() != binding
+                or (proof is not None and (proof.binding != binding or proof.expires_at <= now))
                 or intent.expected_revision != 1
                 or intent.access_epoch != binding.access_epoch
                 or binding.deployment_id != intent.deployment_id

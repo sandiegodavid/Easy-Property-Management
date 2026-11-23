@@ -9,6 +9,7 @@ from hashlib import sha256
 from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
 
+from app.modules.host_agent.application.dispatch import HostAgentDenied
 from app.modules.hosted_access.application.identity_evidence import IdentityBinding
 from app.modules.hosted_access.application.source_contracts import (
     AdmittedFreePolicy,
@@ -85,6 +86,112 @@ class ManualProvisioner:
         self.seeder_runner = config.seeder_runner
         self.host_effect_hook = config.host_effect_hook
 
+    def _start_or_return_succeeded(self, operation_id: str) -> ProvisionOutcome | None:
+        try:
+            self.admission.mark_running(operation_id)
+        except HostAgentDenied:
+            refreshed = self.admission.load_provision_intent(operation_id)
+            if refreshed.operation_state == "succeeded":
+                return ProvisionOutcome(
+                    operation_id=operation_id,
+                    operator_id=refreshed.operator_id,
+                    state="succeeded",
+                )
+            raise
+        return None
+
+    def _prepare_and_seed(self, intent: ProvisioningIntent, paths: ProvisionPaths):
+        for directory in (paths.workspace_root, paths.control_root, paths.scratch_root):
+            directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if self.host_effect_hook is not None:
+            self.host_effect_hook("prepare_resources", intent, paths)
+
+        config_path = paths.control_root / "workspace.json"
+        ws_service = WorkspaceService(
+            LocalConfig(config_path=config_path, workspace_path=paths.workspace_root)
+        )
+        ws_service.initialize(in_place=True)
+
+        access_path = paths.control_root / "access.sqlite"
+        init_result = initialize_store(
+            HostedStore.HOSTED_ACCESS,
+            access_path,
+            application_directory=self.application_directory,
+        )
+        if init_result not in {
+            InitializationResult.INITIALIZED,
+            InitializationResult.ALREADY_INITIALIZED,
+        }:
+            raise RuntimeError("Access store initialization failed.")
+
+        access_engine = create_sqlite_engine(access_path)
+        business_engine = create_sqlite_engine(ws_service.paths.database)
+        try:
+            self._initialize_access_binding(access_engine, intent)
+            if intent.initial_data == "synthetic":
+                seed_synthetic_workspace(
+                    paths.workspace_root,
+                    scratch_dir=paths.scratch_root,
+                    seed_bundle=intent.seed_bundle,
+                    dataset_path=self.dataset_path,
+                    seeder_runner=self.seeder_runner,
+                )
+            usage_store = UsageAccountingStore(access_engine, business_engine, clock=self.clock)
+            usage_snap = usage_store.refresh_usage_state()
+            if usage_snap.used_bytes >= FREE_V1_USABLE_BYTES:
+                raise SeedBundleError(
+                    "seed_exceeds_free_allowance",
+                    "Initial workspace usage exceeds the Free 50,000,000-byte allowance.",
+                )
+            return usage_snap
+        finally:
+            business_engine.dispose()
+            access_engine.dispose()
+
+    def _finalize_succeeded(
+        self,
+        operation_id: str,
+        intent: ProvisioningIntent,
+        observation_ref: str,
+        usage_snap,
+    ) -> ProvisionOutcome:
+        try:
+            self.admission.mark_succeeded(
+                operation_id,
+                observation_ref=observation_ref,
+                observed_usage_bytes=usage_snap.used_bytes,
+                observed_at=usage_snap.observed_at,
+            )
+        except HostAgentDenied:
+            refreshed = self.admission.load_provision_intent(operation_id)
+            if refreshed.operation_state == "succeeded":
+                return ProvisionOutcome(
+                    operation_id=operation_id,
+                    operator_id=refreshed.operator_id,
+                    state="succeeded",
+                )
+            raise
+        except Exception:
+            self.admission.mark_needs_attention(
+                operation_id,
+                error_code="provision_receipt_uncertain",
+                summary="Provisioning completion receipt was uncertain; inspect before retry.",
+                unknown=True,
+            )
+            return ProvisionOutcome(
+                operation_id=operation_id,
+                operator_id=intent.operator_id,
+                state="unknown",
+                error_code="provision_receipt_uncertain",
+            )
+        return ProvisionOutcome(
+            operation_id=operation_id,
+            operator_id=intent.operator_id,
+            state="succeeded",
+            observation_ref=observation_ref,
+            observed_usage_bytes=usage_snap.used_bytes,
+        )
+
     def provision(self, operation_id: str) -> ProvisionOutcome:
         intent = self.admission.load_provision_intent(operation_id)
         if intent.operation_state == "succeeded":
@@ -93,73 +200,18 @@ class ManualProvisioner:
                 operator_id=intent.operator_id,
                 state="succeeded",
             )
-        self.admission.mark_running(operation_id)
+        already_done = self._start_or_return_succeeded(operation_id)
+        if already_done is not None:
+            return already_done
         paths = self.paths_for(intent)
+        external_effects_started = False
         try:
-            for directory in (paths.workspace_root, paths.control_root, paths.scratch_root):
-                directory.mkdir(mode=0o700, parents=True, exist_ok=True)
-            if self.host_effect_hook is not None:
-                self.host_effect_hook("prepare_resources", intent, paths)
-
-            config_path = paths.control_root / "workspace.json"
-            ws_service = WorkspaceService(
-                LocalConfig(config_path=config_path, workspace_path=paths.workspace_root)
-            )
-            ws_service.initialize()
-
-            access_path = paths.control_root / "access.sqlite"
-            init_result = initialize_store(
-                HostedStore.HOSTED_ACCESS,
-                access_path,
-                application_directory=self.application_directory,
-            )
-            if init_result not in {
-                InitializationResult.INITIALIZED,
-                InitializationResult.ALREADY_INITIALIZED,
-            }:
-                raise RuntimeError("Access store initialization failed.")
-
-            access_engine = create_sqlite_engine(access_path)
-            business_engine = create_sqlite_engine(ws_service.paths.database)
-            try:
-                self._initialize_access_binding(access_engine, intent)
-                if intent.initial_data == "synthetic":
-                    seed_synthetic_workspace(
-                        paths.workspace_root,
-                        scratch_dir=paths.scratch_root,
-                        seed_bundle=intent.seed_bundle,
-                        dataset_path=self.dataset_path,
-                        seeder_runner=self.seeder_runner,
-                    )
-                usage_store = UsageAccountingStore(access_engine, business_engine, clock=self.clock)
-                usage_snap = usage_store.refresh_usage_state()
-                if usage_snap.used_bytes >= FREE_V1_USABLE_BYTES:
-                    raise SeedBundleError(
-                        "seed_exceeds_free_allowance",
-                        "Initial workspace usage exceeds the Free 50,000,000-byte allowance.",
-                    )
-            finally:
-                business_engine.dispose()
-                access_engine.dispose()
-
+            usage_snap = self._prepare_and_seed(intent, paths)
             observation_ref = f"provision-receipt:{operation_id}"
             if self.host_effect_hook is not None:
+                external_effects_started = True
                 self.host_effect_hook("apply_auth_routes", intent, paths)
                 observation_ref = self.host_effect_hook("start_container", intent, paths)
-
-            self.admission.mark_succeeded(
-                operation_id,
-                observation_ref=observation_ref,
-                observed_usage_bytes=usage_snap.used_bytes,
-                observed_at=usage_snap.observed_at,
-            )
-            return ProvisionOutcome(
-                operation_id=operation_id,
-                operator_id=intent.operator_id,
-                state="succeeded",
-                observation_ref=observation_ref,
-                observed_usage_bytes=usage_snap.used_bytes,
-            )
         except SeedBundleError as error:
             self.admission.mark_needs_attention(
                 operation_id, error_code=error.code, summary=str(error)
@@ -175,13 +227,15 @@ class ManualProvisioner:
                 operation_id,
                 error_code="provision_failed",
                 summary="Provisioning interrupted; inspect receipts and retry.",
+                unknown=external_effects_started,
             )
             return ProvisionOutcome(
                 operation_id=operation_id,
                 operator_id=intent.operator_id,
-                state="needs_attention",
+                state="unknown" if external_effects_started else "needs_attention",
                 error_code="provision_failed",
             )
+        return self._finalize_succeeded(operation_id, intent, observation_ref, usage_snap)
 
     def _initialize_access_binding(self, access_engine, intent: ProvisioningIntent) -> None:
         binding_id = str(uuid5(NAMESPACE_URL, f"binding:{intent.operator_id}:1"))

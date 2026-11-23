@@ -8,6 +8,7 @@ or synthetic/unmeasured constants, and leaves H05 backup/restore reservations de
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import fcntl
 from hashlib import sha256
 import json
@@ -285,6 +286,78 @@ def _mode_limits(mode: str) -> ResourceLimits:
     )
 
 
+def _cleanup_gcp_qualification(
+    created_users: list[str], run_root: Path, image_tag: str, *, image_built: bool
+) -> None:
+    for user in created_users:
+        subprocess.run(["userdel", user], check=False)
+    if image_built:
+        subprocess.run(["docker", "rmi", "-f", image_tag], check=False, capture_output=True)
+    shutil.rmtree(run_root, ignore_errors=True)
+
+
+@dataclass(frozen=True)
+class _GcpSizingContext:
+    storage: PrivateStorage
+    run_root: Path
+    image_tag: str
+    actor_image_id: str
+    project_base: int
+    created_users: list[str]
+
+
+def _run_gcp_sizing_actor(ctx: _GcpSizingContext, *, mode: str, index: int) -> dict[str, object]:
+    user = f"epm-h4s-{ctx.run_root.name[-6:]}{index}"
+    subprocess.run(
+        ["useradd", "--system", "--no-create-home", "--shell", "/usr/sbin/nologin", user],
+        check=True,
+    )
+    ctx.created_users.append(user)
+    owner = pwd.getpwnam(user)
+    allocation = Allocation(
+        binding_id=str(uuid4()),
+        resource_generation=1,
+        host_uid=owner.pw_uid,
+        host_gid=owner.pw_gid,
+        workspace_project=ctx.project_base + 3 * index,
+        control_project=ctx.project_base + 3 * index + 1,
+        scratch_project=ctx.project_base + 3 * index + 2,
+        filesystem_identity="isolated-h04-sizing-fixture",
+        image_digest=ctx.actor_image_id,
+        limits=_mode_limits(mode),
+    )
+    ctx.storage.prepare(allocation)
+    project_dirs = {
+        role: ctx.storage.projects(allocation)[idx].binding.directory
+        for idx, role in enumerate(TREE_ROLES)
+    }
+    cmd = [
+        "docker",
+        "run",
+        "--rm",
+        "--network=none",
+        "--read-only",
+        "--user",
+        f"{owner.pw_uid}:{owner.pw_gid}",
+        "-v",
+        f"{project_dirs['workspace']}:/workspace:rw",
+        "-v",
+        f"{project_dirs['control']}:/control:rw",
+        "-v",
+        f"{project_dirs['scratch']}:/scratch:rw",
+        ctx.image_tag,
+        mode,
+        "--target-bytes",
+        str(FREE_LOGICAL_BYTES),
+    ]
+    completed = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=600)
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f"Actor {mode} failed (rc={completed.returncode}): {completed.stderr.strip()}"
+        )
+    return json.loads(completed.stdout.strip().splitlines()[-1])
+
+
 def run_gcp_qualification(output_dir: Path, *, image: str, source_sha256: str) -> dict[str, object]:
     """Opt-in native Linux/Docker/GCP H04.9 qualification runner with real ext4 prjquota."""
     if platform.system() != "Linux":
@@ -311,77 +384,43 @@ def run_gcp_qualification(output_dir: Path, *, image: str, source_sha256: str) -
         raise RuntimeError(f"/srv/epm/data missing required mount options: {mount_options}")
 
     run_root = data_root / "qualification" / f"h04-sizing-{uuid4().hex[:10]}"
-    run_root.mkdir(mode=0o711, parents=True)
-    for name in TREE_ROLES:
-        (run_root / name).mkdir(mode=0o711)
-    targets = QuotaTargets(
-        data_root,
-        "isolated-h04-sizing-fixture",
-        bootstrap["uuid"],
-        *(run_root / name for name in TREE_ROLES),
-    )
-    storage = PrivateStorage(targets)
-    source_root = Path(__file__).resolve().parents[3]
-    actor_image_id = _build_h04_actor_image(run_root, base_image=image, source_root=source_root)
-    modes = (*REQUIRED_WORKLOADS, *REQUIRED_EXHAUSTION)
-    project_base = _reserve_projects(data_root, len(modes) * 3)
-
-    workloads: dict[str, object] = {}
-    exhaustion: dict[str, object] = {}
-
-    for index, mode in enumerate(modes):
-        user = f"epm-h4s-{run_root.name[-6:]}{index}"
-        subprocess.run(
-            ["useradd", "--system", "--no-create-home", "--shell", "/usr/sbin/nologin", user],
-            check=True,
+    image_tag = f"epm-h04-sizing:{run_root.name}"
+    created_users: list[str] = []
+    image_built = False
+    try:
+        run_root.mkdir(mode=0o711, parents=True)
+        for name in TREE_ROLES:
+            (run_root / name).mkdir(mode=0o711)
+        targets = QuotaTargets(
+            data_root,
+            "isolated-h04-sizing-fixture",
+            bootstrap["uuid"],
+            *(run_root / name for name in TREE_ROLES),
         )
-        owner = pwd.getpwnam(user)
-        allocation = Allocation(
-            binding_id=str(uuid4()),
-            resource_generation=1,
-            host_uid=owner.pw_uid,
-            host_gid=owner.pw_gid,
-            workspace_project=project_base + 3 * index,
-            control_project=project_base + 3 * index + 1,
-            scratch_project=project_base + 3 * index + 2,
-            filesystem_identity="isolated-h04-sizing-fixture",
-            image_digest=actor_image_id,
-            limits=_mode_limits(mode),
+        storage = PrivateStorage(targets)
+        source_root = Path(__file__).resolve().parents[3]
+        actor_image_id = _build_h04_actor_image(run_root, base_image=image, source_root=source_root)
+        image_built = True
+        modes = (*REQUIRED_WORKLOADS, *REQUIRED_EXHAUSTION)
+        project_base = _reserve_projects(data_root, len(modes) * 3)
+        workloads: dict[str, object] = {}
+        exhaustion: dict[str, object] = {}
+        sizing_ctx = _GcpSizingContext(
+            storage=storage,
+            run_root=run_root,
+            image_tag=image_tag,
+            actor_image_id=actor_image_id,
+            project_base=project_base,
+            created_users=created_users,
         )
-        storage.prepare(allocation)
-        project_dirs = {
-            role: storage.projects(allocation)[idx].binding.directory
-            for idx, role in enumerate(TREE_ROLES)
-        }
-        cmd = [
-            "docker",
-            "run",
-            "--rm",
-            "--network=none",
-            "--read-only",
-            "--user",
-            f"{owner.pw_uid}:{owner.pw_gid}",
-            "-v",
-            f"{project_dirs['workspace']}:/workspace:rw",
-            "-v",
-            f"{project_dirs['control']}:/control:rw",
-            "-v",
-            f"{project_dirs['scratch']}:/scratch:rw",
-            f"epm-h04-sizing:{run_root.name}",
-            mode,
-            "--target-bytes",
-            str(FREE_LOGICAL_BYTES),
-        ]
-        completed = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=600)
-        if completed.returncode != 0:
-            raise RuntimeError(
-                f"Actor {mode} failed (rc={completed.returncode}): {completed.stderr.strip()}"
-            )
-        parsed = json.loads(completed.stdout.strip().splitlines()[-1])
-        if mode in REQUIRED_WORKLOADS:
-            workloads[mode] = parsed
-        else:
-            exhaustion[mode] = parsed
+        for index, mode in enumerate(modes):
+            parsed = _run_gcp_sizing_actor(sizing_ctx, mode=mode, index=index)
+            if mode in REQUIRED_WORKLOADS:
+                workloads[mode] = parsed
+            else:
+                exhaustion[mode] = parsed
+    finally:
+        _cleanup_gcp_qualification(created_users, run_root, image_tag, image_built=image_built)
 
     evidence = {
         "platform": platform.system(),

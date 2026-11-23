@@ -26,6 +26,16 @@ delete window.epmEmailCompletion;
 const searchParams = new URLSearchParams(location.search);
 const flow = searchParams.get("flow");
 const source = searchParams.get("source");
+const invitationCapability = (() => {
+  if (!location.hash.startsWith("#")) return null;
+  const fragment = new URLSearchParams(location.hash.slice(1));
+  const invitation = fragment.get("invitation");
+  const token = fragment.get("token");
+  if (!invitation || !token) return null;
+  history.replaceState(null, "", location.pathname + location.search);
+  return { invitation, token };
+})();
+void invitationCapability;
 
 interface Outcome {
   state: string;
