@@ -1,0 +1,143 @@
+Review: commit be7fc0aa (H04 impl) against docs/hosting/design/HOSTED_MVP_H04_DESIGN.md
+Review date: 2026-11-22
+Branch: hosted_mvp
+
+
+Host Agent, manual provisioning and admin schema
+
+1. [P1] WorkspaceService.initialize() deletes and replaces workspace_root, stripping ext4 prjquota and ownership set by prepare_resources
+File: application/apps/server/app/modules/host_agent/infrastructure/manual_provision.py:99-108
+Related: application/apps/server/app/modules/workspace/application/service.py:92,177-194
+
+ManualProvisioner.provision() invokes self.host_effect_hook("prepare_resources", intent, paths) (line 102) to apply UID/GID ownership and ext4 project quota (FS_PROJINHERIT_FL + project ID) onto paths.workspace_root, and then calls ws_service.initialize() (line 108). WorkspaceService.initialize() creates a sibling staging directory under paths.workspace_root.parent (outside the project quota), then executes self.paths.root.rmdir() followed by staging_paths.root.replace(self.paths.root) (service.py:191-193). Replacing paths.workspace_root with a new directory inode from the parent destroys the ext4 project ID, FS_PROJINHERIT_FL, and per-operator ownership established by prepare_resources (or fails if workspace_root is non-removable). Subsequent workspace files and property-management.sqlite silently escape the workspace ext4 project quota or fail RuntimeEffects.guard()/storage.verify() at start_container. Initialize the workspace layout and database in place inside the already-prepared paths.workspace_root (without rmdir/replace on workspace_root itself) so created files inherit the ext4 project ID.
+
+2. [P2] capacity_profiles single-column primary key prevents inserting new profile_revision rows on an immutable table
+File: application/database/admin-migrations/versions/admin_0001_initial.py:175-188,596
+
+capacity_profiles declares f("profile_ref", "REF", primary=True) as a single-column primary key while also defining sa.UniqueConstraint("profile_ref", "profile_revision") (line 187), a composite FK (profile_ref, profile_revision) from capacity_snapshots (lines 200-203), and append-only immutability via immutable(op, "capacity_profiles") (line 596). Because profile_ref alone is the PK and rows cannot be updated or deleted, appending a new profile_revision for an existing profile_ref always fails with IntegrityError ("retained hosted identity"). Make (profile_ref, profile_revision) the composite primary key and remove the redundant UniqueConstraint.
+
+3. [P2] Concurrent ManualProvisioner.provision() race and mark_succeeded() caught by mark_needs_attention(unknown=False) fallback
+File: application/apps/server/app/modules/host_agent/infrastructure/manual_provision.py:88-96,146-184
+Related: application/apps/server/app/modules/hosted_admin/infrastructure/provisioning_admission.py:27,254-276,326,456-459
+
+(a) AdminEffectAdmission.mark_running() allows "running" in ADMITTABLE_STATES, so two concurrent ManualProvisioner.provision(operation_id) calls both pass mark_running() and concurrently mutate the same workspace.sqlite, access.sqlite, seed-journal.json, and host effect hooks.
+(b) self.admission.mark_succeeded(...) (lines 150-155) sits inside the try block whose except Exception: handler unconditionally calls self.admission.mark_needs_attention(..., unknown=False) (lines 173-178). If a concurrent run already transitioned the operation to 'succeeded', mark_succeeded raises HostAgentDenied, which enters except Exception: and calls mark_needs_attention, raising an unhandled HostAgentDenied instead of returning the succeeded outcome. If start_container or mark_succeeded fails ambiguously after external host effects (apply_auth_routes, start_container) have started, unknown=False records needs_attention / capacity_commitments.state='pending' instead of 'unknown'.
+Guard against concurrent execution of the same operation_id (reject running -> running in mark_running or take an exclusive per-operation lock), handle already-succeeded races cleanly, and record unknown=True when an error occurs after irreversible/external host effects have begun.
+
+
+Hosted Admin control plane and API
+
+4. [P1] AdminObservation.revision reports operation revision instead of operator revision, and detail_operator omits numeric operator revision (permanent 409 conflicts in UI)
+File: application/apps/server/app/modules/hosted_admin/infrastructure/admin_control.py:1148,1221,1319,1363
+Related: application/apps/server/app/modules/hosted_admin/api/router.py:343-350; application/apps/web/src/admin/AdminWorkspace.tsx:269,299
+
+_reissue_invitation (admin_control.py:786) and _refresh_source (admin_control.py:1012) enforce operator["revision"] == command.intent.expected_revision against main.operators.revision. However, observe() (admin_control.py:1148) sets AdminObservation.revision to item.operation.revision (which resets to 1 on every new reissue_invitation or refresh_source operation row) instead of main.operators.revision (which list_operators selects at line 1221 and discards). Likewise, detail_operator (router.py:343-350) never exposes o.revision as a numeric field (only readiness.freshness.source_revision = "operator:<N>"). After provisioning (operators.revision = 3) and a single refresh_source or reissue_invitation, AdminWorkspace.tsx:269,299 sends expectedRevision: 1 and every subsequent UI refresh or invitation reissue fails permanently with HTTP 409 operator_revision_conflict. Populate AdminObservation.revision from main.operators.revision and expose the numeric operator revision on detail_operator for AdminWorkspace.tsx / admin-api.ts to send as expectedRevision.
+
+5. [P1] AdminEffectAdmission receipt transitions do not guard op.kind == 'provision', and load_provision_intent omits current operators.access_epoch check
+File: application/apps/server/app/modules/hosted_admin/infrastructure/provisioning_admission.py:135-164,257-269,309-327,445-457
+
+(a) mark_running, mark_succeeded, and mark_needs_attention only check row["state"] in ADMITTABLE_STATES and never verify op.kind == 'provision' (or o.setup_state / o.desired_access == 'enabled'). Because _refresh_source records state = 'needs_attention' when a source is unreachable (admin_control.py:1055), invoking any of these three methods with a refresh_source operation ID mutates that operation and overwrites main.operators.setup_state (e.g., regressing an 'active' operator to 'preparing', 'ready_for_claim', or 'needs_attention'), main.component_deployments.state, main.capacity_commitments.state, and main.operator_source_observations.effective_enabled = 0.
+(b) load_provision_intent selects op.access_epoch (line 138) but never selects or compares o.access_epoch. In resolve() (line 226), command.access_epoch != intent.access_epoch compares against the historical operation epoch rather than the operator's current access_epoch, admitting host effects after the operator's access_epoch has advanced.
+In load_provision_intent, select o.access_epoch and deny when o.access_epoch != op.access_epoch. In mark_running, mark_succeeded, and mark_needs_attention, enforce op.kind = 'provision', o.desired_access = 'enabled', o.access_epoch = op.access_epoch, and reject transitions when o.setup_state IN ('active', 'retired').
+
+6. [P2] _refresh_source does not validate payload.assignment_id and omits expected_revision check in Phase 3 (TOCTOU)
+File: application/apps/server/app/modules/hosted_admin/infrastructure/admin_control.py:991-1098
+Related: application/apps/server/app/modules/hosted_admin/api/router.py:443
+
+(a) Unlike _reissue_invitation (admin_control.py:799-814), _refresh_source never validates that payload.assignment_id exists in main.component_deployments for scope.operator_id. Passing a nonexistent UUID as assignmentId triggers an uncaught SQLite FK IntegrityError (HTTP 500); passing another operator's component_deployment_id succeeds and records the operation against the wrong operator's deployment.
+(b) _refresh_source verifies operator["revision"] == command.intent.expected_revision in Phase 1 (line 1012, outside any write lock), releases the connection during Phase 2 (self.source_inspector I/O), and in Phase 3 (immediate_transaction, lines 1042-1045) rechecks access_epoch but omits operator["revision"] != command.intent.expected_revision, allowing a concurrent operator update to bypass the revision fence.
+Validate payload.assignment_id belongs to scope.operator_id in main.component_deployments in both Phase 1 and Phase 3, and recheck operator["revision"] != command.intent.expected_revision inside the Phase 3 immediate_transaction.
+
+7. [P2] hosted_admin/api/router.py async def write handlers block the ASGI event loop on Firebase revocation checks and SQLite write transactions
+File: application/apps/server/app/modules/hosted_admin/api/router.py:225-247,291-341,352-394,396-419,421-454
+
+All four async def write handlers (create_operator, issue_invitation, mark_invitation_delivered, refresh_operator_source) call self._authenticate(...) directly on the asyncio event loop. When now >= session.revocation_valid_until, self.sessions.authenticate(...) performs a blocking HTTP call to Firebase followed by a blocking immediate_transaction. In addition, create_operator (line 338), issue_invitation (lines 365, 385), and mark_invitation_delivered (line 409) run blocking SQLite immediate_transaction calls directly on the event loop without run_in_threadpool. Offload self._authenticate(...), _workspace_context(...), and all synchronous self.control.* calls via await run_in_threadpool(...).
+
+8. [P3] Non-ASCII .isdigit() and oversized cursor timestamps cause unhandled ValueError / OverflowError (HTTP 500)
+File: application/apps/server/app/modules/hosted_admin/api/router.py:262
+Related: application/apps/server/app/modules/hosted_admin/infrastructure/admin_control.py:281,289
+
+str.isdigit() returns True for Unicode superscripts/subscripts like "²", for which int() raises ValueError (HTTP 500 because router.py:288 only catches AdminControlError, SemanticConflict, ValidationError). Likewise, an ASCII integer > 2**63 - 1 in cursor position[0] passes .isdigit() and int() and then raises OverflowError when bound to SQLite INTEGER. Use isascii() and isdigit() in both places and validate 0 <= int(pos0) <= 2**63 - 1 in _cursor_filter (raising AdminConflictError("cursor_invalid", ...)).
+
+9. [P3] _OfflineAsgiClient.__enter__ leaks the asyncio event loop if lifespan startup fails
+File: application/apps/server/app/modules/hosted_admin/infrastructure/synthetic_seed.py:54-58
+
+If self._loop.run_until_complete(self._lifespan_cm.__aenter__()) raises inside __enter__, Python does not call __exit__, leaving the newly created asyncio event loop open. Wrap the __aenter__ call in try/except, closing self._loop and resetting self._loop and self._lifespan_cm to None before re-raising.
+
+
+Hosted access, source lifecycle and Free storage admission
+
+10. [P1] Stale-measurement overwrite and concurrent reservation-release race in UsageAccountingStore
+File: application/apps/server/app/modules/hosted_access/infrastructure/usage_accounting.py:151-208,335-379,420-461
+
+refresh_usage_state, settle_commit, and reconcile_unknown all run measure_logical_usage(self.business_engine) outside immediate_transaction(self.access_engine) and then unconditionally overwrite main.usage_state inside the transaction.
+(a) Stale overwrite: If operation A measures business.sqlite before operation B commits, and B settles first (usage_state = 20 MB, B's reservation committed), A then enters immediate_transaction(self.access_engine) and overwrites usage_state with A's older, smaller measurement while marking A's reservation committed (reserved_bytes = 0). Logical usage is permanently undercounted, allowing subsequent writes to bypass the 50,000,000-byte Free quota.
+(b) Premature release in reconcile_unknown: Any reservation that commits to business.sqlite and transitions to 'unknown' (or is created as 'held' when include_held=True) between measure_logical_usage and UPDATE main.usage_reservations SET state='released' WHERE state IN ... is released even though its bytes were excluded from the measurement.
+Run measure_logical_usage(self.business_engine) inside immediate_transaction(self.access_engine) (WAL-mode reads on business.sqlite serialize against usage_state updates via the access.sqlite immediate lock), or guard usage_state updates with an optimistic revision check + retry loop and restrict reconcile_unknown to the exact reservation_id set observed prior to measurement.
+
+11. [P2] asyncio.CancelledError (and settle_commit failure) permanently leaks 'held' reservations in FreeStorageAdmission
+File: application/apps/server/app/modules/hosted_access/infrastructure/free_storage_admission.py:115-130
+Related: application/apps/server/app/modules/hosted_access/api/managed_business.py:226-238
+
+reserve_request catches HostedAccessError and Exception, but not BaseException. In Python 3.8+, asyncio.CancelledError (triggered on client disconnect / ASGI cancellation during await app(...)) inherits from BaseException. When cancelled, neither release nor mark_unknown runs, leaving the row stuck in state='held'. Because reconcile_unknown() defaults to include_held=False, leaked 'held' rows permanently consume the 50 MB Free quota. Likewise, an exception inside settle_commit() in the else: branch leaves the reservation 'held'. Catch BaseException (after HostedAccessError) to call mark_unknown before re-raising, and wrap settle_commit() so failures also transition the reservation to 'unknown'.
+
+12. [P2] SourceLifecycle._initialize_disabled skips LifecycleProof binding and expiration checks
+File: application/apps/server/app/modules/hosted_access/infrastructure/source_lifecycle.py:209-213,221-235
+
+When email_key is None and self.proof_owner verifies the command, lines 211-212 only check isinstance(proof, LifecycleProof) and proof.request_hash == ref.request_hash. Unlike execute() (lines 175-183), it omits proof.binding != binding and proof.expires_at <= now, accepting expired or misbound proofs. Validate proof.binding == binding and proof.expires_at > now inside with self.mutation() after now = self.clock(), matching execute().
+
+13. [P2] SourceLifecycle.original skips access_meta scope verification for initialize_disabled
+File: application/apps/server/app/modules/hosted_access/infrastructure/source_lifecycle.py:114-126
+
+For reference.kind == "initialize_disabled", original() checks actor.scope == reference.scope but never checks them against main.access_meta even when access_meta already exists. An admin actor scoped to workspace B calling original() against workspace A's access.sqlite with a matching operation_id or idempotency_key receives workspace A's initialize_binding receipt. Query main.access_meta WHERE id=1; if no row exists return None, and if a row exists call self._scope(meta, actor, reference) before self._retained(connection, reference).
+
+14. [P2] operator_entry.py instantiates FreeStorageAdmission without physical_headroom, disabling physical quota enforcement
+File: application/apps/server/app/modules/hosted_access/infrastructure/operator_entry.py:142
+Related: application/apps/server/app/modules/hosted_access/infrastructure/free_storage_admission.py:53-55
+
+operator_entry.py:142 constructs FreeStorageAdmission(usage_store) without passing physical_headroom, and _check_physical() silently returns when physical_headroom is None. The production Operator entrypoint therefore bypasses workspace/control/scratch physical byte and inode headroom checks instead of enforcing them or failing closed. Wire a real physical_headroom reader in operator_entry.py for workspace, control, and scratch mounts and require physical_headroom in production wiring.
+
+15. [P3] Unvalidated OperatorDeployment.support_contact causes HTTP 500 on GET /api/hosted/settings
+File: application/apps/server/app/modules/hosted_access/infrastructure/operator_entry.py:60
+Related: application/apps/server/app/modules/hosted_access/infrastructure/operator_identity_runtime.py:251-261; application/apps/server/app/modules/hosted_access/api/operator_settings.py:56,131-138
+
+OperatorDeployment.support_contact is typed as str | None = None while Settings.support_contact (ui_contracts.py:38) requires EmailAddress. A non-email string passes startup and mounts /api/hosted/settings, then raises an unhandled Pydantic ValidationError (HTTP 500) on every request. Type OperatorDeployment.support_contact as EmailAddress | None = None (and validate when constructing OperatorSettingsInputs).
+
+16. [P3] Backwards wall-clock step violates ck_reservation_time (updated_at >= created_at)
+File: application/apps/server/app/modules/hosted_access/infrastructure/usage_accounting.py:375,404,414,457
+Related: application/database/hosted-access-migrations/versions/access_0001_initial.py:199
+
+settle_commit, release, mark_unknown, and reconcile_unknown write updated_at = :now from wall-clock time_ns() // 1_000_000. If NTP steps the host clock backwards while a reservation is active, SQLite raises IntegrityError (CHECK constraint failed: ck_reservation_time), leaving the reservation stuck in 'held' or 'unknown'. Use updated_at = MAX(created_at, :now) in all four UPDATE main.usage_reservations statements.
+
+
+Admin-lite UI, Operator Settings UI and GCP qualification
+
+17. [P1] Generated invitation claim URL in AdminWorkspace.tsx is unconditionally rejected with HTTP 401 by Operator /auth/start and leaks secret token in query string
+File: application/apps/web/src/admin/AdminWorkspace.tsx:468-471
+Related: application/apps/server/app/modules/hosted_access/api/destination_identity.py:94-146
+
+AdminWorkspace.tsx constructs the one-time invitation claim URL as https://${op.slug}.${bootstrap.publicBaseDomain}/auth/start?invitation=${issuedInvite.invitationId}&token=${issuedInvite.token}. On the Operator origin, GET /auth/start (destination_identity.py:94-146) only permits query parameter sets {"continuation"} or subsets of {"returnTo", "renew"}, rejecting all other query parameters with ProviderDenied (HTTP 401). Every invitation link displayed by Admin-lite fails with HTTP 401 when opened, and placing the raw secret token in a URL query string exposes it in browser history and proxy logs (contrary to H03 D10 fragment invitation capabilities). Align the Admin UI claim URL with the actual invitation-claim route/fragment contract and support it on the receiving endpoint.
+
+18. [P1] HostedSettings frontend contract mismatch hides freshness/errors and misreports "degraded" protection as "Active"
+File: application/apps/web/src/app/hosted-settings.tsx:4-18,188-192,205-207,215-221
+Related: application/apps/server/app/modules/hosted_access/api/operator_settings.py:83-141
+
+HostedSettings reads field names that do not exist in the GET /api/hosted/settings payload serialized by operator_settings.py:
+- Reads usage.freshness.observed_at and usage.freshness.reason, whereas backend Freshness serializes as_of (epoch ms) and error_code.
+- Reads protection.data.state and protection.data.latest_verified_point_at, whereas backend Protection serializes status ("protected" | "degraded") and last_verified_at (epoch ms).
+Observation timestamps, unavailability error codes, and verified backup timestamps never render; worse, when protection.state === "ready" and protection.data.status === "degraded", line 217 (state.payload.protection.data.state ?? "Active") evaluates undefined ?? "Active" and falsely displays "Active". Update HostedSettingsPayload, rendering, and hosted-settings.spec.ts to use freshness.as_of, freshness.error_code, protection.data.status, and protection.data.last_verified_at.
+
+19. [P2] Admin "Add operator" deadlocks on stale registryGeneration or transient /api/admin/bootstrap failure
+File: application/apps/web/src/admin/AdminWorkspace.tsx:68-82,120-142,197-211,240-251
+
+bootstrap (holding registryGeneration, freePolicy, qualifiedOperatorReleases, and admissionCommitment) is loaded only on initial mount and after a successful submitAdd. There is no reload when entering the "add" view, clicking "Refresh list", or recovering from a 409 conflict or initial bootstrap failure. A transient initial bootstrap failure permanently blocks "Add operator" until a full page reload, and a concurrent registry_generation bump causes submitAdd to keep sending the stale expectedRevision. Call loadBootstrap() when opening the "add" view, offer a retry action on bootstrapError, and refresh bootstrap on 409 conflict in submitAdd.
+
+20. [P2] Switching inspected operators leaves prior operator's detail and action buttons active during fetch
+File: application/apps/web/src/admin/AdminWorkspace.tsx:169-185,719-724
+
+Clicking "Inspect" on operator B updates view to { kind: "detail", operatorId: item.operator_id } without clearing detail (setDetail(null)) or setting detailBusy(true) before the useEffect fetch resolves. While operator B's detail request is in flight (or if it fails), operator A's details and enabled action buttons ("Refresh source", "Issue / reissue invitation") remain rendered and target operator A. Clear detail and detailError and set detailBusy(true) before starting the new detail fetch.
+
+21. [P2] qualify_free_sizing.py leaks 5 system users, qualification data directory, and Docker image on every run
+File: application/deploy/hosted-mvp/gcp/qualify_free_sizing.py:258-259,313-338
+
+run_gcp_qualification creates 5 Linux system users (useradd ... epm-h4s-...), allocates run_root = data_root / "qualification" / f"h04-sizing-{uuid4().hex[:10]}" (~150+ MB of workload files), and builds epm-h04-sizing:{run_root.name} with no try...finally cleanup. Every run (including failed runs) permanently leaves behind 5 orphan system users, an orphan Docker image, and hundreds of MB on /srv/epm/data. Track created users, run_root, and the image tag in a try...finally block that runs userdel, shutil.rmtree, and docker rmi on exit.
