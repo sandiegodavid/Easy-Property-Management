@@ -160,7 +160,7 @@ restore an operator's business workspace; that uses the operator-local `restore_
 | `point_id` | `ID` | No | — | FK `control_recovery_points.point_id`. |
 | `target_resource_ref` | `REF` | No | — | Registered private control restore destination, not arbitrary path. |
 | `prior_resource_ref` | `REF` | Yes | — | Prior control store retained until acceptance (`ck_control_restore_targets`: null or `!=target_resource_ref`). |
-| `new_registry_generation` | `REV` | No | — | New control incarnation fencing old workers. |
+| `new_registry_generation` | `REV` | Yes | — | New control incarnation fencing old workers; NULL until `switched`, then write-once immutable. |
 | `phase` | `TEXT` | No | — | CHECK `prepared`, `fenced`, `restored`, `validated`, `switched`, `accepted` or `needs_attention`. |
 | `validation_ref` | `REF` | Yes | — | Control/inventory/provider reconciliation evidence. |
 | `started_at` | `TIME` | No | — | Start time. |
@@ -169,7 +169,8 @@ restore an operator's business workspace; that uses the operator-local `restore_
 Indexes `control_restore_operations_point (point_id)` and
 `control_restore_operations_phase (phase, updated_at, operation_id)`. Triggers enforce
 retention and immutability of `operation_id`, `point_id`, `target_resource_ref`,
-`prior_resource_ref`, `new_registry_generation` and `started_at`, and
+`prior_resource_ref` and `started_at`, write-once immutability of
+`new_registry_generation` once non-NULL (`control_restore_operations_new_registry_generation_write_once`), and
 `control_restore_operations_terminal` blocks updates once `phase='accepted'`.
 Retain this local restore record while a separate main Admin destination is prepared,
 fenced, restored, validated and switched. Its operation FK/catalog remain available

@@ -7,6 +7,8 @@ from app.modules.host_agent.application.auth_routes import (
     AuthRouteManifest,
     AuthRouteObservation,
     SharedIdentityManifest,
+    WorkspaceRouteManifest,
+    WorkspaceRouteObservation,
 )
 from app.modules.host_agent.application.dispatch import HostAgentDenied
 from app.modules.host_agent.infrastructure.auth_projection import VerifiedAuthEndpoint
@@ -61,6 +63,26 @@ class AuthEndpoints:
         ):
             raise HostAgentDenied()
         endpoint = self.native.held(manifest, evidence)
+        if not isinstance(endpoint, VerifiedAuthEndpoint) or endpoint.manifest != manifest:
+            raise HostAgentDenied()
+        return endpoint
+
+    def resolve_eligible(self, evidence: WorkspaceRouteObservation) -> VerifiedAuthEndpoint:
+        if (
+            evidence.workspace_route_state != "ready"
+            or evidence.desired_state != "eligible"
+            or not hasattr(self.manifests, "eligible")
+            or not hasattr(self.native, "eligible")
+        ):
+            raise HostAgentDenied()
+        manifest = self.manifests.eligible(evidence.resource_readiness_proof_ref)
+        if (
+            not isinstance(manifest, WorkspaceRouteManifest)
+            or semantic_hash(manifest) != evidence.workspace_manifest_sha256
+            or manifest.recovery_proof_ref != evidence.resource_readiness_proof_ref
+        ):
+            raise HostAgentDenied()
+        endpoint = self.native.eligible(manifest, evidence)
         if not isinstance(endpoint, VerifiedAuthEndpoint) or endpoint.manifest != manifest:
             raise HostAgentDenied()
         return endpoint

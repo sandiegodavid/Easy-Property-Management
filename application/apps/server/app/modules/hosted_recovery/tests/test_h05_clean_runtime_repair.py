@@ -157,6 +157,12 @@ def test_clean_runtime_repair_preserves_ids_data_revokes_sessions_and_boots_reco
         admin_engine, clock=clock, issuer="firebase:epm-demo", application_directory=APP_DIR
     )
 
+    # Align access_meta.binding_id with the repair intent's BINDING_ID (strict binding fence).
+    with env["acc_engine"].begin() as acc_conn:
+        acc_conn.execute(
+            text("UPDATE access_meta SET binding_id = :bid WHERE id = 1"),
+            {"bid": BINDING_ID},
+        )
     # Create an active session in access.sqlite and corrupt the business DB.
     _enable_access_and_create_session(
         env["acc_engine"], clock_ms=clock.now, cookie_value="A" * 43, csrf_value="C" * 43

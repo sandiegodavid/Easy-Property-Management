@@ -4,7 +4,47 @@ import { api } from "@epm/contracts";
 import { Page } from "@epm/ui";
 import { BootstrapFailure, queryClient, WorkspaceScope, type Bootstrap } from "./workspace-scope";
 import { HostedChanges } from "./hosted-changes";
-import { hostedMode } from "./hosted-session-state";
+import { HostedRecovery } from "./hosted-recovery";
+import { hostedMode, managedHostedMode } from "./hosted-session-state";
+
+class RecoveryModeActiveError extends Error {
+  constructor() {
+    super("recovery_mode_active");
+  }
+}
+
+function isRecoveryModeErrorPayload(errorPayload: unknown): boolean {
+  if (!errorPayload || typeof errorPayload !== "object") return false;
+  const record = errorPayload as { code?: unknown; detail?: unknown };
+  if (record.code === "recovery_mode_active") return true;
+  if (
+    record.detail &&
+    typeof record.detail === "object" &&
+    "code" in record.detail &&
+    (record.detail as { code?: unknown }).code === "recovery_mode_active"
+  ) {
+    return true;
+  }
+  return false;
+}
+
+async function checkRecoveryModeStatus(signal: AbortSignal): Promise<boolean> {
+  try {
+    const response = await fetch("/api/hosted/recovery/status", {
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+      signal,
+    });
+    if (!response.ok) return false;
+    const payload = (await response.json().catch(() => null)) as {
+      mode?: unknown;
+      startup?: { mode?: unknown };
+    } | null;
+    return payload?.mode === "recovery" || payload?.startup?.mode === "recovery";
+  } catch {
+    return false;
+  }
+}
 
 const brandAssets = [
   {
@@ -28,6 +68,13 @@ async function loadBootstrap(signal: AbortSignal): Promise<Bootstrap> {
     throw new BootstrapFailure(error instanceof TypeError);
   }
   if (!result.data || result.error) {
+    if (
+      result.response.status === 503 &&
+      (isRecoveryModeErrorPayload(result.error) ||
+        (managedHostedMode() && (await checkRecoveryModeStatus(signal))))
+    ) {
+      throw new RecoveryModeActiveError();
+    }
     if (hostedMode() && [503, 507].includes(result.response.status)) {
       throw new BootstrapFailure(
         false,
@@ -106,6 +153,9 @@ function Gate({ children }: { children: ReactNode }) {
     return <p role="status">Checking workspace readiness…</p>;
   }
   if (bootstrap.isError) {
+    if (bootstrap.error instanceof RecoveryModeActiveError) {
+      return <HostedRecovery forceVisible />;
+    }
     return (
       <>
         <p role="alert">

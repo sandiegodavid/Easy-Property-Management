@@ -163,14 +163,29 @@ def test_auth_config_rejects_unverified_eligible_and_projects_verified_workspace
     assert deny_route["handle"][0]["status_code"] == 403
     match_blocks = deny_route["match"]
     assert {"host": ["ws-alpha.example.invalid"], "header": {"Upgrade": ["*"]}} in match_blocks
-    forbidden_expr = match_blocks[1]["expression"]
+    # Normalized Caddy path matcher covers all forbidden prefixes.
+    normalized_paths = match_blocks[1]["path"]
+    for prefix in WORKSPACE_FORBIDDEN_PREFIXES:
+        assert prefix in normalized_paths
+        assert f"{prefix}/*" in normalized_paths
+    # Raw orig_uri case-insensitive matcher catches pre-normalization paths.
+    forbidden_expr = match_blocks[2]["expression"]
     forbidden_regex = json.loads(
         forbidden_expr.removeprefix("{http.request.orig_uri}.matches(").removesuffix(")")
     )
     for prefix in WORKSPACE_FORBIDDEN_PREFIXES:
         assert re.search(forbidden_regex, prefix) is not None
+        assert re.search(forbidden_regex, prefix.upper()) is not None
         assert re.search(forbidden_regex, f"{prefix}/nested?x=1") is not None
     assert re.search(forbidden_regex, "/api/properties") is None
+    # Traversal / double-slash / encoded-delimiter matcher catches evasion.
+    traversal_expr = match_blocks[3]["expression"]
+    traversal_regex = json.loads(
+        traversal_expr.removeprefix("{http.request.orig_uri}.matches(").removesuffix(")")
+    )
+    for evade in ("//admin", "/api/../admin", "/%2e%2e/admin", "/admin%2finfo", "/admin%5cinfo"):
+        assert re.search(traversal_regex, evade) is not None
+    assert re.search(traversal_regex, "/api/properties") is None
 
     # Route 1: terminal reverse_proxy enforcing exact hostport, HTTPS, Cf-Connecting-Ip, and header stripping.
     assert proxy_route["terminal"] is True

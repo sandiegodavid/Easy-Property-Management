@@ -350,6 +350,12 @@ export function AdminWorkspace({ session }: { session: AdminSession }) {
   async function handleRepairRuntime() {
     if (!detail || !repairConfirmChecked) return;
     const op = detail.operator;
+    if (!op.binding_id || typeof op.resource_generation !== "number") {
+      setDetailStatus(
+        "Runtime repair is unavailable because the operator binding metadata is missing.",
+      );
+      return;
+    }
     setDetailBusy(true);
     setDetailStatus("");
     try {
@@ -361,9 +367,9 @@ export function AdminWorkspace({ session }: { session: AdminSession }) {
           body: {
             idempotencyKey: repairKey,
             expectedRevision: detail.operatorRevision ?? op.operation?.revision ?? 1,
-            bindingId: op.binding_id ?? op.workspace_id,
+            bindingId: op.binding_id,
             releaseId: op.release_id,
-            expectedResourceGeneration: op.resource_generation ?? 1,
+            expectedResourceGeneration: op.resource_generation,
           },
         },
       );
@@ -659,7 +665,13 @@ export function AdminWorkspace({ session }: { session: AdminSession }) {
               <div className="action-row">
                 <button
                   type="button"
-                  disabled={detailBusy || !repairConfirmChecked || !session.csrfToken}
+                  disabled={
+                    detailBusy ||
+                    !repairConfirmChecked ||
+                    !session.csrfToken ||
+                    !op.binding_id ||
+                    typeof op.resource_generation !== "number"
+                  }
                   onClick={() => {
                     void handleRepairRuntime();
                   }}
@@ -897,6 +909,9 @@ export function AdminWorkspace({ session }: { session: AdminSession }) {
                         setIssuedInvite(null);
                         setInviteDelivered(false);
                         setDetailStatus("");
+                        setRepairOperation(null);
+                        setRepairConfirmChecked(false);
+                        setRepairKey(createKey("repair-runtime"));
                         setView({ kind: "detail", operatorId: item.operator_id });
                       }}
                     >

@@ -31,6 +31,10 @@ from app.modules.hosted_access.infrastructure.operator_identity_runtime import (
     create_minimal_recovery_app,
 )
 from app.modules.hosted_access.infrastructure.usage_accounting import UsageAccountingStore
+from app.modules.hosted_recovery.infrastructure.alerting import (
+    DeduplicatingAlertEmitter,
+    StructuredLogAlertSink,
+)
 from app.modules.hosted_recovery.infrastructure.engine import ChunkedAeadBackupEngine
 from app.modules.workspace.application.service import WorkspacePaths
 from app.modules.workspace.infrastructure.hosted_recovery import HostedWorkspaceRecoveryService
@@ -120,7 +124,7 @@ def _live_business_readiness(access_engine, recovery_service) -> bool:
             return False
         if row["maintenance_operation_id"] is not None:
             return False
-        if recovery_service.detect_startup_mode().mode != "normal":
+        if recovery_service.detect_runtime_mode().mode != "normal":
             return False
         protection = recovery_service.read_protection_status()
         return (
@@ -191,6 +195,24 @@ def candidate(configuration):
                 raise ValueError("The retained access store does not match the protected binding.")
 
         def current_binding():
+            # Track post-restore access_epoch advancement when backed by a verified restore_binding receipt (#10).
+            try:
+                with engine.connect() as conn:
+                    live_epoch = conn.execute(
+                        text("SELECT access_epoch FROM access_meta WHERE id = 1")
+                    ).scalar_one_or_none()
+                    if live_epoch is not None and int(live_epoch) > binding.access_epoch:
+                        has_restore_receipt = conn.execute(
+                            text(
+                                "SELECT 1 FROM source_receipts "
+                                "WHERE kind = 'verify_restore_binding' AND state = 'applied' "
+                                "LIMIT 1"
+                            )
+                        ).first()
+                        if has_restore_receipt is not None:
+                            return binding.model_copy(update={"access_epoch": int(live_epoch)})
+            except Exception:
+                pass
             return binding
 
         def clock():
@@ -203,6 +225,7 @@ def candidate(configuration):
         )
         recovery_engine = None
         recovery_service = None
+        live_business_engine_holder: list[object] = []
         startup_recovery_mode = os.environ.get("EPM_RECOVERY_MODE_REQUIRED") == "1"
         if configuration.recovery_database is not None:
             private_file(configuration.recovery_database)
@@ -211,6 +234,22 @@ def candidate(configuration):
                 validate_schema(
                     rec_conn, HostedStore.RECOVERY, application_directory=application_root()
                 )
+                # Verify recovery_meta matches configuration.binding (#18a).
+                rec_meta = (
+                    rec_conn.execute(
+                        text("SELECT deployment_ref, workspace_id FROM recovery_meta WHERE id = 1")
+                    )
+                    .mappings()
+                    .one_or_none()
+                )
+                if (
+                    rec_meta is None
+                    or rec_meta["workspace_id"] != binding.scope.workspace_id
+                    or rec_meta["deployment_ref"] != f"dep:{binding.deployment_id}"
+                ):
+                    raise ValueError(
+                        "The retained recovery store does not match the protected binding."
+                    )
             if (
                 configuration.backup_proxy_socket is not None
                 and configuration.backup_proxy_uid is not None
@@ -220,6 +259,11 @@ def candidate(configuration):
                     expected_proxy_uid=configuration.backup_proxy_uid,
                 )
                 backup_engine = ChunkedAeadBackupEngine(transport)
+
+                def _close_business_connections() -> None:
+                    for active_eng in list(live_business_engine_holder):
+                        active_eng.dispose()
+
                 recovery_service = HostedWorkspaceRecoveryService(
                     recovery_engine=recovery_engine,
                     access_engine=engine,
@@ -233,7 +277,12 @@ def candidate(configuration):
                     business_schema_revision=configuration.business_schema_revision,
                     access_schema_revision=configuration.access_schema_revision,
                     clock=clock,
+                    alert_emitter=DeduplicatingAlertEmitter([StructuredLogAlertSink()]),
+                    summary_signer_key=getattr(signer, "key", None),
+                    summary_key_id=configuration.signing_key_id,
+                    close_business_connections=_close_business_connections,
                 )
+                recovery_service.reconcile_startup()
                 startup = recovery_service.detect_startup_mode(
                     force_recovery_mode=startup_recovery_mode
                 )
@@ -280,7 +329,23 @@ def candidate(configuration):
                     )
                     yield TrustedSourceHTTP(app, configuration.gateway_address)
                 else:
-                    business_engine = create_sqlite_engine(WorkspacePaths(root=workspace).database)
+                    active_workspace = (
+                        recovery_service.active_business_directory()
+                        if recovery_service is not None
+                        else workspace
+                    )
+                    runtime_ws_config = configuration.workspace_configuration
+                    if active_workspace != workspace:
+                        runtime_ws_config = control / "active-workspace-config.json"
+                        runtime_ws_config.write_text(
+                            f'{{"localWorkspacePath": "{active_workspace}"}}\n',
+                            encoding="utf-8",
+                        )
+                        os.chmod(runtime_ws_config, 0o600)
+                    business_engine = create_sqlite_engine(
+                        WorkspacePaths(root=active_workspace).database
+                    )
+                    live_business_engine_holder.append(business_engine)
                     try:
                         usage_store = UsageAccountingStore(engine, business_engine, clock=clock)
                         storage_admission = FreeStorageAdmission(
@@ -290,7 +355,7 @@ def candidate(configuration):
                             ),
                         )
                         app = create_app(
-                            configuration.workspace_configuration,
+                            runtime_ws_config,
                             operator_identity_inputs=OperatorIdentityInputs(
                                 engine=engine,
                                 binding=current_binding,

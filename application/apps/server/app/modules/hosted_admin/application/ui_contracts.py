@@ -44,6 +44,8 @@ class OperatorSummary(Contract):
     usage: Section[FreeUsage]
     protection: Section[Protection]
     release_id: CanonicalId
+    binding_id: CanonicalId | None = None
+    resource_generation: Revision | None = None
     operation: OperationOutcome[AdminResult] | None = None
     actions: Actions
 

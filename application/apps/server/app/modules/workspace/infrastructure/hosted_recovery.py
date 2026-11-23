@@ -639,10 +639,49 @@ class HostedWorkspaceRecoveryService:
             self._publish_summary_best_effort()
         return snap
 
+    def _release_maintenance_fence(self, op_id: str) -> None:
+        """Clear access_meta.maintenance_operation_id when still held by op_id (#11)."""
+        with immediate_transaction(self.access_engine) as conn:
+            conn.execute(
+                text(
+                    "UPDATE access_meta SET maintenance_operation_id = NULL, "
+                    "revision = revision + 1 "
+                    "WHERE id = 1 AND maintenance_operation_id = :op_id"
+                ),
+                {"op_id": op_id},
+            )
+
     def reconcile_startup(self) -> ProtectionSnapshot:
-        """Reconcile interrupted backup operations and post-crash live-vs-protected drift."""
+        """Reconcile interrupted backup operations, stale fences, and post-crash drift."""
         now = self.clock()
         alert_kind: Literal["backup_overdue", "backup_unknown"] | None = None
+
+        # Probe live workspace state and check stale fences OUTSIDE any write lock (#11, #15).
+        with self.recovery_engine.connect() as conn:
+            incarnation_dir, db_path, source_gen, _ = self._active_business_paths(conn)
+            stale_restore_ops = set(
+                conn.execute(
+                    text(
+                        "SELECT operation_id FROM restore_operations "
+                        "WHERE phase = 'needs_attention'"
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        with self.access_engine.connect() as aconn:
+            held_op = aconn.execute(
+                text("SELECT maintenance_operation_id FROM access_meta WHERE id = 1")
+            ).scalar_one_or_none()
+        if held_op is not None and str(held_op) in stale_restore_ops:
+            self._release_maintenance_fence(str(held_op))
+
+        live = None
+        try:
+            live = probe_live_workspace_state(db_path, incarnation_dir)
+        except WorkspaceStateUnreadable:
+            live = None
+
         with immediate_transaction(self.recovery_engine) as conn:
             # 1. Reconcile any interrupted backup operations left in pending/running.
             interrupted = (
@@ -689,11 +728,8 @@ class HostedWorkspaceRecoveryService:
                     )
 
             # 2. Compare live business state against backup_state protected tuple.
-            incarnation_dir, db_path, source_gen, _ = self._active_business_paths(conn)
             bs = conn.execute(text("SELECT * FROM backup_state WHERE id = 1")).mappings().one()
-            try:
-                live = probe_live_workspace_state(db_path, incarnation_dir)
-            except WorkspaceStateUnreadable:
+            if live is None:
                 conn.execute(
                     text(
                         "UPDATE backup_state SET protection_state = 'unknown', "
@@ -1094,6 +1130,20 @@ class HostedWorkspaceRecoveryService:
                 },
                 key_ref=kms_key_ref,
             )
+            if self._last_wrapped_dek_b64 is None and last_point_id is not None:
+                with self.recovery_engine.connect() as conn:
+                    prev_mref = conn.execute(
+                        text("SELECT manifest_ref FROM recovery_points WHERE point_id = :pid"),
+                        {"pid": last_point_id},
+                    ).scalar_one_or_none()
+                if prev_mref is not None:
+                    loaded_dek = self.backup_engine.read_wrapped_dek(
+                        manifest_ref=object_key_for_manifest_ref(str(prev_mref)),
+                        expected_key_ref=kms_key_ref,
+                    )
+                    if loaded_dek is not None:
+                        self._last_wrapped_dek_b64 = loaded_dek
+                        self._last_wrapped_key_ref = kms_key_ref
             backup_result = self.backup_engine.create_point(
                 context=context,
                 captured_at=captured_at,
@@ -1305,12 +1355,24 @@ class HostedWorkspaceRecoveryService:
                 .mappings()
                 .all()
             )
-            if len(rows) <= self.retention_points:
-                return
+            previously_expired = (
+                conn.execute(
+                    text(
+                        "SELECT point_id, manifest_ref FROM recovery_points "
+                        "WHERE state = 'expired' "
+                        "ORDER BY captured_at ASC, point_id ASC"
+                    )
+                )
+                .mappings()
+                .all()
+            )
             retained = rows[: self.retention_points]
-            to_expire = rows[self.retention_points :]
+            newly_expired = rows[self.retention_points :]
+            to_prune = [*previously_expired, *newly_expired]
+            if not to_prune or not retained:
+                return
             now = self.clock()
-            for item in to_expire:
+            for item in newly_expired:
                 conn.execute(
                     text(
                         "UPDATE recovery_points SET state = 'expired', "
@@ -1329,7 +1391,7 @@ class HostedWorkspaceRecoveryService:
                 expected_operator_id=self.operator_id,
                 expected_workspace_id=self.workspace_id,
             )
-            for item in to_expire:
+            for item in to_prune:
                 self.backup_engine.transport.delete_object(
                     object_key_for_manifest_ref(item["manifest_ref"])
                 )
@@ -1339,7 +1401,7 @@ class HostedWorkspaceRecoveryService:
 
         pruned_at = self.clock()
         with immediate_transaction(self.recovery_engine) as conn:
-            for item in to_expire:
+            for item in to_prune:
                 conn.execute(
                     text(
                         "UPDATE recovery_points SET state = 'pruned', "
@@ -1354,7 +1416,7 @@ class HostedWorkspaceRecoveryService:
                 actor_ref=actor_ref,
                 action="retention_pruned",
                 now=pruned_at,
-                facts={"pruned_points": [item["point_id"] for item in to_expire]},
+                facts={"pruned_points": [item["point_id"] for item in to_prune]},
             )
 
     def observe(
@@ -1451,6 +1513,80 @@ class HostedWorkspaceRecoveryService:
             return None
         return self._outcome_from_row(row)
 
+    def active_business_directory(self) -> Path:
+        """Resolve the current active business incarnation directory from recovery_meta."""
+        with self.recovery_engine.connect() as conn:
+            incarnation_dir, _, _, _ = self._active_business_paths(conn)
+        return incarnation_dir
+
+    def detect_runtime_mode(self, *, force_recovery_mode: bool = False) -> StartupMode:
+        """O(1) per-request mode/readiness check without full-DB dump or retained-file hashing."""
+        with self.recovery_engine.connect() as conn:
+            meta = (
+                conn.execute(text("SELECT active_business_ref FROM recovery_meta WHERE id = 1"))
+                .mappings()
+                .one()
+            )
+            active_ref = str(meta["active_business_ref"])
+            interrupted = (
+                conn.execute(
+                    text(
+                        "SELECT operation_id FROM restore_operations "
+                        "WHERE phase IN ('prepared', 'fenced', 'restored', 'validated', 'needs_attention') "
+                        "ORDER BY started_at DESC LIMIT 1"
+                    )
+                )
+                .scalars()
+                .first()
+            )
+            pending_accept = (
+                conn.execute(
+                    text(
+                        "SELECT operation_id FROM restore_operations "
+                        "WHERE phase = 'switched' ORDER BY started_at DESC LIMIT 1"
+                    )
+                )
+                .scalars()
+                .first()
+            )
+        if interrupted is not None:
+            return StartupMode(
+                mode="recovery",
+                reason="interrupted_restore_present",
+                active_business_ref=active_ref,
+                interrupted_restore_id=str(interrupted),
+                pending_acceptance_id=str(pending_accept) if pending_accept else None,
+            )
+        incarnation_dir = (self.workspace_root / active_ref).resolve()
+        try:
+            incarnation_dir.relative_to(self.workspace_root.resolve())
+            db_path = incarnation_dir / "property-management.sqlite"
+            if not db_path.is_file() or db_path.is_symlink():
+                raise WorkspaceStateUnreadable("Business database missing.")
+            with db_path.open("rb") as handle:
+                if handle.read(16) != b"SQLite format 3\x00":
+                    raise WorkspaceStateUnreadable("Business database header invalid.")
+        except OSError, ValueError, WorkspaceStateUnreadable:
+            return StartupMode(
+                mode="recovery",
+                reason="business_database_unreadable",
+                active_business_ref=active_ref,
+                pending_acceptance_id=str(pending_accept) if pending_accept else None,
+            )
+        if force_recovery_mode:
+            return StartupMode(
+                mode="recovery",
+                reason="recovery_mode_required",
+                active_business_ref=active_ref,
+                pending_acceptance_id=str(pending_accept) if pending_accept else None,
+            )
+        return StartupMode(
+            mode="normal",
+            reason=None,
+            active_business_ref=active_ref,
+            pending_acceptance_id=str(pending_accept) if pending_accept else None,
+        )
+
     def detect_startup_mode(self, *, force_recovery_mode: bool = False) -> StartupMode:
         """Inspect active_business_ref and unfinished restores before business composition."""
         with self.recovery_engine.connect() as conn:
@@ -1518,12 +1654,21 @@ class HostedWorkspaceRecoveryService:
     def protection_section(self) -> Section[Protection]:
         """Build a live Section[Protection] directly from recovery.sqlite (D12)."""
         snap = self.read_protection_status()
-        if snap.protection_state in {"healthy", "unchanged"} and snap.last_verified_at is not None:
+        now = self.clock()
+        proof_ref = f"point:{snap.last_point_id}" if snap.last_point_id else None
+        if (
+            snap.protection_state in {"healthy", "unchanged"}
+            and snap.last_verified_at is not None
+            and proof_ref is not None
+        ):
             return Section[Protection](
                 state="ready",
                 data=Protection(
                     status="protected",
-                    latest_verified_point_at=snap.last_verified_at,
+                    state=snap.protection_state,
+                    last_verified_at=snap.last_verified_at,
+                    point_age_ms=max(0, now - snap.last_verified_at),
+                    proof_ref=proof_ref,
                 ),
                 freshness=Freshness(
                     state=FreshnessState.KNOWN,
@@ -1536,11 +1681,18 @@ class HostedWorkspaceRecoveryService:
                 state="ready",
                 data=Protection(
                     status="degraded",
-                    latest_verified_point_at=snap.last_verified_at,
+                    state="overdue",
+                    last_verified_at=snap.last_verified_at,
+                    point_age_ms=(
+                        max(0, now - snap.last_verified_at)
+                        if snap.last_verified_at is not None
+                        else None
+                    ),
+                    proof_ref=proof_ref,
                 ),
                 freshness=Freshness(
                     state=FreshnessState.STALE,
-                    as_of=snap.last_checked_at or snap.last_verified_at or self.clock(),
+                    as_of=snap.last_checked_at or snap.last_verified_at or now,
                     source_revision=f"backup_state:{snap.revision}",
                     error_code=snap.last_error_code or "backup_overdue",
                 ),
@@ -1747,6 +1899,38 @@ class HostedWorkspaceRecoveryService:
         self.source_lifecycle.execute(actor, cmd)
         return self._current_access_epoch()
 
+    def lookup_idempotent_restore(
+        self,
+        *,
+        idempotency_key: str,
+        point_id: str,
+        preview_id: str,
+    ) -> OperationOutcome[WorkspaceRecoveryResult] | None:
+        """Return original restore outcome on exact replay without requiring an active preview."""
+        with self.recovery_engine.connect() as conn:
+            row = (
+                conn.execute(
+                    text(
+                        "SELECT * FROM recovery_operations "
+                        "WHERE kind = 'restore' AND idempotency_key = :key"
+                    ),
+                    {"key": idempotency_key},
+                )
+                .mappings()
+                .first()
+            )
+        if row is None:
+            return None
+        stored_cmd = WorkspaceRecoveryCommand.model_validate_json(row["request_json"])
+        payload = stored_cmd.intent.payload
+        if (
+            not isinstance(payload, ConfirmRestore)
+            or payload.point_id != point_id
+            or payload.preview_id != preview_id
+        ):
+            raise SemanticConflict()
+        return self._outcome_from_row(row)
+
     def confirm_restore(
         self,
         actor: OperatorRestoreAuthority | LocalRestoreAuthority,
@@ -1764,6 +1948,24 @@ class HostedWorkspaceRecoveryService:
         now = self.clock()
         self._prune_expired_previews(now)
 
+        # Idempotent replay check before consuming preview or recomputing epoch (#13a).
+        existing = self.lookup_idempotent_restore(
+            idempotency_key=idempotency_key,
+            point_id=point_id,
+            preview_id=preview_id,
+        )
+        if existing is not None:
+            return existing
+
+        preview = self._previews.get(preview_id)
+        if preview is None or preview_id in self._consumed_previews:
+            raise RestoreDeniedError("Restore preview is missing, expired, or already used.")
+        if preview.point_id != point_id or preview.workspace_id != self.workspace_id:
+            raise RestoreDeniedError("Restore confirmation does not match previewed point.")
+        if now > preview.expires_at:
+            self._previews.pop(preview_id, None)
+            raise RestoreDeniedError("Restore preview has expired.")
+
         scope = WorkspaceScope(operator_id=self.operator_id, workspace_id=self.workspace_id)
         op_id = operation_id or str(uuid4())
         if command is None:
@@ -1772,7 +1974,7 @@ class HostedWorkspaceRecoveryService:
                 scope=scope,
                 kind="confirm_restore",
                 expected_revision=1,
-                access_epoch=self._current_access_epoch(),
+                access_epoch=preview.source_epoch,
                 payload=ConfirmRestore(
                     point_id=point_id,
                     preview_id=preview_id,
@@ -1786,25 +1988,6 @@ class HostedWorkspaceRecoveryService:
                 request_hash=semantic_hash(intent),
             )
 
-        # Idempotent replay check before consuming preview.
-        with self.recovery_engine.connect() as conn:
-            existing = self._lookup_idempotent(
-                conn,
-                kind="restore",
-                idempotency_key=idempotency_key,
-                request_hash=command.request_hash,
-            )
-            if existing is not None:
-                return existing
-
-        preview = self._previews.get(preview_id)
-        if preview is None or preview_id in self._consumed_previews:
-            raise RestoreDeniedError("Restore preview is missing, expired, or already used.")
-        if preview.point_id != point_id or preview.workspace_id != self.workspace_id:
-            raise RestoreDeniedError("Restore confirmation does not match previewed point.")
-        if now > preview.expires_at:
-            self._previews.pop(preview_id, None)
-            raise RestoreDeniedError("Restore preview has expired.")
         if isinstance(actor, OperatorRestoreAuthority):
             if now - actor.step_up_at > STEP_UP_TTL_MS or actor.step_up_at > now:
                 raise RestoreDeniedError("Recent strong step-up authentication has expired.")
@@ -1820,10 +2003,27 @@ class HostedWorkspaceRecoveryService:
         if current_epoch != preview.source_epoch:
             raise RestoreDeniedError("Workspace access_epoch changed since preview; preview again.")
 
+        # Probe existing tree OUTSIDE any SQLite write transaction (#15).
+        with self.recovery_engine.connect() as conn:
+            prior_ref_probe = str(
+                conn.execute(
+                    text("SELECT active_business_ref FROM recovery_meta WHERE id = 1")
+                ).scalar_one()
+            )
+        prior_dir = (self.workspace_root / prior_ref_probe).resolve()
+        prior_db = prior_dir / "property-management.sqlite"
+        prior_tree_kind: Literal["healthy_pre_state", "forensic_damaged"] = "healthy_pre_state"
+        try:
+            probe_live_workspace_state(prior_db, prior_dir)
+        except WorkspaceStateUnreadable:
+            prior_tree_kind = "forensic_damaged"
+
         if not self._op_lock.acquire(blocking=False):
             raise BackupConflictError()
 
         target_dir: Path | None = None
+        switched = False
+        auth_expires_at = now + EXECUTION_AUTH_TTL_MS
         try:
             # Consume preview single-use now that we own the exclusive lock.
             self._consumed_previews.add(preview_id)
@@ -1881,17 +2081,6 @@ class HostedWorkspaceRecoveryService:
                 manifest_ref = str(point["manifest_ref"])
                 manifest_sha256 = str(point["manifest_sha256"])
 
-                # Detect whether existing tree is healthy or damaged (forensic_damaged).
-                prior_dir = (self.workspace_root / prior_ref).resolve()
-                prior_db = prior_dir / "property-management.sqlite"
-                prior_tree_kind: Literal["healthy_pre_state", "forensic_damaged"] = (
-                    "healthy_pre_state"
-                )
-                try:
-                    probe_live_workspace_state(prior_db, prior_dir)
-                except WorkspaceStateUnreadable:
-                    prior_tree_kind = "forensic_damaged"
-
                 auth_ref = (
                     actor.step_up_ref
                     if isinstance(actor, OperatorRestoreAuthority)
@@ -1943,7 +2132,7 @@ class HostedWorkspaceRecoveryService:
                         "subject": authorized_subject,
                         "auth_ref": auth_ref,
                         "now": now,
-                        "auth_exp": now + EXECUTION_AUTH_TTL_MS,
+                        "auth_exp": auth_expires_at,
                         "prev_rev": preview.current_business_revision,
                     },
                 )
@@ -1960,6 +2149,10 @@ class HostedWorkspaceRecoveryService:
                         "target_ref": target_ref,
                     },
                 )
+
+            # Enforce D4 execution authorization TTL before fencing (#16).
+            if self.clock() > auth_expires_at:
+                raise RestoreDeniedError("Restore execution authorization expired before fencing.")
 
             # Phase: fenced (maintenance_fence + drain + close live business DB connections).
             self._run_source_fence(kind="maintenance_fence", op_id=op_id)
@@ -2002,8 +2195,6 @@ class HostedWorkspaceRecoveryService:
                 for child in list(restored_files_wrapper.iterdir()):
                     dest = target_dir / child.name
                     if child.name == "files" and child.is_dir():
-                        # Engine placed files/<rel_path>; if rel_path already starts with files/,
-                        # flatten files/files/* -> files/* cleanly.
                         for nested in list(child.iterdir()):
                             shutil.move(str(nested), str(restored_files_wrapper / nested.name))
                         child.rmdir()
@@ -2034,6 +2225,10 @@ class HostedWorkspaceRecoveryService:
             if before_switch_hook is not None:
                 before_switch_hook(target_dir)
 
+            # Enforce D4 execution authorization TTL before switching active_business_ref (#16).
+            if self.clock() > auth_expires_at:
+                raise RestoreDeniedError("Restore execution authorization expired before switch.")
+
             validated_at = self.clock()
             with immediate_transaction(self.recovery_engine) as conn:
                 conn.execute(
@@ -2044,8 +2239,8 @@ class HostedWorkspaceRecoveryService:
                     {"vref": f"integrity:{op_id}", "now": validated_at, "op_id": op_id},
                 )
 
-            # Phase: switched -> atomic locator switch in recovery.sqlite + revoke sessions/epoch.
-            new_epoch = self._run_verify_restore_binding(point_id=point_id, op_id=op_id)
+            # Phase: switched -> commit active_business_ref in recovery.sqlite FIRST while
+            # maintenance_operation_id still fences traffic (#12), THEN run verify_restore_binding.
             switched_at = self.clock()
             result = WorkspaceRecoveryResult(
                 point_id=point_id,
@@ -2063,11 +2258,10 @@ class HostedWorkspaceRecoveryService:
                 )
                 conn.execute(
                     text(
-                        "UPDATE restore_operations SET phase = 'switched', "
-                        "new_access_epoch = :new_epoch, updated_at = :now "
+                        "UPDATE restore_operations SET phase = 'switched', updated_at = :now "
                         "WHERE operation_id = :op_id"
                     ),
-                    {"new_epoch": new_epoch, "now": switched_at, "op_id": op_id},
+                    {"now": switched_at, "op_id": op_id},
                 )
                 conn.execute(
                     text(
@@ -2076,6 +2270,17 @@ class HostedWorkspaceRecoveryService:
                         "revision = revision + 1 WHERE operation_id = :op_id"
                     ),
                     {"res": result.model_dump_json(), "now": switched_at, "op_id": op_id},
+                )
+            switched = True
+
+            new_epoch = self._run_verify_restore_binding(point_id=point_id, op_id=op_id)
+            with immediate_transaction(self.recovery_engine) as conn:
+                conn.execute(
+                    text(
+                        "UPDATE restore_operations SET new_access_epoch = :new_epoch, "
+                        "updated_at = :now WHERE operation_id = :op_id"
+                    ),
+                    {"new_epoch": new_epoch, "now": self.clock(), "op_id": op_id},
                 )
                 self._record_audit(
                     conn,
@@ -2100,9 +2305,15 @@ class HostedWorkspaceRecoveryService:
                 result=result,
             )
         except Exception as error:
-            # Clean up unvalidated staging tree; NEVER modify active_business_ref or prior tree!
-            if target_dir is not None and target_dir.exists():
+            # Clean up unvalidated staging tree ONLY if active_business_ref has NOT switched (#12).
+            if not switched and target_dir is not None and target_dir.exists():
                 shutil.rmtree(target_dir, ignore_errors=True)
+            # Release maintenance_operation_id fence on pre-switch failure (#11) so workspace is not wedged.
+            if not switched:
+                try:
+                    self._release_maintenance_fence(op_id)
+                except Exception:
+                    logger.warning("Failed to release maintenance fence after restore rollback.")
             err_code = error.code if isinstance(error, HostedRecoveryError) else "restore_failed"
             failed_at = self.clock()
             with immediate_transaction(self.recovery_engine) as conn:

@@ -1,0 +1,233 @@
+HOSTED MVP H05 Code Review Response (Commit 745be9a0)
+=====================================================
+Original review: docs/pending_code_review_comments/HOSTED_MVP_H05_745be9a0_REVIEW_COMMENTS.txt
+All 41 findings addressed and validated.
+
+--------------------------------------------------------------------------------
+Backup Engine, Proxy, KMS, R2, and Alerting (#1 - #8)
+--------------------------------------------------------------------------------
+1. [P0] Cross-DEK chunk dedup collision
+   - application/apps/server/app/modules/hosted_recovery/infrastructure/engine.py:67-146,162-177,260-340
+     Added _dek_fingerprint(dek) so chunks are namespaced under chunks/{key_fp}/{dek_fp}/{chunk_sha256}.enc, preventing cross-DEK dedup collisions across restarts or rotations; added read_wrapped_dek() so services reload their active wrapped DEK across restarts.
+   - application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:1148-1170
+   - application/apps/server/app/modules/hosted_admin/infrastructure/admin_recovery.py:555-580
+     Reload existing_wrapped_dek_b64 from the latest verified manifest on capture so incremental captures continue reusing the active DEK safely.
+
+2. [P1] list_objects 16 KiB header overflow
+   - application/apps/server/app/modules/host_agent/infrastructure/backup_proxy.py:130-165,330-375,450-485
+     BackupProxyHandler.dispatch("list_objects") now serializes {"keys": relative_keys} in the binary response body (bounded by MAX_BODY_BYTES) rather than the 16 KiB header; handle_proxy_connection() catches HostedRecoveryError around _send_frame(). Updated UnixBackupProxyClient and test transports in test_backup_engine_and_proxy.py, test_h05_backup_runner_and_alerting.py, and h05_sizing_actor.py.
+
+3. [P2] Slowloris and unbounded queue in BackupProxyServer
+   - application/apps/server/app/modules/host_agent/infrastructure/backup_proxy.py:88-126,248-328
+     Added monotonic total-frame deadline across _recv_frame()/_recv_exact(), bounded concurrency via max_queued=32 (BoundedSemaphore), and per-UID in-flight cap (max_per_uid=2).
+
+4. [P2] list_objects pagination beyond 1,000 keys
+   - application/apps/server/app/modules/hosted_recovery/application/ports.py:35-65
+   - application/apps/server/app/modules/hosted_recovery/infrastructure/r2_store.py:85-165
+   - application/apps/server/app/modules/host_agent/infrastructure/backup_proxy.py:135-160,340-375,455-485
+   - application/apps/server/app/modules/hosted_recovery/infrastructure/engine.py:619-650
+     Added list_objects_page(prefix, *, max_keys=1000, continuation_token=None) end-to-end and updated _list_all_objects() / prune_unreferenced_chunks() to iterate all pages until truncated is False.
+
+5. [P2] Unbounded memory read in R2ObjectStore.get_object
+   - application/apps/server/app/modules/hosted_recovery/infrastructure/r2_store.py:58-84
+   - application/apps/server/app/modules/host_agent/infrastructure/backup_proxy.py:338-348
+     Added max_bytes parameter to ObjectStore.get_object() (enforcing ContentLength and reading at most max_bytes + 1 inside contextlib.closing); BackupProxyHandler passes max_bytes=MAX_BODY_BYTES.
+
+6. [P3] load_manifest nonce length validation
+   - application/apps/server/app/modules/hosted_recovery/infrastructure/engine.py:415-430
+     Validates len(nonce) == AES_GCM_NONCE_BYTES before AESGCM.decrypt(), raising RecoveryIntegrityError on malformed nonce length.
+
+7. [P3] _validate_list_subprefix error handling and double slash
+   - application/apps/server/app/modules/host_agent/infrastructure/backup_proxy.py:210-232
+   - application/apps/server/app/modules/hosted_recovery/infrastructure/r2_store.py:135-155
+     Wraps subprefix[:-1] validation in try/except ValueError -> BackupProxyDenied; LocalDirectoryObjectStore strips trailing slash cleanly without producing double slashes.
+
+8. [P3] HTTP redirects and SSRF in WebhookAlertSink / CloudKmsEnvelopeProvider
+   - application/apps/server/app/modules/hosted_recovery/infrastructure/alerting.py:90-155
+   - application/apps/server/app/modules/hosted_recovery/infrastructure/kms_provider.py:95-145
+     Added _NoRedirectHandler with urllib.request.build_opener(HTTPSHandler(...), _NoRedirectHandler()); WebhookAlertSink rejects loopback, link-local, private, and unspecified IP targets as well as localhost / metadata.google.internal.
+
+--------------------------------------------------------------------------------
+Operator Recovery Service & Entrypoint (#9 - #18)
+--------------------------------------------------------------------------------
+9. [P0] operator_entry.py active_business_ref & close_business_connections
+   - application/apps/server/app/modules/hosted_access/infrastructure/operator_entry.py:220-290
+     Resolves active_workspace = recovery_service.active_business_directory(), writes private control/active-workspace-config.json when switched, and wires close_business_connections to dispose the live business_engine.
+
+10. [P0] Post-restore access_epoch lockout in operator_entry.py
+    - application/apps/server/app/modules/hosted_access/infrastructure/operator_entry.py:295-335
+      current_binding() reads access_meta.access_epoch and allows epoch advancement when backed by an applied verify_restore_binding receipt in source_receipts.
+
+11. [P0] Stuck maintenance_operation_id on failed restore
+    - application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:640-678,2040-2110
+      Added _release_maintenance_fence(op_id), invoked on pre-switch rollback in confirm_restore() and during reconcile_startup() for needs_attention restores.
+
+12. [P1] Atomic switchover ordering
+    - application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:2010-2095
+      Commits recovery_meta.active_business_ref, phase='switched', and state='succeeded' FIRST while fenced, sets switched = True, then runs _run_verify_restore_binding(), and never rmtree(target_dir) once switched is True.
+
+13. [P1] Idempotent replay of confirm_restore
+    - application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:1855-1935
+    - application/apps/server/app/modules/hosted_access/api/operator_recovery.py:235-295
+      Added lookup_idempotent_restore() checked before preview/recent-auth consumption and bound intent.access_epoch = preview.source_epoch; operator_recovery.py authenticates caller and checks lookup_idempotent_restore() before get_preview()/consume_recent().
+
+14. [P1] Per-request 50 MB DB/file dump in readiness/status
+    - application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:1530-1589
+    - application/apps/server/app/modules/hosted_access/infrastructure/operator_entry.py:100-135
+    - application/apps/server/app/modules/hosted_access/api/operator_recovery.py:155-185
+      Added O(1) detect_runtime_mode() (inspecting restore_operations, active_business_ref, and SQLite 16-byte header magic) and wired it into _live_business_readiness() and GET /api/hosted/recovery/status.
+
+15. [P2] BEGIN IMMEDIATE held across probe_live_workspace_state
+    - application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:675-715,1935-1970
+      Moved probe_live_workspace_state() outside immediate_transaction() in reconcile_startup() and confirm_restore().
+
+16. [P2] Enforce D4 5-minute execution_authorization_expires_at TTL
+    - application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:1940-2025
+      Checks self.clock() > auth_expires_at before fencing and again before switching active_business_ref.
+
+17. [P2] _enforce_retention() leaking 'expired' points
+    - application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:1430-1495
+      Queries both state='verified' and existing state='expired' rows and retries R2 deletion/pruning on all expired points.
+
+18. [P2] operator_entry.py startup checks & wiring
+    - application/apps/server/app/modules/hosted_access/infrastructure/operator_entry.py:210-285
+      Validates recovery_meta.(deployment_ref, workspace_id) against binding, invokes recovery_service.reconcile_startup(), and wires alert_emitter=DeduplicatingAlertEmitter([StructuredLogAlertSink()]) and summary_signer_key.
+
+--------------------------------------------------------------------------------
+Admin Control-Plane Recovery & Schema (#19 - #26, #37a)
+--------------------------------------------------------------------------------
+19. [P0] control_restore_operations.new_registry_generation immutability failure
+    - application/database/admin-recovery-migrations/versions/admin_recovery_0001_initial.py:195-245
+    - docs/database/admin-recovery.md:205-245
+    - application/apps/server/app/modules/hosted_admin/infrastructure/admin_recovery.py:865-955
+      Made new_registry_generation nullable=True with write-once trigger control_restore_operations_new_registry_generation_write_once (updated docs/database/admin-recovery.md in the same change); admin_recovery.py inserts NULL at prepared and sets new_reg_gen once at switched.
+
+20. [P1] POST /api/admin/recovery/reconstruct actor enforcement
+    - application/apps/server/app/modules/hosted_admin/api/recovery_router.py:210-230
+    - application/apps/server/app/modules/hosted_admin/infrastructure/admin_recovery.py:1130-1180
+      Passes actor into recovery.reconstruct_catalog(actor=actor), enforces _verify_recovery_actor(conn, actor), and audits actor.bootstrap_principal_ref.
+
+21. [P1] AdminControlRecoveryService.original() & request_json='{}'
+    - application/apps/server/app/modules/hosted_admin/infrastructure/admin_recovery.py:1035-1085,1210-1240
+      original() verifies actor, idempotency_key, and request_hash (raising SemanticConflict on mismatch); reconstruct_catalog() persists valid serialized AdminRecoveryCommand JSON.
+
+22. [P1] D5 production authenticate_recovery adapter & standalone Admin recovery app
+    - application/apps/server/app/modules/hosted_admin/infrastructure/admin_recovery.py:1315-1450
+      Added build_bootstrap_recovery_authenticator(...) (verifying Firebase token, TOTP MFA, live revocation, CSRF, Origin, and BootstrapRecoveryAuthority.verify_identity()) and create_admin_recovery_app(...) booting independently without admin.sqlite.
+
+23. [P2] Stale preview.source_generation & AdminRecoveryDenied -> 500
+    - application/apps/server/app/modules/hosted_admin/infrastructure/admin_recovery.py:855-985
+      Verifies source_gen == preview.source_generation inside the write transaction and re-raises AdminRecoveryDenied before except Exception.
+
+24. [P2] ReconcileCheckpoint stub & missing deployment_id check
+    - application/apps/server/app/modules/hosted_admin/infrastructure/admin_recovery.py:495-645
+      Checks actor.deployment_id == self.deployment_id in _execute_capture_control() and ReconcileCheckpoint; implements real reconciliation of orphaned 'pending'/'running' control backup operations.
+
+25. [P2] Post-restore admin.sqlite incomplete invalidation
+    - application/apps/server/app/modules/hosted_admin/infrastructure/admin_recovery.py:920-965
+      Expires non-terminal login_handoffs, login_attempts, and email_continuations and marks pending identity_commands as 'unknown'.
+
+26. [P2] reconstruct_on_clean_host source_generation regression
+    - application/apps/server/app/modules/hosted_admin/infrastructure/admin_recovery.py:1245-1275
+      Advances admin_recovery_meta.source_generation to max(source_generation, max_reconstructed_source_generation).
+
+--------------------------------------------------------------------------------
+Host Agent, Gateway Projection, and Clean Runtime Repair (#27 - #32)
+--------------------------------------------------------------------------------
+27. [P0] Gateway._record() killing eligible containers on supervise()
+    - application/apps/server/app/modules/host_agent/infrastructure/gateway.py:185-235
+      Separates apply_ingress_policy proof checks from runtime-authority verify()/supervise() checks, permitting already-admitted eligible bindings via _eligible_observation_for().
+
+28. [P0] Production Inventory.eligible_ready() & AuthEndpoints.resolve_eligible() + rollback
+    - application/apps/server/app/modules/host_agent/infrastructure/inventory.py:195-225
+    - application/apps/server/app/modules/host_agent/infrastructure/auth_endpoints.py:140-185
+    - application/apps/server/app/modules/host_agent/infrastructure/gateway.py:290-335
+      Implemented Inventory.eligible_ready() and AuthEndpoints.resolve_eligible(); updated Gateway.auth_effect() rollback to exclude eligible rows from closed_config() fallback.
+
+29. [P1] _workspace_eligible_routes() normalization/encoding bypass
+    - application/apps/server/app/modules/host_agent/infrastructure/auth_projection.py:240-290
+    - application/apps/server/app/modules/hosted_recovery/tests/test_h05_positive_workspace_gateway.py:164-187
+      Added normalized Caddy "path" matcher for WORKSPACE_FORBIDDEN_PREFIXES, case-insensitive (?i) orig_uri regex, and traversal/double-slash/encoded-delimiter (//, /./, /../, %2e, %2f, %5c) regex.
+
+30. [P1] Binding proofs across command.payload, WorkspaceRouteObservation, WorkspaceRouteManifest + rollback
+    - application/apps/server/app/modules/host_agent/infrastructure/auth_projection.py:215-240
+    - application/apps/server/app/modules/host_agent/infrastructure/gateway.py:195-245,270-315
+      Verifies observation.resource_readiness_proof_ref == manifest.recovery_proof_ref and matches command.payload proofs; rolls back self.admin.load(previous) on load/inspect failure in apply(eligible).
+
+31. [P1] CleanRuntimeRepairer inventory/fencing/recovery/UID fixes
+    - application/apps/server/app/modules/host_agent/infrastructure/repair_runtime.py:115-295
+    - application/apps/server/app/modules/hosted_recovery/tests/test_h05_clean_runtime_repair.py:160-168
+      Added optional inventory lock + resource_bindings update, setup_state != 'retired' and o.access_epoch == op.access_epoch checks, resume support for 'running' state, strict binding_id/resource_generation/access_epoch checks on access_meta, PRAGMA wal_checkpoint(TRUNCATE), and UID:GID preservation on sidecar files when euid == 0.
+
+32. [P2] HostAgent.execute() retained receipt check before eligible_proof_verifier
+    - application/apps/server/app/modules/host_agent/application/service.py:100-125
+      Checks inventory.retained(command) for terminal state inside inventory.exclusive() before invoking eligible_proof_verifier.
+
+--------------------------------------------------------------------------------
+Frontend Recovery UI, Admin-lite, Qualification, and Runbook (#33 - #41)
+--------------------------------------------------------------------------------
+33. [P0] Minimal Recovery Mode UI (HostedRecovery) unreachable in WorkspaceGate
+    - application/apps/web/src/app/workspace-gate.tsx:5-65,150-168
+      Detects 503 recovery_mode_active (or checks /api/hosted/recovery/status on 503 in managed hosted mode) inside WorkspaceGate and renders <HostedRecovery forceVisible /> directly without requiring /api/operator/bootstrap.
+
+34. [P1] Operator restore step-up interactive browser flow
+    - application/apps/web/src/app/hosted-recovery.tsx:18-25,288-344,681-690
+      Added interactive "Start fresh verification" button and direct link bound to preview.stepUpChallengeId (/auth/start?recent_challenge=...&return_to=...) plus same-origin postMessage and location.hash grant capture into recentAuthGrant.
+
+35. [P1] AdminWorkspace.tsx handleRepairRuntime() bindingId & expectedResourceGeneration
+    - application/apps/server/app/modules/hosted_admin/application/ui_contracts.py:45-50
+    - application/apps/server/app/modules/hosted_admin/infrastructure/admin_control.py:1437-1439,1546-1548,1688-1692
+    - application/apps/web/src/admin/AdminWorkspace.tsx:350-375,666-678
+      Exposed binding_id (component_deployment_id) and resource_generation (component_deployments.revision) on OperatorSummary; removed unsafe op.workspace_id / 1 fallbacks in AdminWorkspace.tsx and disabled Repair runtime when binding metadata is missing.
+
+36. [P1] qualify_h05_recovery.py nonexistent test names & per-node proof
+    - application/deploy/hosted-mvp/gcp/qualify_h05_recovery.py:55-125,250-305
+    - docs/hosting/qualification/reports/HOSTED_MVP_H05_11_COMPONENT_RECOVERY.json
+      Updated all 17 CASE_TEST_MAP entries to exact existing test function names, executed explicit test_file::test_func node IDs with --junitxml parsing per test function, and regenerated HOSTED_MVP_H05_11_COMPONENT_RECOVERY.json.
+
+37. [P1] Whole-host control loss CLI main() & runbook alignment
+    - application/apps/server/app/modules/hosted_admin/infrastructure/admin_recovery.py:1455-1515
+    - docs/hosting/runbooks/H05_RECOVERY_OPERATIONS_RUNBOOK.md:56-72,144-160
+      Implemented main() + if __name__ == "__main__": wired to reconstruct_on_clean_host(), and aligned H05_RECOVERY_OPERATIONS_RUNBOOK.md CLI flags and /run/epm/admin-recovery-authority.json schema (principals list) with the executable code.
+
+38. [P1] h05_sizing_actor.py run_exhaustion_proof() real backup/restore staging exhaustion
+    - application/deploy/hosted-mvp/gcp/h05_sizing_actor.py:463-660
+      Exercises real service.execute(Capture) and service.confirm_restore() while quota is exhausted (both live prjquota fill on Linux and fault-injected OSError on component runs), verifying fail-closed staging rollback, intact original DB/active_business_ref, zero empty init, and honest backup_state.
+
+39. [P2] Post-restore 401 handling in HostedRecovery
+    - application/apps/web/src/app/hosted-recovery.tsx:4-16,172-182,200-285,393-405,504-518,568-578
+      Added RecoveryAuthError on HTTP 401, calls pauseHostedSession(...), preserves the restore confirmation banner after confirm_restore revokes sessions, and displays an explicit "Sign in again" (/auth/start) CTA.
+
+40. [P2] Stale UI state across point selection, operator switching, and post-acceptance
+    - application/apps/web/src/app/hosted-recovery.tsx:444-450,639-646
+    - application/apps/web/src/admin/AdminRecovery.tsx:167-172,284-290
+    - application/apps/web/src/admin/AdminWorkspace.tsx:905-916
+      Clears preview/confirmation/grant when selectedPointId changes, clears repairOperation/repairConfirmChecked/repairKey when switching operators, and clears operationId/lastOperationId on successful acceptance.
+
+41. [P2] D8 unchanged protection state in backend Protection contract & UI
+    - application/apps/server/app/platform/hosted_contracts/ui_states.py:124-131
+    - application/apps/server/app/modules/hosted_admin/infrastructure/admin_control.py:1641-1652
+    - application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:1654-1706
+    - application/apps/web/src/app/hosted-settings.tsx:18-24,223-235
+      Added state: Literal["healthy", "unchanged", "overdue", "unavailable", "unknown"] | None = None to Protection, populated it in AdminControlService._summary_from_row() and HostedWorkspaceRecoveryService.protection_section() (also fixing Protection field names in protection_section()), and surfaced "Protected — unchanged since verified point" in HostedSettings and Admin-lite.
+
+--------------------------------------------------------------------------------
+Validation Results
+--------------------------------------------------------------------------------
+1. Python focused tests:
+   - pytest test_h05_positive_workspace_gateway.py test_h05_clean_runtime_repair.py test_gateway.py: 41 passed
+   - pytest test_h05_operator_restore_and_recovery_mode.py test_h05_backup_runner_and_alerting.py test_h05_recovery_security.py: 17 passed
+   - pytest test_h05_admin_control_recovery.py: 2 passed
+   - pytest test_backup_engine_and_proxy.py (incl. AF_UNIX test_unix_socket_backup_proxy_end_to_end): 6 passed
+   - pytest test_h05_sizing_qualification.py test_h05_recovery_qualification.py: 10 passed
+   - pytest test_admin_control.py: all passed (part of 44-test green run)
+2. Python lint & format (application/pyproject.toml):
+   - ruff check on all 27 modified Python files: All checks passed!
+   - ruff format --check on all 27 modified Python files: 27 files already formatted
+3. Frontend lint, format, typecheck, and Playwright component tests:
+   - npm run lint (eslint . --max-warnings 0): passed
+   - npm run format:check (prettier --check): All matched files use Prettier code style!
+   - npm run typecheck (node scripts/typecheck.mjs): Type checking passed (212 source files)
+   - npx playwright test --config playwright.components.config.ts hosted-recovery.spec.ts hosted-settings.spec.ts admin-lite.spec.ts: 8 passed
+4. H05.11 component qualification report:
+   - PYTHONPATH=apps/server .venv/bin/python deploy/hosted-mvp/gcp/qualify_h05_recovery.py ../docs/hosting/qualification/reports/HOSTED_MVP_H05_11_COMPONENT_RECOVERY.json: exited 0 (all 17 recovery.json cases passed individually via explicit test_file::test_func node IDs + joint H04/H05 positive handoff passed).

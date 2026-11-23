@@ -17,6 +17,7 @@ type UsageData = {
 
 type ProtectionData = {
   status: "protected" | "degraded";
+  state?: "healthy" | "unchanged" | "overdue" | "unavailable" | "unknown" | null;
   last_verified_at?: number | null;
   point_age_ms?: number | null;
   proof_ref?: string | null;
@@ -223,7 +224,11 @@ export function HostedSettings() {
             <dd>
               {state.payload.protection.state === "ready" && state.payload.protection.data ? (
                 <p>
-                  {state.payload.protection.data.status === "protected" ? "Protected" : "Degraded"}
+                  {state.payload.protection.data.state === "unchanged"
+                    ? "Protected — unchanged since verified point"
+                    : state.payload.protection.data.status === "protected"
+                      ? "Protected"
+                      : "Degraded"}
                   {typeof state.payload.protection.data.last_verified_at === "number"
                     ? ` — latest verified point: ${formatEpochMs(state.payload.protection.data.last_verified_at)}`
                     : ""}

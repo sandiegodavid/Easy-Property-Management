@@ -1,124 +1,124 @@
 {
   "cases": {
     "admin_outage_independence": {
-      "evidence_sha256": "d3054aec1fbb4e9c24d5aefd936a6076cefcb0a5414e97584cbdd8652343330c",
+      "evidence_sha256": "26f46961e0d2e2519da2ac6b5425e774fb06299c33ca3a53f23e79b058c776c7",
       "status": "passed",
       "test_file": "apps/server/app/modules/hosted_recovery/tests/test_h05_operator_restore_and_recovery_mode.py",
       "test_function": "test_admin_outage_independence_and_reconstruct_catalog"
     },
     "clean_runtime_repair": {
-      "evidence_sha256": "d3054aec1fbb4e9c24d5aefd936a6076cefcb0a5414e97584cbdd8652343330c",
+      "evidence_sha256": "26f46961e0d2e2519da2ac6b5425e774fb06299c33ca3a53f23e79b058c776c7",
       "status": "passed",
       "test_file": "apps/server/app/modules/hosted_recovery/tests/test_h05_clean_runtime_repair.py",
-      "test_function": "test_clean_runtime_repair_replaces_only_container_and_retains_state"
+      "test_function": "test_clean_runtime_repair_preserves_ids_data_revokes_sessions_and_boots_recovery_mode"
     },
     "consistent_scheduled_capture": {
-      "evidence_sha256": "d3054aec1fbb4e9c24d5aefd936a6076cefcb0a5414e97584cbdd8652343330c",
+      "evidence_sha256": "26f46961e0d2e2519da2ac6b5425e774fb06299c33ca3a53f23e79b058c776c7",
       "status": "passed",
       "test_file": "apps/server/app/modules/hosted_recovery/tests/test_h05_backup_runner_and_alerting.py",
-      "test_function": "test_consistent_scheduled_capture_and_unchanged_file_only_checkpoints"
+      "test_function": "test_consistent_scheduled_capture_and_idempotency"
     },
     "corrupt_business_recovery_mode": {
-      "evidence_sha256": "d3054aec1fbb4e9c24d5aefd936a6076cefcb0a5414e97584cbdd8652343330c",
+      "evidence_sha256": "26f46961e0d2e2519da2ac6b5425e774fb06299c33ca3a53f23e79b058c776c7",
       "status": "passed",
       "test_file": "apps/server/app/modules/hosted_recovery/tests/test_h05_operator_restore_and_recovery_mode.py",
       "test_function": "test_corrupt_business_recovery_mode_and_operator_step_up_exact_confirmation"
     },
     "corrupt_missing_object_key": {
-      "evidence_sha256": "d3054aec1fbb4e9c24d5aefd936a6076cefcb0a5414e97584cbdd8652343330c",
+      "evidence_sha256": "26f46961e0d2e2519da2ac6b5425e774fb06299c33ca3a53f23e79b058c776c7",
       "status": "passed",
       "test_file": "apps/server/app/modules/hosted_access/tests/test_h05_recovery_security.py",
       "test_function": "test_tampered_ciphertext_chunk_and_manifest_fail_closed"
     },
     "crash_safe_locator_switch": {
-      "evidence_sha256": "d3054aec1fbb4e9c24d5aefd936a6076cefcb0a5414e97584cbdd8652343330c",
+      "evidence_sha256": "26f46961e0d2e2519da2ac6b5425e774fb06299c33ca3a53f23e79b058c776c7",
       "status": "passed",
       "test_file": "apps/server/app/modules/hosted_recovery/tests/test_h05_operator_restore_and_recovery_mode.py",
       "test_function": "test_crash_safe_locator_switch_rollback_and_healthy_prior_tree"
     },
     "cross_workspace_replay_path_key_denial": {
-      "evidence_sha256": "d3054aec1fbb4e9c24d5aefd936a6076cefcb0a5414e97584cbdd8652343330c",
+      "evidence_sha256": "26f46961e0d2e2519da2ac6b5425e774fb06299c33ca3a53f23e79b058c776c7",
       "status": "passed",
       "test_file": "apps/server/app/modules/hosted_access/tests/test_h05_recovery_security.py",
       "test_function": "test_cross_workspace_prefix_key_and_aad_isolation"
     },
     "encrypt_key_custody_readback": {
-      "evidence_sha256": "d3054aec1fbb4e9c24d5aefd936a6076cefcb0a5414e97584cbdd8652343330c",
+      "evidence_sha256": "26f46961e0d2e2519da2ac6b5425e774fb06299c33ca3a53f23e79b058c776c7",
       "status": "passed",
       "test_file": "apps/server/app/modules/hosted_recovery/tests/test_backup_engine_and_proxy.py",
-      "test_function": "test_chunked_aead_round_trip_dedup_and_readback_verification"
+      "test_function": "test_dedup_readback_restore_and_reference_safe_pruning"
     },
     "forensic_prior_tree": {
-      "evidence_sha256": "d3054aec1fbb4e9c24d5aefd936a6076cefcb0a5414e97584cbdd8652343330c",
+      "evidence_sha256": "26f46961e0d2e2519da2ac6b5425e774fb06299c33ca3a53f23e79b058c776c7",
       "status": "passed",
       "test_file": "apps/server/app/modules/hosted_recovery/tests/test_h05_operator_restore_and_recovery_mode.py",
       "test_function": "test_corrupt_business_recovery_mode_and_operator_step_up_exact_confirmation"
     },
     "no_offline_workspace_bypass": {
-      "evidence_sha256": "d3054aec1fbb4e9c24d5aefd936a6076cefcb0a5414e97584cbdd8652343330c",
+      "evidence_sha256": "26f46961e0d2e2519da2ac6b5425e774fb06299c33ca3a53f23e79b058c776c7",
       "status": "passed",
       "test_file": "apps/server/app/modules/hosted_access/tests/test_h05_recovery_security.py",
       "test_function": "test_no_offline_workspace_decrypt_or_restore_bypass_and_gateway_negative_gate"
     },
     "operator_step_up_exact_confirmation": {
-      "evidence_sha256": "d3054aec1fbb4e9c24d5aefd936a6076cefcb0a5414e97584cbdd8652343330c",
+      "evidence_sha256": "26f46961e0d2e2519da2ac6b5425e774fb06299c33ca3a53f23e79b058c776c7",
       "status": "passed",
       "test_file": "apps/server/app/modules/hosted_access/tests/test_h05_recovery_security.py",
       "test_function": "test_stolen_or_ordinary_session_cannot_confirm_restore_without_step_up"
     },
     "point_age_duration_traffic": {
-      "evidence_sha256": "d3054aec1fbb4e9c24d5aefd936a6076cefcb0a5414e97584cbdd8652343330c",
+      "evidence_sha256": "26f46961e0d2e2519da2ac6b5425e774fb06299c33ca3a53f23e79b058c776c7",
       "status": "passed",
       "test_file": "scripts/tests/test_h05_sizing_qualification.py",
       "test_function": "test_h05_actor_measures_7_captures_and_concurrent_restore"
     },
     "separate_admin_recovery_loss": {
-      "evidence_sha256": "d3054aec1fbb4e9c24d5aefd936a6076cefcb0a5414e97584cbdd8652343330c",
+      "evidence_sha256": "26f46961e0d2e2519da2ac6b5425e774fb06299c33ca3a53f23e79b058c776c7",
       "status": "passed",
       "test_file": "apps/server/app/modules/hosted_recovery/tests/test_h05_admin_control_recovery.py",
-      "test_function": "test_separate_admin_recovery_loss_independent_of_main_admin_db"
+      "test_function": "test_separate_admin_recovery_loss_damaged_main_admin_db"
     },
     "seven_points_incremental_retention": {
-      "evidence_sha256": "d3054aec1fbb4e9c24d5aefd936a6076cefcb0a5414e97584cbdd8652343330c",
+      "evidence_sha256": "26f46961e0d2e2519da2ac6b5425e774fb06299c33ca3a53f23e79b058c776c7",
       "status": "passed",
       "test_file": "apps/server/app/modules/hosted_recovery/tests/test_h05_backup_runner_and_alerting.py",
-      "test_function": "test_seven_points_incremental_retention_and_failed_readback_protection"
+      "test_function": "test_seven_points_incremental_retention_preserves_shared_chunks"
     },
     "source_commit_crash": {
-      "evidence_sha256": "d3054aec1fbb4e9c24d5aefd936a6076cefcb0a5414e97584cbdd8652343330c",
+      "evidence_sha256": "26f46961e0d2e2519da2ac6b5425e774fb06299c33ca3a53f23e79b058c776c7",
       "status": "passed",
       "test_file": "apps/server/app/modules/hosted_recovery/tests/test_h05_backup_runner_and_alerting.py",
-      "test_function": "test_source_commit_crash_reconciliation_and_stale_alerting"
+      "test_function": "test_source_commit_crash_startup_reconciliation_and_catchup"
     },
     "unchanged_file_only_checkpoints": {
-      "evidence_sha256": "d3054aec1fbb4e9c24d5aefd936a6076cefcb0a5414e97584cbdd8652343330c",
+      "evidence_sha256": "26f46961e0d2e2519da2ac6b5425e774fb06299c33ca3a53f23e79b058c776c7",
       "status": "passed",
       "test_file": "apps/server/app/modules/hosted_recovery/tests/test_h05_backup_runner_and_alerting.py",
-      "test_function": "test_consistent_scheduled_capture_and_unchanged_file_only_checkpoints"
+      "test_function": "test_unchanged_file_only_checkpoints_and_unreadable_never_unchanged"
     },
     "whole_host_control_loss": {
-      "evidence_sha256": "d3054aec1fbb4e9c24d5aefd936a6076cefcb0a5414e97584cbdd8652343330c",
+      "evidence_sha256": "26f46961e0d2e2519da2ac6b5425e774fb06299c33ca3a53f23e79b058c776c7",
       "status": "passed",
       "test_file": "apps/server/app/modules/hosted_recovery/tests/test_h05_admin_control_recovery.py",
-      "test_function": "test_whole_host_control_loss_reconstruction_on_clean_host"
+      "test_function": "test_damaged_admin_recovery_db_and_whole_host_control_loss"
     }
   },
   "joint_h04_h05_positive_handoff": {
     "admin_route_policy": "separate_exact_host_method_allowlists_v3",
-    "duration_ms": 422,
-    "eligible_gateway_config_sha256": "6dbdbf2c22373c891acd3f8b3ce20f25afce7fa1d07b70072c063824baa17287",
+    "duration_ms": 461,
+    "eligible_gateway_config_sha256": "6be0b69c112618f5b6390e61388f744d15c5cf182ced1fc4779fa2ad8bf88bcc",
     "operators_verified": [
       {
         "live_readiness": true,
         "protection_state": "healthy",
         "slug": "pilot-alpha",
-        "verified_point_id": "a30614ff-5cec-4c8d-bd81-a7f33e468890"
+        "verified_point_id": "adb4d1e0-1421-42d2-9104-595b31ccac5b"
       },
       {
         "live_readiness": true,
         "protection_state": "healthy",
         "slug": "pilot-beta",
-        "verified_point_id": "2e513358-744f-4c14-817e-352a0667682c"
+        "verified_point_id": "e038e7cb-c123-47bc-bf54-cdd7e1836055"
       }
     ],
     "status": "passed"
@@ -129,7 +129,7 @@
     "configuration": "h05_component_recovery_v1",
     "image": "component_local_no_container",
     "schema": "recovery_0001_initial+admin_recovery_0001_initial+access_0001_initial",
-    "source": "935aeffa6f5b2bc9003088d783d18442172c204c03d206d79dc7432e29f96a93",
+    "source": "4dd8b0334c5391c172c22aa02d5bf2a1d88c9f9c63015e9f100fe21617845862",
     "tool": "pytest:3.14.8",
     "workload": "two_disposable_operators_plus_admin_control"
   },
@@ -137,6 +137,6 @@
   "proof": "recovery",
   "revision": 1,
   "status": "passed",
-  "suite_duration_ms": 14446,
+  "suite_duration_ms": 11291,
   "version": 1
 }

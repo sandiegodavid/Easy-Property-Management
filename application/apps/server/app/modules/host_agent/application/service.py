@@ -43,21 +43,29 @@ class HostAgent:
         # H05 restore uses workspace-internal recovery; switch_binding remains unavailable.
         if command.effect.kind in {"stage_restore", "switch_binding"}:
             raise HostAgentUnavailable()
-        if (
+        is_eligible_ingress = (
             command.effect.kind == "apply_ingress_policy"
             and command.payload.desired_state == "eligible"
-        ):
-            if (
+        )
+        admitted = self.admission.resolve(command)
+        require_admission(command, admitted, self.clock())
+        with self.inventory.exclusive():
+            require_admission(command, admitted, self.clock())
+            # Check retained terminal receipt FIRST so idempotent replay succeeds even if
+            # live proofs later expire (#32).
+            try:
+                retained_existing, _, _ = self.inventory.retained(command)
+                if retained_existing.state in {"applied", "rejected", "superseded"}:
+                    return retained_existing
+            except Exception:
+                pass
+            if is_eligible_ingress and (
                 self.eligible_proof_verifier is None
                 or not command.payload.source_identity_proof_ref
                 or not command.payload.resource_readiness_proof_ref
                 or self.eligible_proof_verifier(command) is not True
             ):
                 raise HostAgentUnavailable()
-        admitted = self.admission.resolve(command)
-        require_admission(command, admitted, self.clock())
-        with self.inventory.exclusive():
-            require_admission(command, admitted, self.clock())
             _, allocation, fresh = self.inventory.reserve(admitted, self.clock())
             retained, retained_allocation, inspectable = self.inventory.retained(command)
             if retained.state in {"applied", "rejected", "superseded"} or (

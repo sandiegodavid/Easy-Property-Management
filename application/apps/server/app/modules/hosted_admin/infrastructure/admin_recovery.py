@@ -445,11 +445,60 @@ class AdminControlRecoveryService:
                 command=command,
             )
         if isinstance(payload, ReconcileCheckpoint):
+            if actor.deployment_id != self.deployment_id:
+                raise AdminRecoveryDenied("Service actor deployment_id mismatch.")
+            now = self.clock()
+            with immediate_transaction(self.admin_recovery_engine) as conn:
+                orphaned = (
+                    conn.execute(
+                        text(
+                            "SELECT operation_id FROM control_recovery_operations "
+                            "WHERE kind = 'backup' AND state IN ('pending', 'running')"
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                for orphan_id in orphaned:
+                    point_row = (
+                        conn.execute(
+                            text(
+                                "SELECT point_id FROM control_recovery_points "
+                                "WHERE operation_id = :op_id"
+                            ),
+                            {"op_id": orphan_id},
+                        )
+                        .mappings()
+                        .first()
+                    )
+                    if point_row is not None:
+                        res = AdminRecoveryResult(
+                            point_id=point_row["point_id"],
+                            phase="captured",
+                            receipt_ref=f"op:{orphan_id}",
+                        )
+                        conn.execute(
+                            text(
+                                "UPDATE control_recovery_operations SET state = 'succeeded', "
+                                "result_json = :res, error_code = NULL, updated_at = :now, "
+                                "revision = revision + 1 WHERE operation_id = :op_id"
+                            ),
+                            {"res": res.model_dump_json(), "now": now, "op_id": orphan_id},
+                        )
+                    else:
+                        conn.execute(
+                            text(
+                                "UPDATE control_recovery_operations SET state = 'unknown', "
+                                "error_code = 'interrupted_on_crash', updated_at = :now, "
+                                "revision = revision + 1 WHERE operation_id = :op_id"
+                            ),
+                            {"now": now, "op_id": orphan_id},
+                        )
             return OperationOutcome[AdminRecoveryResult](
                 operation=command.reference(),
                 state=OperationState.SUCCEEDED,
                 revision=1,
-                observed_at=self.clock(),
+                observed_at=now,
                 result=AdminRecoveryResult(
                     point_id=payload.capture_operation_id,
                     phase="reconciled",
@@ -463,6 +512,8 @@ class AdminControlRecoveryService:
         actor: ServiceAuthority,
         command: AdminRecoveryCommand,
     ) -> OperationOutcome[AdminRecoveryResult]:
+        if actor.deployment_id != self.deployment_id:
+            raise AdminRecoveryDenied("Service actor deployment_id mismatch.")
         if not self._op_lock.acquire(blocking=False):
             raise SemanticConflict()
         try:
@@ -521,6 +572,22 @@ class AdminControlRecoveryService:
                     },
                     key_ref=kms_key,
                 )
+                if self._last_wrapped_dek_b64 is None:
+                    with self.admin_recovery_engine.connect() as conn:
+                        prev_mref = conn.execute(
+                            text(
+                                "SELECT manifest_ref FROM control_recovery_points "
+                                "WHERE state = 'verified' ORDER BY captured_at DESC LIMIT 1"
+                            )
+                        ).scalar_one_or_none()
+                    if prev_mref is not None:
+                        loaded_dek = self.backup_engine.read_wrapped_dek(
+                            manifest_ref=object_key_for_manifest_ref(str(prev_mref)),
+                            expected_key_ref=kms_key,
+                        )
+                        if loaded_dek is not None:
+                            self._last_wrapped_dek_b64 = loaded_dek
+                            self._last_wrapped_key_ref = kms_key
                 backup_result = self.backup_engine.create_point(
                     context=context,
                     captured_at=captured_at,
@@ -538,6 +605,8 @@ class AdminControlRecoveryService:
                 )
                 self._last_wrapped_dek_b64 = backup_result.wrapped_dek_b64
                 self._last_wrapped_key_ref = backup_result.key_ref
+            except AdminRecoveryDenied:
+                raise
             except Exception as error:
                 err_code = (
                     error.code
@@ -798,6 +867,10 @@ class AdminControlRecoveryService:
                 )
                 prior_ref = str(meta["active_admin_resource_ref"])
                 source_gen = int(meta["source_generation"])
+                if source_gen != preview.source_generation:
+                    raise AdminRecoveryDenied(
+                        "Control source_generation changed since preview; preview again."
+                    )
                 new_gen = source_gen + 1
                 target_ref = f"admin-incarnation-{new_gen}"
                 manifest_ref = str(point["manifest_ref"])
@@ -832,14 +905,13 @@ class AdminControlRecoveryService:
                         "operation_id, point_id, target_resource_ref, prior_resource_ref, "
                         "new_registry_generation, phase, validation_ref, started_at, updated_at"
                         ") VALUES ("
-                        ":op_id, :pid, :target, :prior, :new_gen, 'prepared', NULL, :now, :now)"
+                        ":op_id, :pid, :target, :prior, NULL, 'prepared', NULL, :now, :now)"
                     ),
                     {
                         "op_id": op_id,
                         "pid": point_id,
                         "target": target_ref,
                         "prior": prior_ref,
-                        "new_gen": new_gen,
                         "now": now,
                     },
                 )
@@ -915,6 +987,42 @@ class AdminControlRecoveryService:
                         ),
                         {"now": reconcile_now},
                     )
+                    # Also invalidate in-flight handoffs, login attempts, continuations,
+                    # and pending identity commands captured in the backup (#25).
+                    existing_tables = {
+                        row[0]
+                        for row in aconn.execute(
+                            text("SELECT name FROM main.sqlite_master WHERE type = 'table'")
+                        ).fetchall()
+                    }
+                    if "login_handoffs" in existing_tables:
+                        aconn.execute(
+                            text(
+                                "UPDATE main.login_handoffs SET state = 'expired' "
+                                "WHERE state NOT IN ('consumed', 'expired', 'revoked')"
+                            )
+                        )
+                    if "login_attempts" in existing_tables:
+                        aconn.execute(
+                            text(
+                                "UPDATE main.login_attempts SET state = 'expired' "
+                                "WHERE state NOT IN ('completed', 'expired', 'failed')"
+                            )
+                        )
+                    if "email_continuations" in existing_tables:
+                        aconn.execute(
+                            text(
+                                "UPDATE main.email_continuations SET state = 'expired' "
+                                "WHERE state NOT IN ('consumed', 'expired', 'revoked')"
+                            )
+                        )
+                    if "identity_commands" in existing_tables:
+                        aconn.execute(
+                            text(
+                                "UPDATE main.identity_commands SET state = 'unknown' "
+                                "WHERE state IN ('pending', 'running')"
+                            )
+                        )
                     new_reg_gen = int(
                         aconn.execute(
                             text("SELECT registry_generation FROM main.control_meta WHERE id = 1")
@@ -977,6 +1085,8 @@ class AdminControlRecoveryService:
                 observed_at=switched_at,
                 result=result,
             )
+        except AdminRecoveryDenied:
+            raise
         except Exception as error:
             if target_dir is not None and target_dir.exists():
                 shutil.rmtree(target_dir, ignore_errors=True)
@@ -1047,11 +1157,18 @@ class AdminControlRecoveryService:
                 )
             return {"operationId": operation_id, "phase": "accepted", "updatedAt": now}
 
-    def reconstruct_catalog(self) -> ControlReconstructResult:
+    def reconstruct_catalog(
+        self, *, actor: AdminRecoveryAuthority | None = None
+    ) -> ControlReconstructResult:
         """Reconstruct verified control_recovery_points from off-host manifests (no runnable ops)."""
+        if actor is not None:
+            with self.admin_recovery_engine.connect() as conn:
+                self._verify_recovery_actor(conn, actor)
+        actor_ref = actor.bootstrap_principal_ref if actor is not None else "service:admin_recovery"
         manifest_keys = self.backup_engine.transport.list_objects("manifests/")
         imported: list[str] = []
         skipped: list[str] = []
+        max_source_gen = 1
         now = self.clock()
         for key in manifest_keys:
             try:
@@ -1063,6 +1180,7 @@ class AdminControlRecoveryService:
             except HostedRecoveryError:
                 skipped.append(key)
                 continue
+            max_source_gen = max(max_source_gen, int(manifest.source_generation))
 
             with immediate_transaction(self.admin_recovery_engine) as conn:
                 exists = conn.execute(
@@ -1078,6 +1196,23 @@ class AdminControlRecoveryService:
                     phase="reconciled",
                     receipt_ref=f"reconstruct:{op_id}",
                 )
+                synth_intent = CommandIntent(
+                    deployment_id=self.deployment_id,
+                    scope=DeploymentScope(),
+                    kind="capture_control",
+                    expected_revision=1,
+                    access_epoch=1,
+                    payload=CaptureControl(
+                        capture_policy_ref="policy:reconstructed",
+                        expected_checkpoint_revision=1,
+                    ),
+                )
+                synth_cmd = AdminRecoveryCommand(
+                    operation_id=op_id,
+                    idempotency_key=f"reconstruct-{manifest.point_id}",
+                    intent=synth_intent,
+                    request_hash=semantic_hash(synth_intent),
+                )
                 conn.execute(
                     text(
                         "INSERT INTO control_recovery_operations ("
@@ -1086,13 +1221,15 @@ class AdminControlRecoveryService:
                         "authorization_expires_at, source_generation, state, result_json, "
                         "error_code, created_at, updated_at, revision"
                         ") VALUES ("
-                        ":op_id, 'backup', :key, :hash, '{}', 'system', 'service:admin_recovery', "
+                        ":op_id, 'backup', :key, :hash, :req_json, 'system', :actor_ref, "
                         "NULL, NULL, NULL, :sgen, 'succeeded', :res, NULL, :now, :now, 1)"
                     ),
                     {
                         "op_id": op_id,
-                        "key": f"reconstruct-{manifest.point_id}",
-                        "hash": manifest_sha,
+                        "key": synth_cmd.idempotency_key,
+                        "hash": synth_cmd.request_hash,
+                        "req_json": synth_cmd.model_dump_json(),
+                        "actor_ref": actor_ref,
                         "sgen": manifest.source_generation,
                         "res": result.model_dump_json(),
                         "now": now,
@@ -1130,12 +1267,22 @@ class AdminControlRecoveryService:
                 self._record_audit(
                     conn,
                     operation_id=op_id,
-                    actor_ref="service:admin_recovery",
+                    actor_ref=actor_ref,
                     action="control_catalog_reconstructed",
                     now=now,
                     facts={"point_id": manifest.point_id, "manifest_sha256": manifest_sha},
                 )
                 imported.append(manifest.point_id)
+        if max_source_gen > 1:
+            with immediate_transaction(self.admin_recovery_engine) as conn:
+                conn.execute(
+                    text(
+                        "UPDATE admin_recovery_meta "
+                        "SET source_generation = MAX(source_generation, :sgen), "
+                        "revision = revision + 1 WHERE id = 1 AND source_generation < :sgen"
+                    ),
+                    {"sgen": max_source_gen},
+                )
         return ControlReconstructResult(
             scanned_manifests=len(manifest_keys),
             imported_points=imported,
@@ -1205,11 +1352,18 @@ class AdminControlRecoveryService:
         reference: OperationReference,
     ) -> OperationOutcome[AdminRecoveryResult] | None:
         with self.admin_recovery_engine.connect() as conn:
+            if isinstance(actor, AdminRecoveryAuthority):
+                self._verify_recovery_actor(conn, actor)
+            elif isinstance(actor, ServiceAuthority):
+                if actor.deployment_id != self.deployment_id:
+                    raise AdminRecoveryDenied("Service actor deployment_id mismatch.")
+            else:
+                raise AdminRecoveryDenied("Unsupported actor for control recovery lookup.")
             row = (
                 conn.execute(
                     text(
-                        "SELECT operation_id, request_hash, request_json, state, result_json, "
-                        "error_code, updated_at, revision "
+                        "SELECT operation_id, kind, idempotency_key, request_hash, request_json, "
+                        "state, result_json, error_code, updated_at, revision "
                         "FROM control_recovery_operations WHERE operation_id = :op_id"
                     ),
                     {"op_id": reference.operation_id},
@@ -1219,6 +1373,11 @@ class AdminControlRecoveryService:
             )
         if row is None:
             return None
+        if (
+            row["idempotency_key"] != reference.idempotency_key
+            or row["request_hash"] != reference.request_hash
+        ):
+            raise SemanticConflict()
         return self._outcome_from_row(row)
 
 
@@ -1295,6 +1454,76 @@ def reconstruct_on_clean_host(
     return service, reconstructed, incarnation_id
 
 
+def build_bootstrap_recovery_authenticator(
+    *,
+    bootstrap_authority_path: Path,
+    verify_firebase_token: Callable[[str], dict[str, object]],
+    expected_origin: str,
+    clock: Callable[[], int],
+):
+    """Production D5 authenticate_recovery adapter independent of main admin.sqlite (#22)."""
+    from app.modules.hosted_access.application.managed_provider import ProviderDenied
+
+    def authenticate_recovery(
+        request, write: bool, confirmed_request_hash: str | None
+    ) -> AdminRecoveryAuthority:
+        if write and request.headers.get("origin") != expected_origin:
+            raise ProviderDenied()
+        if write and not request.headers.get("x-csrf-token"):
+            raise ProviderDenied()
+        auth_header = request.headers.get("authorization", "")
+        if not auth_header.startswith("Bearer "):
+            raise ProviderDenied()
+        token = auth_header.removeprefix("Bearer ").strip()
+        if not token:
+            raise ProviderDenied()
+        claims = verify_firebase_token(token)
+        issuer = str(claims.get("iss") or "")
+        subject = str(claims.get("sub") or "")
+        mfa_verified = bool(claims.get("totp_mfa_verified") or claims.get("firebase_mfa_totp"))
+        revoked = bool(claims.get("revoked"))
+        if revoked:
+            raise ProviderDenied()
+        authority, authority_ref = load_bootstrap_authority(bootstrap_authority_path)
+        principal = authority.verify_identity(
+            issuer=issuer, subject=subject, mfa_verified=mfa_verified
+        )
+        return AdminRecoveryAuthority(
+            deployment_id=authority.deployment_id,
+            bootstrap_principal_ref=principal.principal_ref,
+            bootstrap_authority_ref=authority_ref,
+            current_mfa_proof_ref=f"mfa:{principal.subject}",
+            mfa_verified_at=clock(),
+            confirmed_request_hash=confirmed_request_hash or ("0" * 64),
+        )
+
+    return authenticate_recovery
+
+
+def create_admin_recovery_app(
+    recovery: AdminControlRecoveryService,
+    *,
+    authenticate_recovery,
+):
+    """Standalone Admin recovery-mode ASGI app that boots without opening admin.sqlite (#22)."""
+    from fastapi import FastAPI, Request as FastAPIRequest
+    from app.modules.hosted_admin.api.recovery_router import build_admin_recovery_router
+
+    async def _read_body(request: FastAPIRequest) -> dict[str, object]:
+        raw = await request.json()
+        return raw if isinstance(raw, dict) else {}
+
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    app.include_router(
+        build_admin_recovery_router(
+            recovery,
+            authenticate_recovery=authenticate_recovery,
+            read_body=_read_body,
+        )
+    )
+    return app
+
+
 def build_host_loss_cli_parser() -> argparse.ArgumentParser:
     """Restricted platform control-plane host-loss recovery CLI (never customer workspace restore)."""
     parser = argparse.ArgumentParser(
@@ -1311,3 +1540,46 @@ def build_host_loss_cli_parser() -> argparse.ArgumentParser:
     parser.add_argument("--admin-schema-revision", default="admin_0001_initial")
     parser.add_argument("--inventory-schema-revision", default="host_inventory_0001_initial")
     return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Execute restricted whole-host Admin control-plane reconstruction CLI (#37a)."""
+    from time import time_ns
+    from app.modules.host_agent.infrastructure.backup_proxy import UnixBackupProxyClient
+    from app.platform.config import application_root
+
+    args = build_host_loss_cli_parser().parse_args(argv)
+    transport = UnixBackupProxyClient(
+        args.backup_proxy_socket,
+        expected_proxy_uid=args.backup_proxy_uid,
+    )
+    engine = ChunkedAeadBackupEngine(transport)
+    _, result, incarnation_id = reconstruct_on_clean_host(
+        admin_recovery_db_path=args.admin_recovery_db,
+        bootstrap_authority_path=args.bootstrap_authority,
+        control_root=args.control_root,
+        scratch_root=args.scratch_root,
+        backup_engine=engine,
+        kms_key_ref=args.kms_key_ref,
+        release_ref=args.release_ref,
+        admin_schema_revision=args.admin_schema_revision,
+        inventory_schema_revision=args.inventory_schema_revision,
+        application_directory=application_root(),
+        clock=lambda: time_ns() // 1_000_000,
+    )
+    print(
+        json.dumps(
+            {
+                "incarnationId": incarnation_id,
+                "scannedManifests": result.scanned_manifests,
+                "importedPoints": len(result.imported_points),
+                "skippedPoints": len(result.skipped_points),
+            },
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -113,9 +113,25 @@ class _DirectTransport:
     def delete_object(self, relative_key: str) -> None:
         self._call({"op": "delete_object", "key": relative_key})
 
+    def list_objects_page(
+        self, subprefix: str = "", *, max_keys: int = 1000, continuation_token: str | None = None
+    ) -> tuple[list[str], str | None]:
+        import json
+
+        req: dict[str, object] = {
+            "op": "list_objects",
+            "subprefix": subprefix,
+            "max_keys": max_keys,
+        }
+        if continuation_token is not None:
+            req["continuation_token"] = continuation_token
+        resp, body = self._call(req)
+        keys = json.loads(body.decode("utf-8"))["keys"] if body else resp["keys"]
+        return list(keys), resp.get("next_token")
+
     def list_objects(self, subprefix: str = "", *, max_keys: int = 1000) -> list[str]:
-        resp, _ = self._call({"op": "list_objects", "subprefix": subprefix, "max_keys": max_keys})
-        return list(resp["keys"])
+        keys, _ = self.list_objects_page(subprefix, max_keys=max_keys)
+        return keys
 
     def kms_wrap(self, key_ref: str, plaintext_dek: bytes, *, aad: bytes) -> bytes:
         import base64

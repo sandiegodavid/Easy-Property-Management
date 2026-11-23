@@ -21,6 +21,7 @@ import sys
 import tempfile
 import time
 from uuid import uuid4
+import xml.etree.ElementTree as ET
 
 from sqlalchemy import text
 
@@ -56,23 +57,23 @@ CLI_ARGC = 2
 CASE_TEST_MAP: dict[str, tuple[str, str]] = {
     "consistent_scheduled_capture": (
         "apps/server/app/modules/hosted_recovery/tests/test_h05_backup_runner_and_alerting.py",
-        "test_consistent_scheduled_capture_and_unchanged_file_only_checkpoints",
+        "test_consistent_scheduled_capture_and_idempotency",
     ),
     "unchanged_file_only_checkpoints": (
         "apps/server/app/modules/hosted_recovery/tests/test_h05_backup_runner_and_alerting.py",
-        "test_consistent_scheduled_capture_and_unchanged_file_only_checkpoints",
+        "test_unchanged_file_only_checkpoints_and_unreadable_never_unchanged",
     ),
     "source_commit_crash": (
         "apps/server/app/modules/hosted_recovery/tests/test_h05_backup_runner_and_alerting.py",
-        "test_source_commit_crash_reconciliation_and_stale_alerting",
+        "test_source_commit_crash_startup_reconciliation_and_catchup",
     ),
     "encrypt_key_custody_readback": (
         "apps/server/app/modules/hosted_recovery/tests/test_backup_engine_and_proxy.py",
-        "test_chunked_aead_round_trip_dedup_and_readback_verification",
+        "test_dedup_readback_restore_and_reference_safe_pruning",
     ),
     "seven_points_incremental_retention": (
         "apps/server/app/modules/hosted_recovery/tests/test_h05_backup_runner_and_alerting.py",
-        "test_seven_points_incremental_retention_and_failed_readback_protection",
+        "test_seven_points_incremental_retention_preserves_shared_chunks",
     ),
     "corrupt_missing_object_key": (
         "apps/server/app/modules/hosted_access/tests/test_h05_recovery_security.py",
@@ -88,7 +89,7 @@ CASE_TEST_MAP: dict[str, tuple[str, str]] = {
     ),
     "clean_runtime_repair": (
         "apps/server/app/modules/hosted_recovery/tests/test_h05_clean_runtime_repair.py",
-        "test_clean_runtime_repair_replaces_only_container_and_retains_state",
+        "test_clean_runtime_repair_preserves_ids_data_revokes_sessions_and_boots_recovery_mode",
     ),
     "operator_step_up_exact_confirmation": (
         "apps/server/app/modules/hosted_access/tests/test_h05_recovery_security.py",
@@ -108,11 +109,11 @@ CASE_TEST_MAP: dict[str, tuple[str, str]] = {
     ),
     "separate_admin_recovery_loss": (
         "apps/server/app/modules/hosted_recovery/tests/test_h05_admin_control_recovery.py",
-        "test_separate_admin_recovery_loss_independent_of_main_admin_db",
+        "test_separate_admin_recovery_loss_damaged_main_admin_db",
     ),
     "whole_host_control_loss": (
         "apps/server/app/modules/hosted_recovery/tests/test_h05_admin_control_recovery.py",
-        "test_whole_host_control_loss_reconstruction_on_clean_host",
+        "test_damaged_admin_recovery_db_and_whole_host_control_loss",
     ),
     "no_offline_workspace_bypass": (
         "apps/server/app/modules/hosted_access/tests/test_h05_recovery_security.py",
@@ -248,34 +249,61 @@ def _run_joint_positive_handoff() -> dict[str, object]:
     }
 
 
+def _parse_junit_case_outcomes(junit_xml: Path) -> dict[str, bool]:
+    """Return {base_test_function_name: all_invocations_passed} from pytest JUnit XML."""
+    if not junit_xml.is_file():
+        return {}
+    tree = ET.parse(junit_xml)
+    outcomes: dict[str, list[bool]] = {}
+    for tc in tree.iter("testcase"):
+        raw_name = tc.attrib.get("name", "")
+        base_name = raw_name.split("[", 1)[0]
+        failed = (
+            tc.find("failure") is not None
+            or tc.find("error") is not None
+            or tc.find("skipped") is not None
+        )
+        outcomes.setdefault(base_name, []).append(not failed)
+    return {name: (bool(results) and all(results)) for name, results in outcomes.items()}
+
+
 def run_component_qualification(*, python_bin: Path | None = None) -> dict[str, object]:
     """Run all 17 recovery.json cases + joint H04/H05 positive handoff at component level."""
     spec = load_recovery_spec()
     py = str(python_bin or (APPLICATION_ROOT / ".venv" / "bin" / "python"))
 
-    # Execute each distinct pytest file once for speed and exact exit-code proof.
-    unique_files = sorted({test_file for test_file, _ in CASE_TEST_MAP.values()})
-    t0 = time.monotonic()
-    proc = subprocess.run(
-        [py, "-m", "pytest", *unique_files, "-q"],
-        cwd=str(APPLICATION_ROOT),
-        capture_output=True,
-        text=True,
-        check=False,
+    # Execute exact test_file::test_func node IDs so nonexistent names fail immediately.
+    unique_nodes = sorted(
+        {f"{test_file}::{test_func}" for test_file, test_func in CASE_TEST_MAP.values()}
     )
+    t0 = time.monotonic()
+    with tempfile.TemporaryDirectory(prefix="epm-h0511-junit-") as td:
+        junit_path = Path(td) / "recovery-junit.xml"
+        proc = subprocess.run(
+            [py, "-m", "pytest", *unique_nodes, "-q", f"--junitxml={junit_path}"],
+            cwd=str(APPLICATION_ROOT),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        node_outcomes = _parse_junit_case_outcomes(junit_path)
     suite_ms = int((time.monotonic() - t0) * 1000)
-    passed = proc.returncode == 0
     output_sha = sha256((proc.stdout + proc.stderr).encode("utf-8")).hexdigest()
 
     cases_report: dict[str, dict[str, object]] = {}
+    all_cases_passed = proc.returncode == 0
     for case_id in spec["cases"]:
         test_file, test_func = CASE_TEST_MAP[case_id]
+        case_passed = proc.returncode == 0 and node_outcomes.get(test_func) is True
+        if not case_passed:
+            all_cases_passed = False
         cases_report[case_id] = {
-            "status": "passed" if passed else "failed",
+            "status": "passed" if case_passed else "failed",
             "test_file": test_file,
             "test_function": test_func,
             "evidence_sha256": output_sha,
         }
+    passed = all_cases_passed
 
     handoff = _run_joint_positive_handoff()
     source_sha = sha256(

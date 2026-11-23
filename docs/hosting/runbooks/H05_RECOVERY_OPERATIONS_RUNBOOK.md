@@ -59,10 +59,14 @@ Write `/run/epm/admin-recovery-authority.json` (`0600`) with:
 {
   "version": 1,
   "deployment_id": "<DEPLOYMENT_UUID>",
-  "issuer": "firebase:<FIREBASE_PROJECT_ID>",
-  "allowed_admin_uids": ["<ADMIN_FIREBASE_UID>"],
-  "allowed_admin_emails": ["<ADMIN_EMAIL>"],
-  "require_totp_mfa": true
+  "principals": [
+    {
+      "issuer": "firebase:<FIREBASE_PROJECT_ID>",
+      "subject": "<ADMIN_FIREBASE_UID>",
+      "principal_ref": "admin:<ADMIN_EMAIL>",
+      "mfa_required": true
+    }
+  ]
 }
 ```
 Verify Admin recovery mode can authenticate against this file even if `admin.sqlite` is renamed or removed.
@@ -146,12 +150,12 @@ On a clean replacement host with `epm-backup-proxy` connected to R2 + Cloud KMS 
 ```bash
 cd application
 PYTHONPATH=apps/server .venv/bin/python -m app.modules.hosted_admin.infrastructure.admin_recovery \
-  --deployment-id <DEPLOYMENT_UUID> \
-  --admin-dir /var/lib/epm/admin \
-  --recovery-db /var/lib/epm/admin-recovery/admin-recovery.sqlite \
+  --admin-recovery-db /var/lib/epm/admin-recovery/admin-recovery.sqlite \
   --bootstrap-authority /run/epm/admin-recovery-authority.json \
-  --proxy-socket /run/epm/backup-proxy.sock \
-  --proxy-uid <PROXY_UID> \
+  --control-root /var/lib/epm/admin \
+  --scratch-root /var/lib/epm/admin-scratch \
+  --backup-proxy-socket /run/epm/backup-proxy.sock \
+  --backup-proxy-uid <PROXY_UID> \
   --kms-key-ref <ADMIN_CONTROL_KMS_KEY_REF>
 ```
 This reconstructs the control catalog from immutable R2 manifests, restores `admin.sqlite` + `host_inventory.sqlite` into a fresh `incarnation_id` (leaving prior in-flight operations inert and revoking prior sessions), and requires explicit reconciliation of host bindings before reopening ingress.

@@ -166,7 +166,7 @@ def _restore_operations():
         f("point_id", "ID"),
         f("target_resource_ref", "REF"),
         f("prior_resource_ref", "REF", nullable=True),
-        f("new_registry_generation", "REV"),
+        f("new_registry_generation", "REV", nullable=True),
         f("phase", "CODE"),
         f("validation_ref", "REF", nullable=True),
         f("started_at", "TIME"),
@@ -280,9 +280,14 @@ def _guards():
     helpers["immutable"](
         op,
         "control_restore_operations",
-        "operation_id point_id target_resource_ref prior_resource_ref "
-        "new_registry_generation started_at",
+        "operation_id point_id target_resource_ref prior_resource_ref started_at",
         retain=True,
+    )
+    _guard(
+        "control_restore_operations",
+        "new_registry_generation_write_once",
+        "OLD.new_registry_generation IS NOT NULL "
+        "AND NEW.new_registry_generation IS NOT OLD.new_registry_generation",
     )
     _guard("control_restore_operations", "terminal", "OLD.phase='accepted'")
     op.execute(

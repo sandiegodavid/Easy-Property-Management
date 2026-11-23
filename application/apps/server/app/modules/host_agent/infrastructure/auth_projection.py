@@ -155,11 +155,15 @@ def _workspace_eligible_routes(origin, endpoint):
     forbidden_alt = "|".join(
         re.escape(prefix.lstrip("/")) for prefix in WORKSPACE_FORBIDDEN_PREFIXES
     )
-    forbidden_pattern = f"^/(?:{forbidden_alt})(?:/|[?]|$)"
-    traversal_pattern = r"(?:^|/)\.\.(?:/|[?]|$)"
+    forbidden_pattern = f"(?i)^/(?:{forbidden_alt})(?:/|[?]|$)"
+    traversal_pattern = r"(?i)(?:^|/)\.{1,2}(?:/|[?]|$)|//|%(?:2e|2f|5c)"
+    normalized_forbidden_paths = [
+        item for prefix in WORKSPACE_FORBIDDEN_PREFIXES for item in (prefix, f"{prefix}/*")
+    ]
     deny_route = {
         "match": [
             {"host": [host], "header": {"Upgrade": ["*"]}},
+            {"host": [host], "path": normalized_forbidden_paths},
             {
                 "host": [host],
                 "expression": "{http.request.orig_uri}.matches("
@@ -268,6 +272,7 @@ def auth_config(projection, settings, *, held=(), eligible=(), shared=None, logi
             or observation.resource_generation != row.resource_generation
             or not isinstance(manifest, WorkspaceRouteManifest)
             or observation.workspace_manifest_sha256 != semantic_hash(manifest)
+            or observation.resource_readiness_proof_ref != manifest.recovery_proof_ref
             or not observation.source_identity_proof_ref
             or not observation.resource_readiness_proof_ref
         ):

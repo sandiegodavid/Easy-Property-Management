@@ -9,8 +9,10 @@ revokes all prior sessions and boots the replacement runtime in minimal recovery
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import nullcontext
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
 
 from sqlalchemy import Engine, text
@@ -86,6 +88,7 @@ class CleanRuntimeRepairer:
         replace_container: ReplaceContainerHook,
         application_directory: Path,
         clock: Callable[[], int],
+        inventory=None,
     ):
         self.admin_engine = admin_engine
         self.paths_for = paths_for
@@ -93,6 +96,7 @@ class CleanRuntimeRepairer:
         self.replace_container = replace_container
         self.application_directory = application_directory
         self.clock = clock
+        self.inventory = inventory
 
     def load_intent(self, operation_id: str) -> RepairRuntimeIntent:
         with self.admin_engine.connect() as conn:
@@ -101,7 +105,7 @@ class CleanRuntimeRepairer:
                     text(
                         "SELECT o.operation_id, o.kind, o.state, o.operator_id, o.request_json, "
                         "o.access_epoch, op.workspace_id, op.revision AS op_revision, "
-                        "cm.deployment_id "
+                        "op.setup_state, op.access_epoch AS op_access_epoch, cm.deployment_id "
                         "FROM main.operations o "
                         "JOIN main.operators op ON op.operator_id = o.operator_id "
                         "JOIN main.control_meta cm ON cm.id = 1 "
@@ -112,7 +116,12 @@ class CleanRuntimeRepairer:
                 .mappings()
                 .one_or_none()
             )
-            if row is None or row["kind"] != "repair_runtime":
+            if (
+                row is None
+                or row["kind"] != "repair_runtime"
+                or row["setup_state"] == "retired"
+                or int(row["access_epoch"]) != int(row["op_access_epoch"])
+            ):
                 raise HostAgentDenied()
             req = json.loads(row["request_json"])
             payload = req.get("payload") or {}
@@ -162,7 +171,7 @@ class CleanRuntimeRepairer:
             )
             if row is None or row["kind"] != "repair_runtime":
                 raise HostAgentDenied()
-            if row["state"] not in {"pending", "needs_attention", "unknown"}:
+            if row["state"] not in {"pending", "running", "needs_attention", "unknown"}:
                 raise HostAgentDenied()
             conn.execute(
                 text(
@@ -275,6 +284,7 @@ class CleanRuntimeRepairer:
         finally:
             rec_engine.dispose()
 
+        access_stat = access_path.stat()
         acc_engine = create_sqlite_engine(access_path)
         try:
             with immediate_transaction(acc_engine) as conn:
@@ -291,7 +301,8 @@ class CleanRuntimeRepairer:
                 acc_meta = (
                     conn.execute(
                         text(
-                            "SELECT deployment_id, operator_id, workspace_id, not_before "
+                            "SELECT deployment_id, operator_id, workspace_id, binding_id, "
+                            "resource_generation, access_epoch, not_before "
                             "FROM access_meta WHERE id = 1"
                         )
                     )
@@ -303,6 +314,9 @@ class CleanRuntimeRepairer:
                     or acc_meta["deployment_id"] != intent.deployment_id
                     or acc_meta["operator_id"] != intent.operator_id
                     or acc_meta["workspace_id"] != intent.workspace_id
+                    or acc_meta["binding_id"] != intent.binding_id
+                    or int(acc_meta["resource_generation"]) != intent.expected_resource_generation
+                    or int(acc_meta["access_epoch"]) != intent.access_epoch
                 ):
                     raise CleanRuntimeRepairError(
                         "access_store_mismatch", "Retained access_meta identity mismatch."
@@ -322,83 +336,111 @@ class CleanRuntimeRepairer:
                     ),
                     {"nb": now + 1},
                 )
+            with acc_engine.connect() as conn:
+                conn.execute(text("PRAGMA wal_checkpoint(TRUNCATE)"))
         finally:
             acc_engine.dispose()
+        if os.geteuid() == 0:
+            for suffix in ("", "-wal", "-shm", "-journal"):
+                candidate = Path(f"{access_path}{suffix}")
+                if candidate.exists():
+                    os.chown(candidate, access_stat.st_uid, access_stat.st_gid)
 
         return active_business_ref, int(revoked or 0)
 
+    def _update_inventory_binding(self, intent: RepairRuntimeIntent, *, container_ref: str) -> None:
+        if self.inventory is None:
+            return
+        with self.inventory.transaction(write=True) as conn:
+            conn.execute(
+                text(
+                    "UPDATE resource_bindings SET container_ref = :cref, "
+                    "state = 'stopped', updated_at = :now, revision = revision + 1 "
+                    "WHERE binding_id = :bid AND resource_generation = :gen"
+                ),
+                {
+                    "cref": container_ref,
+                    "now": self.clock(),
+                    "bid": intent.binding_id,
+                    "gen": intent.expected_resource_generation,
+                },
+            )
+
     def execute(self, operation_id: str) -> RepairRuntimeResult:
         """Execute an admitted repair_runtime operation idempotently and fail-closed."""
-        intent = self.load_intent(operation_id)
-        if intent.operation_state == "succeeded":
-            return RepairRuntimeResult(
-                operation_id=intent.operation_id,
-                operator_id=intent.operator_id,
-                workspace_id=intent.workspace_id,
-                binding_id=intent.binding_id,
-                release_id=intent.release_id,
-                state="succeeded",
-                recovery_mode_required=True,
-            )
-
-        self._mark_running(operation_id)
-        paths = self.paths_for(intent)
-        try:
-            # 1. Stop and fence the former runtime before touching any state.
-            self.stop_container(intent, paths)
-
-            # 2. Validate retained access/recovery stores and revoke all old sessions.
-            active_business_ref, revoked_count = self._validate_retained_stores_and_revoke_sessions(
-                intent, paths
-            )
-
-            # 3. Inspect business DB read-only (NEVER initialize or seed an empty DB).
-            incarnation_dir = (paths.workspace_root / active_business_ref).resolve()
-            business_db_healthy = True
-            try:
-                incarnation_dir.relative_to(paths.workspace_root.resolve())
-                probe_live_workspace_state(
-                    incarnation_dir / "property-management.sqlite", incarnation_dir
+        lock_ctx = self.inventory.exclusive() if self.inventory is not None else nullcontext()
+        with lock_ctx:
+            intent = self.load_intent(operation_id)
+            if intent.operation_state == "succeeded":
+                return RepairRuntimeResult(
+                    operation_id=intent.operation_id,
+                    operator_id=intent.operator_id,
+                    workspace_id=intent.workspace_id,
+                    binding_id=intent.binding_id,
+                    release_id=intent.release_id,
+                    state="succeeded",
+                    recovery_mode_required=True,
                 )
-            except ValueError, WorkspaceStateUnreadable:
-                business_db_healthy = False
 
-            # 4. Always start replacement container in minimal recovery mode (recovery.md:137).
-            container_ref = self.replace_container(intent, paths, True)
-            self._mark_succeeded(intent, container_ref=container_ref)
-            return RepairRuntimeResult(
-                operation_id=intent.operation_id,
-                operator_id=intent.operator_id,
-                workspace_id=intent.workspace_id,
-                binding_id=intent.binding_id,
-                release_id=intent.release_id,
-                state="succeeded",
-                recovery_mode_required=True,
-                business_db_healthy=business_db_healthy,
-                prior_sessions_revoked=revoked_count,
-                container_ref=container_ref,
-            )
-        except CleanRuntimeRepairError as error:
-            self._mark_needs_attention(operation_id, error_code=error.code)
-            return RepairRuntimeResult(
-                operation_id=intent.operation_id,
-                operator_id=intent.operator_id,
-                workspace_id=intent.workspace_id,
-                binding_id=intent.binding_id,
-                release_id=intent.release_id,
-                state="needs_attention",
-                recovery_mode_required=True,
-                error_code=error.code,
-            )
-        except Exception:
-            self._mark_needs_attention(operation_id, error_code="repair_runtime_failed")
-            return RepairRuntimeResult(
-                operation_id=intent.operation_id,
-                operator_id=intent.operator_id,
-                workspace_id=intent.workspace_id,
-                binding_id=intent.binding_id,
-                release_id=intent.release_id,
-                state="needs_attention",
-                recovery_mode_required=True,
-                error_code="repair_runtime_failed",
-            )
+            self._mark_running(operation_id)
+            paths = self.paths_for(intent)
+            try:
+                # 1. Stop and fence the former runtime before touching any state.
+                self.stop_container(intent, paths)
+
+                # 2. Validate retained access/recovery stores and revoke all old sessions.
+                active_business_ref, revoked_count = (
+                    self._validate_retained_stores_and_revoke_sessions(intent, paths)
+                )
+
+                # 3. Inspect business DB read-only (NEVER initialize or seed an empty DB).
+                incarnation_dir = (paths.workspace_root / active_business_ref).resolve()
+                business_db_healthy = True
+                try:
+                    incarnation_dir.relative_to(paths.workspace_root.resolve())
+                    probe_live_workspace_state(
+                        incarnation_dir / "property-management.sqlite", incarnation_dir
+                    )
+                except ValueError, WorkspaceStateUnreadable:
+                    business_db_healthy = False
+
+                # 4. Always start replacement container in minimal recovery mode (recovery.md:137).
+                container_ref = self.replace_container(intent, paths, True)
+                self._update_inventory_binding(intent, container_ref=container_ref)
+                self._mark_succeeded(intent, container_ref=container_ref)
+                return RepairRuntimeResult(
+                    operation_id=intent.operation_id,
+                    operator_id=intent.operator_id,
+                    workspace_id=intent.workspace_id,
+                    binding_id=intent.binding_id,
+                    release_id=intent.release_id,
+                    state="succeeded",
+                    recovery_mode_required=True,
+                    business_db_healthy=business_db_healthy,
+                    prior_sessions_revoked=revoked_count,
+                    container_ref=container_ref,
+                )
+            except CleanRuntimeRepairError as error:
+                self._mark_needs_attention(operation_id, error_code=error.code)
+                return RepairRuntimeResult(
+                    operation_id=intent.operation_id,
+                    operator_id=intent.operator_id,
+                    workspace_id=intent.workspace_id,
+                    binding_id=intent.binding_id,
+                    release_id=intent.release_id,
+                    state="needs_attention",
+                    recovery_mode_required=True,
+                    error_code=error.code,
+                )
+            except Exception:
+                self._mark_needs_attention(operation_id, error_code="repair_runtime_failed")
+                return RepairRuntimeResult(
+                    operation_id=intent.operation_id,
+                    operator_id=intent.operator_id,
+                    workspace_id=intent.workspace_id,
+                    binding_id=intent.binding_id,
+                    release_id=intent.release_id,
+                    state="needs_attention",
+                    recovery_mode_required=True,
+                    error_code="repair_runtime_failed",
+                )

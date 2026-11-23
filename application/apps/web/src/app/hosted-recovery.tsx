@@ -1,5 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { hostedCsrfToken, managedHostedMode } from "./hosted-session-state";
+import { hostedCsrfToken, managedHostedMode, pauseHostedSession } from "./hosted-session-state";
+
+class RecoveryAuthError extends Error {
+  status: number;
+  code: string;
+
+  constructor(status: number, code: string, message: string) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+function buildStepUpUrl(challengeId: string): string {
+  const returnTo = `${window.location.pathname}${window.location.search}`;
+  const params = new URLSearchParams({
+    recent_challenge: challengeId,
+    return_to: returnTo,
+  });
+  return `/auth/start?${params.toString()}`;
+}
 
 export type RecoveryProtectionState = string;
 
@@ -151,7 +171,11 @@ async function recoveryFetch<T>(
   };
   if (!response.ok) {
     const code = parsed.error?.code ?? parsed.state ?? `http_${response.status}`;
-    throw new Error(parsed.error?.message ?? `Recovery request could not be completed (${code}).`);
+    const message = parsed.error?.message ?? `Recovery request could not be completed (${code}).`;
+    if (response.status === 401) {
+      throw new RecoveryAuthError(401, code, message);
+    }
+    throw new Error(message);
   }
   return parsed as T;
 }
@@ -175,36 +199,52 @@ export function HostedRecovery({
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string>("");
   const [actionStatus, setActionStatus] = useState<string>("");
+  const [reauthRequired, setReauthRequired] = useState(false);
   const confirmHeadingRef = useRef<HTMLHeadingElement>(null);
 
-  const loadStatus = useCallback(async (signal?: AbortSignal) => {
-    try {
-      const payload = await recoveryFetch<OperatorRecoveryStatusPayload>(
-        "/api/hosted/recovery/status",
-        { signal },
-      );
-      setLoadState({ status: "ready", payload });
-      const items = payload.catalog.data?.items ?? [];
-      setSelectedPointId((prev) => {
-        if (prev && items.some((item) => item.resource_id === prev)) return prev;
-        return payload.selected_point_id ?? items[0]?.resource_id ?? "";
-      });
-      const existingOp =
-        payload.startup.pendingAcceptanceId ?? payload.startup.interruptedRestoreId ?? "";
-      if (existingOp) {
-        setOperationId((prev) => prev || existingOp);
+  const loadStatus = useCallback(
+    async (options?: { signal?: AbortSignal; preserveBannerOnAuth?: boolean }) => {
+      try {
+        const payload = await recoveryFetch<OperatorRecoveryStatusPayload>(
+          "/api/hosted/recovery/status",
+          { signal: options?.signal },
+        );
+        setReauthRequired(false);
+        setLoadState({ status: "ready", payload });
+        const items = payload.catalog.data?.items ?? [];
+        setSelectedPointId((prev) => {
+          if (prev && items.some((item) => item.resource_id === prev)) return prev;
+          return payload.selected_point_id ?? items[0]?.resource_id ?? "";
+        });
+        const existingOp =
+          payload.startup.pendingAcceptanceId ?? payload.startup.interruptedRestoreId ?? "";
+        if (existingOp) {
+          setOperationId((prev) => prev || existingOp);
+        }
+      } catch (error: unknown) {
+        if (options?.signal?.aborted) return;
+        if (error instanceof RecoveryAuthError) {
+          setReauthRequired(true);
+          pauseHostedSession(
+            options?.preserveBannerOnAuth
+              ? "Workspace restore completed and prior sessions were signed out. Sign in again to inspect and accept the restored workspace."
+              : "Your session has expired. Sign in again to continue.",
+          );
+          if (options?.preserveBannerOnAuth) {
+            return;
+          }
+        }
+        setLoadState({
+          status: "unavailable",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Backup and recovery details are currently unavailable.",
+        });
       }
-    } catch (error: unknown) {
-      if (signal?.aborted) return;
-      setLoadState({
-        status: "unavailable",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Backup and recovery details are currently unavailable.",
-      });
-    }
-  }, []);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!hosted) return;
@@ -229,6 +269,10 @@ export function HostedRecovery({
       },
       (error: unknown) => {
         if (!active || controller.signal.aborted) return;
+        if (error instanceof RecoveryAuthError) {
+          setReauthRequired(true);
+          pauseHostedSession("Sign in to inspect workspace recovery status.");
+        }
         setLoadState({
           status: "unavailable",
           message:
@@ -249,6 +293,66 @@ export function HostedRecovery({
       confirmHeadingRef.current?.focus();
     }
   }, [preview]);
+
+  useEffect(() => {
+    if (!preview) return;
+    const expectedChallenge = preview.stepUpChallengeId;
+
+    const captureFromHash = () => {
+      const rawHash = window.location.hash.replace(/^#/, "");
+      if (!rawHash) return;
+      const params = new URLSearchParams(rawHash);
+      const grant = params.get("recent_auth_grant");
+      const challengeId = params.get("challenge_id");
+      if (grant && (!challengeId || challengeId === expectedChallenge)) {
+        setRecentAuthGrant(grant);
+        setActionStatus("Fresh authentication verified. Review the confirmation checkbox below.");
+        window.history.replaceState(
+          null,
+          "",
+          `${window.location.pathname}${window.location.search}`,
+        );
+      }
+    };
+    captureFromHash();
+
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data as {
+        type?: unknown;
+        challengeId?: unknown;
+        grant?: unknown;
+      } | null;
+      if (
+        data?.type === "epm-recent-auth-grant" &&
+        typeof data.grant === "string" &&
+        data.grant.trim().length >= 16 &&
+        (!data.challengeId || data.challengeId === expectedChallenge)
+      ) {
+        setRecentAuthGrant(data.grant.trim());
+        setActionStatus("Fresh authentication verified. Review the confirmation checkbox below.");
+      }
+    };
+    window.addEventListener("message", onMessage);
+    window.addEventListener("hashchange", captureFromHash);
+    return () => {
+      window.removeEventListener("message", onMessage);
+      window.removeEventListener("hashchange", captureFromHash);
+    };
+  }, [preview]);
+
+  function handleStartStepUp() {
+    if (!preview) return;
+    const url = buildStepUpUrl(preview.stepUpChallengeId);
+    const popup = window.open(url, "epm-recent-auth", "noopener=false,width=520,height=680");
+    if (!popup) {
+      window.location.assign(url);
+    } else {
+      setActionStatus(
+        "Complete fresh verification in the sign-in window to populate your verification grant.",
+      );
+    }
+  }
 
   async function handlePreview() {
     if (!selectedPointId) return;
@@ -295,13 +399,15 @@ export function HostedRecovery({
       });
       const opId = outcome.operation?.operation_id ?? "";
       if (opId) setOperationId(opId);
+      setPreview(null);
+      setConfirmChecked(false);
       setRecentAuthGrant("");
       setActionStatus(
         outcome.state === "succeeded"
           ? "Workspace restore switched. Sign in again if prompted, inspect your data, and accept the restore."
           : `Restore outcome is ${outcome.state ?? "unknown"}. Check restore status before retrying.`,
       );
-      await loadStatus();
+      await loadStatus({ preserveBannerOnAuth: true });
     } catch (error: unknown) {
       setActionError(
         error instanceof Error
@@ -343,6 +449,7 @@ export function HostedRecovery({
         body: { operation_id: targetOpId },
       });
       setPreview(null);
+      setOperationId("");
       setOperationDetail(null);
       setActionStatus("Restored workspace accepted.");
       await loadStatus();
@@ -398,8 +505,15 @@ export function HostedRecovery({
       <section aria-labelledby={headingId}>
         <h3 id={headingId}>Data and backup</h3>
         <p role={embedded ? "status" : "alert"}>
-          Backup and recovery details are currently unavailable.
+          {reauthRequired
+            ? "Sign in is required to view workspace recovery status."
+            : "Backup and recovery details are currently unavailable."}
         </p>
+        {reauthRequired && (
+          <p>
+            <a href="/auth/start">Sign in again</a> to continue.
+          </p>
+        )}
         {!embedded && (
           <p>
             If your workspace cannot open normally, verify your sign-in and contact your workspace
@@ -466,6 +580,14 @@ export function HostedRecovery({
       </dl>
 
       {actionStatus && <p role="status">{actionStatus}</p>}
+      {reauthRequired && (
+        <div role="status">
+          <p>
+            Active sessions were signed out. <a href="/auth/start">Sign in again</a> to inspect and
+            accept the restored workspace.
+          </p>
+        </div>
+      )}
       {actionError && <p role="alert">{actionError}</p>}
 
       {payload.startup.interruptedRestoreId && (
@@ -530,7 +652,12 @@ export function HostedRecovery({
                     value={point.resource_id}
                     checked={selectedPointId === point.resource_id}
                     disabled={!compatible || busy}
-                    onChange={() => setSelectedPointId(point.resource_id)}
+                    onChange={() => {
+                      setSelectedPointId(point.resource_id);
+                      setPreview(null);
+                      setConfirmChecked(false);
+                      setRecentAuthGrant("");
+                    }}
                   />{" "}
                   <strong>{index === 0 ? "Latest verified point" : "Verified point"}</strong> —{" "}
                   captured {formatEpoch(captured)}
@@ -569,6 +696,12 @@ export function HostedRecovery({
             Step-up challenge: <code>{preview.stepUpChallengeId}</code> · Request hash:{" "}
             <code>{preview.exactRequestHash.slice(0, 16)}…</code>
           </p>
+          <div style={{ marginBottom: "0.75rem" }}>
+            <button type="button" disabled={busy} onClick={handleStartStepUp}>
+              Start fresh verification
+            </button>{" "}
+            <a href={buildStepUpUrl(preview.stepUpChallengeId)}>Open verification page directly</a>
+          </div>
           <label htmlFor="recent-auth-grant">Fresh authentication verification token</label>
           <input
             id="recent-auth-grant"

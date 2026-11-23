@@ -258,7 +258,14 @@ class Gateway:
                     try:
                         _, previous = self._snapshot()
                     except Exception:
-                        previous = closed_config(self.inventory.ingress_projection(), self.settings)
+                        snap = self.inventory.ingress_projection()
+                        non_eligible = tuple(
+                            row for row in snap.records if row.desired_state != "eligible"
+                        )
+                        previous = closed_config(
+                            snap.model_copy(update={"records": non_eligible}),
+                            self.settings,
+                        )
                     self.admin.load(previous)
 
                 self._with_containment(command, allocation, rollback)
@@ -290,6 +297,14 @@ class Gateway:
             and self.eligible_proof_verifier(command) is True
         )
 
+    def _eligible_observation_for(self, binding_id: str):
+        if not hasattr(self.inventory, "eligible_ready"):
+            return None
+        for obs in self.inventory.eligible_ready():
+            if obs.binding_id == binding_id and obs.workspace_route_state == "ready":
+                return obs
+        return None
+
     def _record(self, command, allocation):
         snapshot, config = self._snapshot()
         rows = [row for row in snapshot.records if row.binding_id == allocation.binding_id]
@@ -298,8 +313,22 @@ class Gateway:
         row = rows[0]
         scope = command.effect.parent.scope
         allowed_states = {"held", "blocked"}
-        if row.desired_state == "eligible" and self._eligible_verified(command):
-            allowed_states.add("eligible")
+        if row.desired_state == "eligible":
+            if command.effect.kind == "apply_ingress_policy":
+                # Ingress admission requires explicit command proof verification (#27, #30).
+                obs = self._eligible_observation_for(allocation.binding_id)
+                if (
+                    self._eligible_verified(command)
+                    and obs is not None
+                    and obs.source_identity_proof_ref == command.payload.source_identity_proof_ref
+                    and obs.resource_readiness_proof_ref
+                    == command.payload.resource_readiness_proof_ref
+                ):
+                    allowed_states.add("eligible")
+            else:
+                # Runtime-authority verify/supervise on an already-admitted eligible binding (#27).
+                if self._eligible_observation_for(allocation.binding_id) is not None:
+                    allowed_states.add("eligible")
         if (
             command.effect.binding_id != allocation.binding_id
             or command.effect.resource_generation != allocation.resource_generation
@@ -323,6 +352,11 @@ class Gateway:
         if command.payload.desired_state == "eligible":
             if not self._eligible_verified(command):
                 raise HostAgentUnavailable()
+            previous = None
+            try:
+                previous = self.admin.inspect()
+            except Exception:
+                previous = None
             row, config = self._record(command, allocation)
             if (
                 row.operation_id != command.effect.child_id()
@@ -330,9 +364,17 @@ class Gateway:
                 or allocation.ingress_projection_revision is None
             ):
                 raise HostAgentDenied()
-            self.admin.load(config)
-            if self.admin.inspect() != config:
-                raise HostAgentUnavailable()
+            try:
+                self.admin.load(config)
+                if self.admin.inspect() != config:
+                    raise HostAgentUnavailable()
+            except Exception:
+                if previous is not None:
+                    try:
+                        self.admin.load(previous)
+                    except Exception:
+                        pass
+                raise
             return EffectObservation(
                 request_hash=semantic_hash(command),
                 binding_id=allocation.binding_id,

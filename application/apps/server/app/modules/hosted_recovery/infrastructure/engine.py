@@ -93,6 +93,10 @@ def _safe_destination_path(root: Path, relative_path: str) -> Path:
     return target
 
 
+def _dek_fingerprint(dek: bytes) -> str:
+    return hashlib.sha256(b"epm-dek-fp-v1:" + dek).hexdigest()[:16]
+
+
 class ChunkedAeadBackupEngine:
     """Pure-Python chunked AES-256-GCM backup engine backed by BackupTransport."""
 
@@ -124,6 +128,22 @@ class ChunkedAeadBackupEngine:
         wrapped_b64 = base64.b64encode(wrapped).decode("ascii")
         return dek, wrapped_b64
 
+    def read_wrapped_dek(
+        self,
+        *,
+        manifest_ref: str,
+        expected_key_ref: str,
+    ) -> str | None:
+        """Read wrapped_dek_b64 from an existing verified manifest envelope if key_ref matches."""
+        try:
+            raw_envelope, _ = self.transport.get_object(manifest_ref)
+            envelope = ManifestEnvelope.model_validate_json(raw_envelope)
+        except Exception:
+            return None
+        if envelope.key_ref != expected_key_ref:
+            return None
+        return envelope.wrapped_dek_b64
+
     def _upload_file_chunks(
         self,
         path: Path,
@@ -131,6 +151,7 @@ class ChunkedAeadBackupEngine:
         context: EnvelopeContext,
         dek: bytes,
         key_fp: str,
+        dek_fp: str,
         stats: dict[str, int],
         new_chunk_refs: list[ChunkRef],
     ) -> tuple[str, int, list[ChunkRef]]:
@@ -146,7 +167,9 @@ class ChunkedAeadBackupEngine:
                 whole_hasher.update(chunk)
                 total_plaintext += len(chunk)
                 chunk_sha256 = hashlib.sha256(chunk).hexdigest()
-                object_key = validate_relative_object_key(f"chunks/{key_fp}/{chunk_sha256}.enc")
+                object_key = validate_relative_object_key(
+                    f"chunks/{key_fp}/{dek_fp}/{chunk_sha256}.enc"
+                )
                 head = self.transport.head_object(object_key)
                 if head.exists and head.sha256 is not None and head.size is not None:
                     ref = ChunkRef(
@@ -178,7 +201,7 @@ class ChunkedAeadBackupEngine:
                 refs.append(ref)
         if not refs:
             empty_sha = hashlib.sha256(b"").hexdigest()
-            object_key = validate_relative_object_key(f"chunks/{key_fp}/{empty_sha}.enc")
+            object_key = validate_relative_object_key(f"chunks/{key_fp}/{dek_fp}/{empty_sha}.enc")
             head = self.transport.head_object(object_key)
             if head.exists and head.sha256 is not None and head.size is not None:
                 ref = ChunkRef(
@@ -234,6 +257,7 @@ class ChunkedAeadBackupEngine:
             existing_key_ref=existing_key_ref,
         )
         key_fp = key_fingerprint(context.key_ref)
+        dek_fp = _dek_fingerprint(dek)
         stats = {
             "stored_bytes": 0,
             "uploaded_bytes": 0,
@@ -253,6 +277,7 @@ class ChunkedAeadBackupEngine:
                 context=context,
                 dek=dek,
                 key_fp=key_fp,
+                dek_fp=dek_fp,
                 stats=stats,
                 new_chunk_refs=new_chunk_refs,
             )
@@ -277,6 +302,7 @@ class ChunkedAeadBackupEngine:
                 context=context,
                 dek=dek,
                 key_fp=key_fp,
+                dek_fp=dek_fp,
                 stats=stats,
                 new_chunk_refs=new_chunk_refs,
             )
@@ -400,6 +426,8 @@ class ChunkedAeadBackupEngine:
             ciphertext = base64.b64decode(envelope.ciphertext_b64.encode("ascii"), validate=True)
         except ValueError as error:
             raise RecoveryCryptoError("Manifest envelope contains invalid base64.") from error
+        if len(nonce) != AES_GCM_NONCE_BYTES:
+            raise RecoveryIntegrityError("Manifest envelope nonce length is invalid.")
 
         dek = self.transport.kms_unwrap(context.key_ref, wrapped_dek, aad=context.kms_aad())
         if len(dek) != AES_KEY_BYTES:
@@ -588,6 +616,21 @@ class ChunkedAeadBackupEngine:
             raise RecoveryIntegrityError("Restored file digest/size mismatch.")
         return count
 
+    def _list_all_objects(self, subprefix: str) -> list[str]:
+        if hasattr(self.transport, "list_objects_page"):
+            all_keys: list[str] = []
+            token: str | None = None
+            while True:
+                page, next_token = self.transport.list_objects_page(
+                    subprefix, max_keys=1000, continuation_token=token
+                )
+                all_keys.extend(page)
+                if not next_token:
+                    break
+                token = next_token
+            return all_keys
+        return self.transport.list_objects(subprefix)
+
     def prune_unreferenced_chunks(
         self,
         *,
@@ -614,7 +657,7 @@ class ChunkedAeadBackupEngine:
             for group in (*manifest.databases, *manifest.files):
                 for ref in group.chunks:
                     referenced.add(ref.object_key)
-        existing = self.transport.list_objects("chunks/")
+        existing = self._list_all_objects("chunks/")
         deleted: list[str] = []
         for key in existing:
             if key not in referenced:

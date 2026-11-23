@@ -1434,6 +1434,7 @@ class AdminControlService:
                         "SELECT "
                         "  o.operator_id, o.workspace_id, o.display_name, o.workspace_slug, "
                         "  o.setup_state, o.desired_access, o.subject, o.created_at, o.revision, "
+                        "  cd.component_deployment_id, cd.revision AS deployment_revision, "
                         "  cd.desired_release_id, cd.state AS deployment_state, "
                         "  cd.observation_ref, "
                         "  obs.effective_enabled AS obs_enabled, obs.usage_bytes AS obs_usage, "
@@ -1543,6 +1544,7 @@ class AdminControlService:
                         "SELECT "
                         "  o.operator_id, o.workspace_id, o.display_name, o.workspace_slug, "
                         "  o.setup_state, o.desired_access, o.subject, o.created_at, o.revision, "
+                        "  cd.component_deployment_id, cd.revision AS deployment_revision, "
                         "  cd.desired_release_id, cd.state AS deployment_state, "
                         "  cd.observation_ref, "
                         "  obs.effective_enabled AS obs_enabled, obs.usage_bytes AS obs_usage, "
@@ -1644,6 +1646,7 @@ class AdminControlService:
                     status=(
                         "protected" if row["rec_state"] in {"healthy", "unchanged"} else "degraded"
                     ),
+                    state=row["rec_state"],
                     last_verified_at=row["rec_verified_at"],
                     point_age_ms=max(0, now - row["rec_verified_at"]),
                     proof_ref=row["rec_point_ref"],
@@ -1685,6 +1688,8 @@ class AdminControlService:
             usage=usage_section,
             protection=protection_section,
             release_id=row["desired_release_id"],
+            binding_id=row["component_deployment_id"],
+            resource_generation=int(row["deployment_revision"]),
             operation=operation,
             actions=actions,
         )

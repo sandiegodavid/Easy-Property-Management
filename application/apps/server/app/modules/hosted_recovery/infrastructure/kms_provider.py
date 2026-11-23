@@ -8,7 +8,7 @@ import json
 import os
 import ssl
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener, urlopen
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -43,6 +43,11 @@ def fetch_gcp_metadata_token(*, timeout_seconds: float = 5.0) -> str:
     if not isinstance(token, str) or not token:
         raise BackupProxyUnavailable("GCP metadata server returned an invalid token response.")
     return token
+
+
+class _NoRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise URLError("HTTP redirects are not allowed for Cloud KMS requests.")
 
 
 class CloudKmsEnvelopeProvider:
@@ -82,11 +87,10 @@ class CloudKmsEnvelopeProvider:
             if self._opener is not None:
                 response_bytes = self._opener(request, self._timeout_seconds)
             else:
-                with urlopen(
-                    request,
-                    timeout=self._timeout_seconds,
-                    context=self._ssl_context,
-                ) as response:
+                http_opener = build_opener(
+                    HTTPSHandler(context=self._ssl_context), _NoRedirectHandler()
+                )
+                with http_opener.open(request, timeout=self._timeout_seconds) as response:
                     response_bytes = response.read()
         except HTTPError as error:
             if error.code in {400, 403}:

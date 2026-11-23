@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import closing
 import hashlib
 from importlib import import_module
 import os
@@ -127,11 +128,32 @@ class R2ObjectStore:
         size = response.get("ContentLength")
         return ObjectMetadata(exists=True, sha256=sha, size=int(size) if size is not None else None)
 
-    def get_object(self, full_key: str) -> tuple[bytes, ObjectMetadata]:
+    def get_object(
+        self, full_key: str, *, max_bytes: int | None = None
+    ) -> tuple[bytes, ObjectMetadata]:
         key = validate_relative_object_key(full_key)
         try:
             response = self._client.get_object(Bucket=self.bucket, Key=key)
-            body = response["Body"].read()
+            content_length = response.get("ContentLength")
+            if (
+                max_bytes is not None
+                and content_length is not None
+                and int(content_length) > max_bytes
+            ):
+                with closing(response["Body"]):
+                    pass
+                raise BackupProxyUnavailable("R2 object exceeds maximum allowed frame size.")
+            with closing(response["Body"]) as stream:
+                if max_bytes is not None:
+                    body = stream.read(max_bytes + 1)
+                    if len(body) > max_bytes:
+                        raise BackupProxyUnavailable(
+                            "R2 object stream exceeds maximum allowed frame size."
+                        )
+                else:
+                    body = stream.read()
+        except BackupProxyUnavailable:
+            raise
         except Exception as error:
             if _is_not_found_error(error):
                 raise RecoveryIntegrityError("Requested recovery object does not exist.") from error
@@ -152,35 +174,44 @@ class R2ObjectStore:
         except Exception as error:
             raise BackupProxyUnavailable("R2 delete_object failed.") from error
 
-    def list_objects(self, prefix: str, *, max_keys: int = 1000) -> list[str]:
+    def list_objects_page(
+        self,
+        prefix: str,
+        *,
+        max_keys: int = 1000,
+        continuation_token: str | None = None,
+    ) -> tuple[list[str], str | None]:
         if not prefix or not prefix.endswith("/"):
             raise ValueError("Object listing prefix must be non-empty and end with '/'.")
-        validate_relative_object_key(prefix.rstrip("/"))
+        validate_relative_object_key(prefix[:-1])
         bounded = max(1, min(int(max_keys), 1000))
-        keys: list[str] = []
-        token: str | None = None
+        params: dict[str, object] = {
+            "Bucket": self.bucket,
+            "Prefix": prefix,
+            "MaxKeys": bounded,
+        }
+        if continuation_token is not None:
+            params["ContinuationToken"] = continuation_token
         try:
-            while len(keys) < bounded:
-                params: dict[str, object] = {
-                    "Bucket": self.bucket,
-                    "Prefix": prefix,
-                    "MaxKeys": min(1000, bounded - len(keys)),
-                }
-                if token is not None:
-                    params["ContinuationToken"] = token
-                response = self._client.list_objects_v2(**params)
-                for entry in response.get("Contents") or []:
-                    item_key = entry.get("Key")
-                    if isinstance(item_key, str):
-                        keys.append(item_key)
-                if not response.get("IsTruncated"):
-                    break
-                token = response.get("NextContinuationToken")
-                if not token:
-                    break
+            response = self._client.list_objects_v2(**params)
         except Exception as error:
             raise BackupProxyUnavailable("R2 list_objects failed.") from error
-        return sorted(keys)
+        keys: list[str] = []
+        for entry in response.get("Contents") or []:
+            item_key = entry.get("Key")
+            if isinstance(item_key, str):
+                keys.append(item_key)
+        next_token = (
+            response.get("NextContinuationToken")
+            if response.get("IsTruncated")
+            and isinstance(response.get("NextContinuationToken"), str)
+            else None
+        )
+        return sorted(keys), next_token
+
+    def list_objects(self, prefix: str, *, max_keys: int = 1000) -> list[str]:
+        keys, _ = self.list_objects_page(prefix, max_keys=max_keys)
+        return keys
 
 
 class LocalDirectoryObjectStore:
@@ -229,10 +260,14 @@ class LocalDirectoryObjectStore:
             size=len(data),
         )
 
-    def get_object(self, full_key: str) -> tuple[bytes, ObjectMetadata]:
+    def get_object(
+        self, full_key: str, *, max_bytes: int | None = None
+    ) -> tuple[bytes, ObjectMetadata]:
         target = self._resolve(full_key)
         if not target.is_file():
             raise RecoveryIntegrityError("Requested recovery object does not exist.")
+        if max_bytes is not None and target.stat().st_size > max_bytes:
+            raise BackupProxyUnavailable("Object exceeds maximum allowed frame size.")
         data = target.read_bytes()
         return data, ObjectMetadata(
             exists=True,
@@ -244,22 +279,35 @@ class LocalDirectoryObjectStore:
         target = self._resolve(full_key)
         target.unlink(missing_ok=True)
 
-    def list_objects(self, prefix: str, *, max_keys: int = 1000) -> list[str]:
+    def list_objects_page(
+        self,
+        prefix: str,
+        *,
+        max_keys: int = 1000,
+        continuation_token: str | None = None,
+    ) -> tuple[list[str], str | None]:
         if not prefix or not prefix.endswith("/"):
             raise ValueError("Object listing prefix must be non-empty and end with '/'.")
-        validate_relative_object_key(prefix.rstrip("/"))
+        validate_relative_object_key(prefix[:-1])
         bounded = max(1, min(int(max_keys), 1000))
-        base = (self.root / prefix.rstrip("/")).resolve()
+        base = (self.root / prefix[:-1]).resolve()
         try:
             base.relative_to(self.root)
         except ValueError as error:
             raise RecoveryIntegrityError("Listing prefix escapes storage root.") from error
         if not base.is_dir():
-            return []
-        keys: list[str] = []
-        for path in sorted(base.rglob("*")):
-            if path.is_file() and not path.name.startswith(".obj-"):
-                keys.append(path.relative_to(self.root).as_posix())
-                if len(keys) >= bounded:
-                    break
+            return [], None
+        all_keys = [
+            path.relative_to(self.root).as_posix()
+            for path in sorted(base.rglob("*"))
+            if path.is_file() and not path.name.startswith(".obj-")
+        ]
+        if continuation_token is not None:
+            all_keys = [key for key in all_keys if key > continuation_token]
+        page = all_keys[:bounded]
+        next_token = page[-1] if len(all_keys) > bounded else None
+        return page, next_token
+
+    def list_objects(self, prefix: str, *, max_keys: int = 1000) -> list[str]:
+        keys, _ = self.list_objects_page(prefix, max_keys=max_keys)
         return keys

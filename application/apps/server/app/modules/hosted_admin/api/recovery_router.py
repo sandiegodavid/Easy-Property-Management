@@ -182,8 +182,8 @@ def build_admin_recovery_router(
     @router.post("/api/admin/recovery/reconstruct")
     async def reconstruct_catalog(request: Request) -> JSONResponse:
         try:
-            await run_in_threadpool(authenticate_recovery, request, True, None)
-            result = await run_in_threadpool(recovery.reconstruct_catalog)
+            actor = await run_in_threadpool(authenticate_recovery, request, True, None)
+            result = await run_in_threadpool(recovery.reconstruct_catalog, actor=actor)
             return JSONResponse(
                 {
                     "scannedManifests": result.scanned_manifests,

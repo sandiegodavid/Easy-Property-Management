@@ -123,6 +123,7 @@ class FreeUsage(Contract):
 
 class Protection(Contract):
     status: Literal["protected", "degraded"]
+    state: Literal["healthy", "unchanged", "overdue", "unavailable", "unknown"] | None = None
     last_verified_at: Count | None
     point_age_ms: Count | None
     proof_ref: Reference | None

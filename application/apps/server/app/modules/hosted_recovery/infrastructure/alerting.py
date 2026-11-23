@@ -2,18 +2,42 @@
 
 from __future__ import annotations
 
+from ipaddress import ip_address
 import json
 import logging
 import ssl
 from typing import Literal, Protocol
 from urllib.error import URLError
-from urllib.request import Request, urlopen
+from urllib.parse import urlsplit
+from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
 from pydantic import Field
 
 from app.platform.hosted_contracts.values import Contract
 
 logger = logging.getLogger("epm.hosted_recovery.alerts")
+
+_FORBIDDEN_WEBHOOK_HOSTS = frozenset({"localhost", "metadata.google.internal", "metadata"})
+
+
+class _NoRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise URLError("HTTP redirects are not allowed for alert webhooks.")
+
+
+def _validate_webhook_url(webhook_url: str) -> str:
+    parsed = urlsplit(webhook_url)
+    host = (parsed.hostname or "").strip().lower().rstrip(".")
+    if parsed.scheme != "https" or not host or host in _FORBIDDEN_WEBHOOK_HOSTS:
+        raise ValueError("Alert webhook URL must use HTTPS to a public non-local host.")
+    try:
+        addr = ip_address(host)
+    except ValueError:
+        return webhook_url
+    if addr.is_loopback or addr.is_link_local or addr.is_private or addr.is_unspecified:
+        raise ValueError("Alert webhook URL cannot target loopback, link-local, or private IPs.")
+    return webhook_url
+
 
 AlertKind = Literal["backup_failed", "backup_overdue", "backup_unknown", "backup_recovered"]
 ProtectionState = Literal["healthy", "unchanged", "overdue", "unavailable", "unknown"]
@@ -54,9 +78,7 @@ class WebhookAlertSink:
     """Best-effort HTTPS webhook sink for GCP Cloud Monitoring / Pilot 0 alerting."""
 
     def __init__(self, webhook_url: str, *, timeout_seconds: float = 5.0, opener=None):
-        if not webhook_url.startswith("https://"):
-            raise ValueError("Alert webhook URL must use HTTPS.")
-        self.webhook_url = webhook_url
+        self.webhook_url = _validate_webhook_url(webhook_url)
         self.timeout_seconds = timeout_seconds
         self._ssl_context = ssl.create_default_context()
         self._opener = opener
@@ -73,9 +95,10 @@ class WebhookAlertSink:
             if self._opener is not None:
                 self._opener(request, self.timeout_seconds)
             else:
-                with urlopen(
-                    request, timeout=self.timeout_seconds, context=self._ssl_context
-                ) as resp:
+                http_opener = build_opener(
+                    HTTPSHandler(context=self._ssl_context), _NoRedirectHandler()
+                )
+                with http_opener.open(request, timeout=self.timeout_seconds) as resp:
                     resp.read(256)
         except URLError, OSError:
             logger.warning("Failed to deliver hosted recovery webhook alert.")

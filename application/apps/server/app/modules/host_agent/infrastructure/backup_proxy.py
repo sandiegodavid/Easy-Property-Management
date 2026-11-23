@@ -23,6 +23,7 @@ import sqlite3
 import stat
 import struct
 import threading
+import time
 from typing import Literal
 
 from sqlalchemy import create_engine
@@ -81,7 +82,10 @@ def _validate_list_subprefix(subprefix: str) -> str:
         return ""
     if not subprefix.endswith("/"):
         raise BackupProxyDenied("List subprefix must be empty or end with '/'.")
-    validate_relative_object_key(subprefix.rstrip("/"))
+    try:
+        validate_relative_object_key(subprefix[:-1])
+    except ValueError as error:
+        raise BackupProxyDenied("Invalid list subprefix.") from error
     return subprefix
 
 
@@ -243,7 +247,7 @@ class BackupProxyHandler:
             if body:
                 raise BackupProxyDenied("get_object does not accept a body.")
             full_key = self._full_key(principal, header.get("key"))
-            data, meta = self.object_store.get_object(full_key)
+            data, meta = self.object_store.get_object(full_key, max_bytes=MAX_BODY_BYTES)
             if len(data) > MAX_BODY_BYTES:
                 raise BackupProxyUnavailable("Object exceeds maximum proxy frame size.")
             return {"ok": True, "meta": meta.model_dump(mode="json")}, data
@@ -268,14 +272,22 @@ class BackupProxyHandler:
                 or not 1 <= raw_max <= 1000
             ):
                 raise BackupProxyDenied("max_keys must be an integer between 1 and 1000.")
+            raw_token = header.get("continuation_token")
+            if raw_token is not None and not isinstance(raw_token, str):
+                raise BackupProxyDenied("continuation_token must be a string or null.")
             full_prefix = principal.namespace_prefix + subprefix
-            full_keys = self.object_store.list_objects(full_prefix, max_keys=raw_max)
+            full_keys, next_token = self.object_store.list_objects_page(
+                full_prefix, max_keys=raw_max, continuation_token=raw_token
+            )
             relative_keys: list[str] = []
             for key in full_keys:
                 if not key.startswith(principal.namespace_prefix):
                     raise BackupProxyDenied("Storage backend returned key outside caller prefix.")
                 relative_keys.append(key[len(principal.namespace_prefix) :])
-            return {"ok": True, "keys": relative_keys}, b""
+            keys_body = json.dumps({"keys": relative_keys}, separators=(",", ":")).encode("utf-8")
+            if len(keys_body) > MAX_BODY_BYTES:
+                raise BackupProxyUnavailable("Object listing exceeds maximum proxy frame size.")
+            return {"ok": True, "next_token": next_token}, keys_body
         if op in {"kms_wrap", "kms_unwrap"}:
             key_ref = self._require_allowed_key_ref(principal, header.get("key_ref"))
             raw_aad = header.get("aad_b64")
@@ -294,10 +306,15 @@ class BackupProxyHandler:
         raise BackupProxyDenied("Unknown backup proxy operation.")
 
 
-def _recv_exact(connection: socket.socket, length: int) -> bytes:
+def _recv_exact(connection: socket.socket, length: int, *, deadline: float | None = None) -> bytes:
     chunks: list[bytes] = []
     remaining = length
     while remaining > 0:
+        if deadline is not None:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise BackupProxyUnavailable("Backup proxy request exceeded total deadline.")
+            connection.settimeout(left)
         piece = connection.recv(remaining)
         if not piece:
             raise BackupProxyUnavailable("Unexpected EOF on backup proxy socket.")
@@ -318,30 +335,38 @@ def _send_frame(connection: socket.socket, header: dict[str, object], body: byte
     )
 
 
-def _recv_frame(connection: socket.socket) -> tuple[dict[str, object], bytes]:
-    header_len = struct.unpack("!I", _recv_exact(connection, 4))[0]
+def _recv_frame(
+    connection: socket.socket, *, deadline: float | None = None
+) -> tuple[dict[str, object], bytes]:
+    header_len = struct.unpack("!I", _recv_exact(connection, 4, deadline=deadline))[0]
     if not 1 <= header_len <= MAX_HEADER_BYTES:
         raise BackupProxyDenied("Backup proxy header length out of bounds.")
-    header_raw = _recv_exact(connection, header_len)
+    header_raw = _recv_exact(connection, header_len, deadline=deadline)
     try:
         header = json.loads(header_raw.decode("utf-8"), object_pairs_hook=_unique_object)
     except (UnicodeDecodeError, ValueError) as error:
         raise BackupProxyDenied("Malformed backup proxy header JSON.") from error
     if not isinstance(header, dict):
         raise BackupProxyDenied("Backup proxy header must be a JSON object.")
-    body_len = struct.unpack("!I", _recv_exact(connection, 4))[0]
+    body_len = struct.unpack("!I", _recv_exact(connection, 4, deadline=deadline))[0]
     if body_len > MAX_BODY_BYTES:
         raise BackupProxyDenied("Backup proxy body length out of bounds.")
-    body = _recv_exact(connection, body_len) if body_len else b""
+    body = _recv_exact(connection, body_len, deadline=deadline) if body_len else b""
     return header, body
 
 
-def handle_proxy_connection(connection: socket.socket, handler: BackupProxyHandler) -> None:
+def handle_proxy_connection(
+    connection: socket.socket,
+    handler: BackupProxyHandler,
+    *,
+    timeout_seconds: float = 15.0,
+) -> None:
     """Serve one bounded request per Unix socket connection after peer_uid check."""
-    connection.settimeout(15.0)
+    deadline = time.monotonic() + timeout_seconds
+    connection.settimeout(timeout_seconds)
     try:
         caller_uid = peer_uid(connection)
-        header, body = _recv_frame(connection)
+        header, body = _recv_frame(connection, deadline=deadline)
         response_header, response_body = handler.dispatch(caller_uid, header, body)
     except HostedRecoveryError as error:
         response_header, response_body = {"ok": False, "error": {"code": error.code}}, b""
@@ -355,6 +380,11 @@ def handle_proxy_connection(connection: socket.socket, handler: BackupProxyHandl
         )
     try:
         _send_frame(connection, response_header, response_body)
+    except HostedRecoveryError as error:
+        try:
+            _send_frame(connection, {"ok": False, "error": {"code": error.code}}, b"")
+        except OSError:
+            pass
     except OSError:
         pass
 
@@ -392,7 +422,7 @@ def backup_proxy_listener(
 
 
 class BackupProxyServer:
-    """Threaded Unix socket server for epm-backup-proxy."""
+    """Threaded Unix socket server for epm-backup-proxy with bounded queue & per-UID cap."""
 
     def __init__(
         self,
@@ -400,11 +430,17 @@ class BackupProxyServer:
         handler: BackupProxyHandler,
         *,
         max_workers: int = 8,
+        max_queued: int = 32,
+        max_per_uid: int = 2,
     ):
         self._listener = listener
         self._handler = handler
         self._stop = threading.Event()
         self._pool = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="backup-proxy")
+        self._queue_slots = threading.BoundedSemaphore(max_queued)
+        self._uid_lock = threading.Lock()
+        self._uid_inflight: dict[int, int] = {}
+        self._max_per_uid = max_per_uid
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
@@ -420,12 +456,51 @@ class BackupProxyServer:
                 continue
             except OSError:
                 break
+            if not self._queue_slots.acquire(blocking=False):
+                try:
+                    _send_frame(
+                        conn,
+                        {"ok": False, "error": {"code": BackupProxyUnavailable.code}},
+                        b"",
+                    )
+                except OSError:
+                    pass
+                finally:
+                    conn.close()
+                continue
             self._pool.submit(self._handle_and_close, conn)
 
     def _handle_and_close(self, conn: socket.socket) -> None:
+        uid: int | None = None
+        acquired_uid = False
         try:
+            uid = peer_uid(conn)
+            with self._uid_lock:
+                current = self._uid_inflight.get(uid, 0)
+                if current >= self._max_per_uid:
+                    try:
+                        _send_frame(
+                            conn,
+                            {"ok": False, "error": {"code": BackupProxyUnavailable.code}},
+                            b"",
+                        )
+                    except OSError:
+                        pass
+                    return
+                self._uid_inflight[uid] = current + 1
+                acquired_uid = True
             handle_proxy_connection(conn, self._handler)
+        except Exception:
+            pass
         finally:
+            if acquired_uid and uid is not None:
+                with self._uid_lock:
+                    remaining = self._uid_inflight.get(uid, 1) - 1
+                    if remaining <= 0:
+                        self._uid_inflight.pop(uid, None)
+                    else:
+                        self._uid_inflight[uid] = remaining
+            self._queue_slots.release()
             conn.close()
 
     def stop(self) -> None:
@@ -503,15 +578,48 @@ class UnixBackupProxyClient:
         key = validate_relative_object_key(relative_key)
         self._request({"op": "delete_object", "key": key})
 
-    def list_objects(self, subprefix: str = "", *, max_keys: int = 1000) -> list[str]:
+    def list_objects_page(
+        self,
+        subprefix: str = "",
+        *,
+        max_keys: int = 1000,
+        continuation_token: str | None = None,
+    ) -> tuple[list[str], str | None]:
         validated = _validate_list_subprefix(subprefix)
-        resp, _ = self._request(
-            {"op": "list_objects", "subprefix": validated, "max_keys": max_keys}
-        )
-        raw_keys = resp.get("keys")
+        header: dict[str, object] = {
+            "op": "list_objects",
+            "subprefix": validated,
+            "max_keys": max_keys,
+        }
+        if continuation_token is not None:
+            header["continuation_token"] = continuation_token
+        resp, body = self._request(header)
+        if body:
+            try:
+                payload = json.loads(body.decode("utf-8"))
+            except (UnicodeDecodeError, ValueError) as error:
+                raise BackupProxyUnavailable("Backup proxy returned malformed key body.") from error
+            raw_keys = payload.get("keys") if isinstance(payload, dict) else None
+        else:
+            raw_keys = resp.get("keys")
         if not isinstance(raw_keys, list) or not all(isinstance(item, str) for item in raw_keys):
             raise BackupProxyUnavailable("Backup proxy returned malformed key list.")
-        return raw_keys
+        raw_next = resp.get("next_token")
+        next_token = raw_next if isinstance(raw_next, str) else None
+        return raw_keys, next_token
+
+    def list_objects(self, subprefix: str = "", *, max_keys: int = 1000) -> list[str]:
+        all_keys: list[str] = []
+        token: str | None = None
+        while True:
+            page, next_token = self.list_objects_page(
+                subprefix, max_keys=max_keys, continuation_token=token
+            )
+            all_keys.extend(page)
+            if not next_token:
+                break
+            token = next_token
+        return all_keys
 
     def kms_wrap(self, key_ref: str, plaintext_dek: bytes, *, aad: bytes) -> bytes:
         validated = validate_kms_key_ref(key_ref)

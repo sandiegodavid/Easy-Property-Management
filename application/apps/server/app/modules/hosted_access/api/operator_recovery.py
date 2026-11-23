@@ -135,7 +135,7 @@ def operator_recovery_router(sessions, inputs: OperatorRecoveryInputs) -> APIRou
         except Exception as error:
             return _auth_error_response(error)
 
-        startup = recovery.detect_startup_mode(force_recovery_mode=inputs.recovery_mode)
+        startup = recovery.detect_runtime_mode(force_recovery_mode=inputs.recovery_mode)
         mode: Literal["normal", "recovery"] = (
             "recovery" if (inputs.recovery_mode or startup.mode == "recovery") else "normal"
         )
@@ -286,6 +286,21 @@ def operator_recovery_router(sessions, inputs: OperatorRecoveryInputs) -> APIRou
             return JSONResponse(
                 {"error": {"code": "invalid_confirm_request"}}, status_code=400, headers=HEADERS
             )
+
+        try:
+            sessions.authorize_with_restore(cookie, csrf=csrf, write=True)
+            replayed = recovery.lookup_idempotent_restore(
+                idempotency_key=body.idempotency_key,
+                point_id=body.point_id,
+                preview_id=body.preview_id,
+            )
+            if replayed is not None:
+                status_code = 200 if replayed.state.value == "succeeded" else 500
+                return JSONResponse(
+                    replayed.model_dump(mode="json"), status_code=status_code, headers=HEADERS
+                )
+        except Exception as error:
+            return _auth_error_response(error)
 
         preview = recovery.get_preview(body.preview_id)
         if preview is None or preview.point_id != body.point_id:

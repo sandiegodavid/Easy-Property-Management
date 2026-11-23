@@ -14,11 +14,21 @@ class ObjectStorePort(Protocol):
 
     def head_object(self, full_key: str) -> ObjectMetadata: ...
 
-    def get_object(self, full_key: str) -> tuple[bytes, ObjectMetadata]: ...
+    def get_object(
+        self, full_key: str, *, max_bytes: int | None = None
+    ) -> tuple[bytes, ObjectMetadata]: ...
 
     def delete_object(self, full_key: str) -> None: ...
 
     def list_objects(self, prefix: str, *, max_keys: int = 1000) -> list[str]: ...
+
+    def list_objects_page(
+        self,
+        prefix: str,
+        *,
+        max_keys: int = 1000,
+        continuation_token: str | None = None,
+    ) -> tuple[list[str], str | None]: ...
 
 
 class KmsPort(Protocol):

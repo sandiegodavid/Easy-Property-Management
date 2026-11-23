@@ -128,9 +128,23 @@ class _DirectProxyTransport:
     def delete_object(self, relative_key: str) -> None:
         self._call({"op": "delete_object", "key": relative_key})
 
+    def list_objects_page(
+        self, subprefix: str = "", *, max_keys: int = 1000, continuation_token: str | None = None
+    ) -> tuple[list[str], str | None]:
+        req: dict[str, object] = {
+            "op": "list_objects",
+            "subprefix": subprefix,
+            "max_keys": max_keys,
+        }
+        if continuation_token is not None:
+            req["continuation_token"] = continuation_token
+        resp, body = self._call(req)
+        keys = json.loads(body.decode("utf-8"))["keys"] if body else resp["keys"]
+        return list(keys), resp.get("next_token")
+
     def list_objects(self, subprefix: str = "", *, max_keys: int = 1000) -> list[str]:
-        resp, _ = self._call({"op": "list_objects", "subprefix": subprefix, "max_keys": max_keys})
-        return list(resp["keys"])
+        keys, _ = self.list_objects_page(subprefix, max_keys=max_keys)
+        return keys
 
     def kms_wrap(self, key_ref: str, plaintext_dek: bytes, *, aad: bytes) -> bytes:
         _, body = self._call(
@@ -450,12 +464,14 @@ def run_h05_workload(
         acc_engine.dispose()
 
 
-def _trigger_quota_exhaustion(kind: str, dirs: SizingDirs) -> int | None:
+def _fill_quota_until_error(kind: str, dirs: SizingDirs) -> tuple[int | None, Path, bool]:
+    """Consume quota in the target tree until OSError; caller removes created files in finally."""
     if kind.startswith("backup_"):
-        target_dir = dirs.scratch
-        remove_dir = False
+        target_dir = dirs.scratch / ".quota-fill"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        remove_dir = True
     elif kind.startswith("restore_"):
-        target_dir = dirs.workspace / "incarnation-staging-fault"
+        target_dir = dirs.workspace / ".quota-fill"
         target_dir.mkdir(parents=True, exist_ok=True)
         remove_dir = True
     else:
@@ -473,13 +489,84 @@ def _trigger_quota_exhaustion(kind: str, dirs: SizingDirs) -> int | None:
                 (target_dir / f"i-{idx}").touch()
     except OSError as exc:
         observed_errno = exc.errno
+    return observed_errno, target_dir, remove_dir
+
+
+def _cleanup_quota_fill(target_dir: Path | None, remove_dir: bool) -> None:
+    if target_dir is None or not target_dir.exists():
+        return
+    for entry in list(target_dir.iterdir()):
+        if entry.is_file():
+            entry.unlink(missing_ok=True)
+    if remove_dir:
+        target_dir.rmdir()
+
+
+def _run_exhausted_operation(
+    kind: str,
+    service: HostedWorkspaceRecoveryService,
+    *,
+    point_id: str,
+    now_ms: int,
+    simulated_errno: int | None,
+) -> bool:
+    """Invoke real capture or confirm_restore under quota exhaustion and return failed_closed."""
+    scope = WorkspaceScope(operator_id=OPERATOR_ID, workspace_id=WORKSPACE_ID)
+    if kind.startswith("backup_"):
+        svc_actor = ServiceAuthority(
+            deployment_id=DEPLOYMENT_ID,
+            scope=scope,
+            service="operator_backup",
+            authenticated_channel_ref="channel:h059-exhaust",
+        )
+        orig_capture = service.backup_engine.create_point
+        if simulated_errno is not None:
+
+            def _failing_capture(*args, **kwargs):
+                raise OSError(simulated_errno, os.strerror(simulated_errno))
+
+            service.backup_engine.create_point = _failing_capture  # type: ignore[method-assign]
+        try:
+            fail_cmd = _make_capture_command(scope, f"h059-{kind}-fault")
+            outcome = service.execute(svc_actor, fail_cmd)
+            return outcome.state.value == "failed"
+        finally:
+            service.backup_engine.create_point = orig_capture  # type: ignore[method-assign]
+
+    op_actor = OperatorAuthority(
+        deployment_id=DEPLOYMENT_ID,
+        scope=scope,
+        identity_proof_ref="session:h059-exhaust",
+    )
+    preview = service.preview_restore(op_actor, point_id=point_id)
+    recent_actor = OperatorRestoreAuthority(
+        deployment_id=DEPLOYMENT_ID,
+        scope=scope,
+        identity_proof_ref="session:h059-exhaust",
+        step_up_ref=f"stepup:{preview.preview_id}",
+        step_up_at=now_ms,
+        confirmed_request_hash=preview.exact_request_hash,
+    )
+    orig_restore = service.backup_engine.restore_point
+    if simulated_errno is not None:
+
+        def _failing_restore(*args, **kwargs):
+            raise OSError(simulated_errno, os.strerror(simulated_errno))
+
+        service.backup_engine.restore_point = _failing_restore  # type: ignore[method-assign]
+    try:
+        outcome = service.confirm_restore(
+            recent_actor,
+            point_id=point_id,
+            preview_id=preview.preview_id,
+            idempotency_key=f"h059-{kind}-fault",
+            authorized_subject=f"operator:{OPERATOR_ID}",
+        )
+        return outcome.state.value in {"failed", "needs_attention"}
+    except Exception:
+        return True
     finally:
-        for entry in list(target_dir.iterdir()):
-            if entry.is_file():
-                entry.unlink(missing_ok=True)
-        if remove_dir:
-            target_dir.rmdir()
-    return observed_errno
+        service.backup_engine.restore_point = orig_restore  # type: ignore[method-assign]
 
 
 def run_exhaustion_proof(
@@ -488,7 +575,9 @@ def run_exhaustion_proof(
     *,
     simulated_errno: int | None = None,
 ) -> dict[str, object]:
-    """Verify byte or inode exhaustion during backup or restore staging rolls back cleanly."""
+    """Verify byte or inode exhaustion during real backup or restore staging rolls back cleanly."""
+    if not (kind.startswith("backup_") or kind.startswith("restore_")):
+        raise ValueError(f"Unknown exhaustion kind: {kind}")
     clock_ms = [DEFAULT_NOW_MS]
     incarnation = dirs.workspace / "incarnation-1"
     _populate_workload("database_heavy", incarnation, 64_000)
@@ -497,6 +586,8 @@ def run_exhaustion_proof(
         before_count = conn.execute("SELECT COUNT(*) FROM properties").fetchone()[0]
 
     service, rec_engine, acc_engine = _setup_recovery_service(dirs, clock_ms=clock_ms)
+    fill_dir: Path | None = None
+    remove_fill_dir = False
     try:
         scope = WorkspaceScope(operator_id=OPERATOR_ID, workspace_id=WORKSPACE_ID)
         svc_actor = ServiceAuthority(
@@ -510,33 +601,64 @@ def run_exhaustion_proof(
             scope=scope,
             identity_proof_ref="session:h059-exhaust",
         )
-
-        # Always capture one healthy baseline point first.
-        baseline_cmd = _make_capture_command(scope, f"h059-{kind}-baseline")
-        service.execute(svc_actor, baseline_cmd)
+        service.execute(svc_actor, _make_capture_command(scope, f"h059-{kind}-baseline"))
         point_id = service.read_protection_status().last_point_id or ""
+        active_before = service.active_business_directory()
 
-        observed_errno = (
-            simulated_errno
-            if simulated_errno is not None
-            else _trigger_quota_exhaustion(kind, dirs)
-        )
+        if kind.startswith("backup_"):
+            with sqlite3.connect(biz_db) as conn:
+                conn.execute(
+                    "INSERT INTO properties(id, name, notes) VALUES (999999, 'mut', 'quota-test')"
+                )
+                conn.commit()
+                before_count = conn.execute("SELECT COUNT(*) FROM properties").fetchone()[0]
 
-        # Verify original business tree is completely intact and no empty DB was created.
+        if simulated_errno is None:
+            observed_errno, fill_dir, remove_fill_dir = _fill_quota_until_error(kind, dirs)
+        else:
+            observed_errno = simulated_errno
+
+        clock_ms[0] += 10_000
+        try:
+            operation_failed_closed = _run_exhausted_operation(
+                kind,
+                service,
+                point_id=point_id,
+                now_ms=clock_ms[0],
+                simulated_errno=simulated_errno,
+            )
+        finally:
+            _cleanup_quota_fill(fill_dir, remove_fill_dir)
+
         with sqlite3.connect(biz_db) as conn:
             integrity = conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
             after_count = conn.execute("SELECT COUNT(*) FROM properties").fetchone()[0]
         startup = service.detect_startup_mode()
         snap = service.read_protection_status()
-        preview = service.preview_restore(op_actor, point_id=point_id)
+        active_after = service.active_business_directory()
+        preview_after = service.preview_restore(op_actor, point_id=point_id)
 
+        honest_status = (
+            snap.last_point_id == point_id
+            and bool(preview_after.preview_id)
+            and operation_failed_closed
+            and (snap.consecutive_failures >= 1 if kind.startswith("backup_") else True)
+        )
+        workspace_entries = sorted(p.name for p in dirs.workspace.iterdir())
+        no_empty_init = (
+            workspace_entries == ["incarnation-1"]
+            and startup.reason != "business_database_unreadable"
+            and (startup.mode == "normal" if kind.startswith("backup_") else True)
+        )
         return {
             "kind": kind,
             "errno": observed_errno,
             "sqlite_integrity_ok": integrity,
-            "original_tree_preserved": after_count == before_count and biz_db.is_file(),
-            "no_empty_init": startup.mode == "normal",
-            "honest_status_recorded": snap.last_point_id == point_id and bool(preview.preview_id),
+            "original_tree_preserved": (
+                after_count == before_count and biz_db.is_file() and active_after == active_before
+            ),
+            "no_empty_init": no_empty_init,
+            "honest_status_recorded": honest_status,
         }
     finally:
         rec_engine.dispose()

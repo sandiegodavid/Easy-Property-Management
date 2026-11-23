@@ -165,6 +165,8 @@ export function AdminRecovery({ session, onBack }: { session: AdminSession; onBa
         body: { operation_id: lastOperationId },
       });
       setPreview(null);
+      setConfirmChecked(false);
+      setLastOperationId("");
       setFeedback("Control-plane restore accepted.");
       await loadStatus();
     } catch (err) {
@@ -280,7 +282,11 @@ export function AdminRecovery({ session, onBack }: { session: AdminSession; onBa
                         name="controlRecoveryPoint"
                         value={point.resource_id}
                         checked={selectedPointId === point.resource_id}
-                        onChange={() => setSelectedPointId(point.resource_id)}
+                        onChange={() => {
+                          setSelectedPointId(point.resource_id);
+                          setPreview(null);
+                          setConfirmChecked(false);
+                        }}
                       />{" "}
                       <strong>{index === 0 ? "Latest verified point" : "Verified point"}</strong> —{" "}
                       captured {formatTimestamp(pointCapturedAt(point))} · verified{" "}

@@ -584,6 +584,46 @@ class Inventory:
                 for row in rows
             )
 
+    def eligible_ready(self):
+        """Return verified eligible WorkspaceRouteObservations from ingress_bindings (#28)."""
+        from app.modules.host_agent.application.auth_routes import WorkspaceRouteObservation
+
+        with self.transaction(write=False) as connection:
+            table = self.table(connection, "ingress_bindings")
+            rows = (
+                connection.execute(
+                    select(table)
+                    .where(
+                        table.c.desired_state == "eligible",
+                        table.c.auth_route_state == "ready",
+                        table.c.auth_manifest_sha256.is_not(None),
+                        table.c.auth_manifest_ref.is_not(None),
+                        table.c.auth_operation_id.is_not(None),
+                    )
+                    .order_by(table.c.public_origin)
+                    .limit(MAX_ORIGINS + 1)
+                )
+                .mappings()
+                .all()
+            )
+            if len(rows) > MAX_ORIGINS:
+                raise HostAgentUnavailable()
+            return tuple(
+                WorkspaceRouteObservation(
+                    binding_id=row["binding_id"],
+                    resource_generation=int(row["resource_generation"]),
+                    access_epoch=int(row["access_epoch"]),
+                    desired_state="eligible",
+                    workspace_route_state="ready",
+                    workspace_manifest_sha256=row["auth_manifest_sha256"],
+                    source_identity_proof_ref=f"auth-op:{row['auth_operation_id']}",
+                    resource_readiness_proof_ref=row["auth_manifest_ref"],
+                    verified_recovery_point_id=row["auth_operation_id"],
+                    observed_at=int(row["auth_verified_at"] or row["updated_at"]),
+                )
+                for row in rows
+            )
+
     def network_projection(self):
         """All retained allocations reserve their slot; no address reuse after retirement."""
         with self.transaction(write=False) as connection:
