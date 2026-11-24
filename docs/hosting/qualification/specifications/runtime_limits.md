@@ -1,8 +1,7 @@
 # Private runtime and physical-limit proof — H02, with H04
 
 Case authority: [runtime_limits.json](runtime_limits.json). Use the
-[common safety/runner interface](README.md), [quota reuse guide](../reports/HOSTED_MVP_H02_11_HANDOFF.md)
-and its pinned import manifest. Historical systemd/ext4 reports do not qualify Docker/GCP.
+[common safety/runner interface](README.md) and [local/Lima/GCP qualification guide](../../operations/local-dev-and-qualification.md). Historical systemd/ext4 reports do not qualify Docker/GCP.
 
 ## Setup and invocation
 

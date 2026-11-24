@@ -1,25 +1,11 @@
-# Hosting designs
+# Hosted MVP Design (`HOSTED-001`)
 
-The [Hosted MVP design](HOSTED_MVP_DESIGN.md) is the authoritative architecture and
-product specification for **HOSTED-001** (H01–H12). It is a navigation index backed by
-focused guides in `mvp/`:
+For the live Pilot 0 (`H01–H06`) architecture and accepted decisions, see [../ARCHITECTURE.md](../ARCHITECTURE.md). For operational procedures, see [../operations/README.md](../operations/README.md).
 
-- **Core**: [scope](mvp/scope.md) · [architecture and access](mvp/architecture-and-access.md) · [delivery plan](mvp/delivery-plan.md)
-- **Workflows**: [onboarding](mvp/onboarding.md) · [subscriptions, storage, and runtime](mvp/subscriptions-storage-and-runtime.md) · [recovery](mvp/recovery.md) · [releases](mvp/releases.md)
-- **Controls**: [operations and sources](mvp/operations-and-sources.md) · [plans and budgets](mvp/plans-and-budgets.md) · [implementation contracts](mvp/implementation-contracts.md) · [validation](mvp/validation.md)
+This folder holds the **accepted HOSTED-001 specification** governing both live platform invariants and future `H07–H12` slices:
 
-## Delivered Slice Designs (H01–H04)
-
-| Slice | Design | Status & Final Exit Evidence |
-| --- | --- | --- |
-| **H01** | [HOSTED_MVP_H01_DESIGN.md](HOSTED_MVP_H01_DESIGN.md) | **Done** — [H01.7 handoff](../qualification/reports/HOSTED_MVP_H01_7_HANDOFF_2026-11-11.md) |
-| **H02** | [HOSTED_MVP_H02_DESIGN.md](HOSTED_MVP_H02_DESIGN.md) | **Done** — [Foundation guides](../foundation/README.md) · [H02.11 handoff](../qualification/reports/HOSTED_MVP_H02_11_HANDOFF.md) |
-| **H03** | [HOSTED_MVP_H03_DESIGN.md](HOSTED_MVP_H03_DESIGN.md) | **Done** — [H03.12 exit review](../qualification/reports/HOSTED_MVP_H03_12_EXIT_REVIEW_2026-11-22.md) · [Provider research](../../research/HOSTED_MVP_H03_IDENTITY_RESEARCH.md) |
-| **H04** | [HOSTED_MVP_H04_DESIGN.md](HOSTED_MVP_H04_DESIGN.md) | **Done** — [H04.9 Free sizing](../qualification/reports/HOSTED_MVP_H04_9_FREE_SIZING.json) · [H04.10 exit review](../qualification/reports/HOSTED_MVP_H04_10_EXIT_REVIEW_2026-11-22.md) |
-
-## Next Up
-
-- **H05 (Nightly verified off-host recovery)**: [HOSTED_MVP_H05_DESIGN.md](HOSTED_MVP_H05_DESIGN.md) (component proof complete; live GCP `epm-h02-host` execution pending before Pilot 0); see [H05.11 exit review](../qualification/reports/HOSTED_MVP_H05_11_EXIT_REVIEW.md) and [recovery runbook](../runbooks/H05_RECOVERY_OPERATIONS_RUNBOOK.md).
-- **H06 (Pilot 0 release, observability, support & operations gate)**: [HOSTED_MVP_H06_DESIGN.md](HOSTED_MVP_H06_DESIGN.md) ([H06.10 exit review](../qualification/reports/HOSTED_MVP_H06_10_EXIT_REVIEW.md) — implementation & 47/47 review closure complete; real-customer admission held pending 6 live launch-day GCP gates); see [acceptance register](../qualification/HOSTED_MVP_ACCEPTANCE.md).
-- **Schema reference**: [Database schema master](../../database/overview.md).
-- **Research input**: [SQLite upgrade workflow](../research/SQLITE_SCHEMA_UPGRADE_WORKFLOW_2026-10-31.md) (candidate input for H10, subordinate to one-writer and recovery rules).
+- [HOSTED_MVP_DESIGN.md](HOSTED_MVP_DESIGN.md) — Master navigation index and deep-link anchor map for the 11 focused specification guides under [`mvp/`](mvp/delivery-plan.md).
+- [mvp/delivery-plan.md](mvp/delivery-plan.md) — Pilot 0 operating rules and `H07–H12` roadmap (automated provisioning, Paid 1/2 sizing & 15-min RPO, Stripe billing, per-operator release scheduling, Free idle suspension/wake, and 100-operator qualification).
+- [mvp/subscriptions-storage-and-runtime.md](mvp/subscriptions-storage-and-runtime.md) — Logical/physical storage admission, Paid 1/2 sizing protocol (`H08`), Stripe lifecycle (`H09`), and Free idle/wake (`H11`).
+- [mvp/releases.md](mvp/releases.md) — Independent component releases, per-operator update scheduling (`H10`), and post-Pilot 0 SQLite schema upgrade principles.
+- [mvp/implementation-contracts.md](mvp/implementation-contracts.md) — 6-store schema ownership map (`H07–H11` additions) and post-Pilot 0 forward-only schema evolution contract.

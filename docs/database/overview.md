@@ -37,7 +37,7 @@ delivers and validates them.
 | Host inventory SQLite | Actual resource identities, Operator UID/GID allocations, ingress/fences and child-effect receipts for one host. Privileged agent owns the file; control service reads typed observations only. | [Inventory resources](../../application/database/host-inventory-migrations/): implemented six-table baseline, reservation/receipt adapters and scoped native effects. Protected configuration pins host/location. Auth-route extensions remain H03.6 work. | [Host inventory](host-inventory.md) |
 | Per-Operator hosted-access SQLite | Effective access/session authority, source fences and bounded storage admission. Owning runtime only; Admin/agent use authenticated typed commands. | [Access baseline](../../application/database/hosted-access-migrations/versions/access_0001_initial.py): eight tables, resource-derived validation and explicit disabled binding. Runtime DDL is removed; authentication/usage services remain their H03/H04 work. | [Operator access, sessions and usage](operator-access.md) |
 | Per-Operator recovery SQLite | Workspace backup checkpoints, catalog and restore operations. Operator service owns it through normal/authenticated recovery mode, independently of the replaceable business DB. | [Recovery baseline](../../application/database/recovery-migrations/versions/recovery_0001_initial.py): implemented six-table structural baseline (`recovery_0001_initial`, H05.1) with resource-derived validation; backup/restore services remain H05.2–H05.4 work. Separate private control directory persists with the container's resources. Local recovery need not depend on hosted login. | [Operator recovery](operator-recovery.md) |
-| Immutable off-host manifests | Recovery object membership, integrity and key references. Catalog rows are verified projections, not another editable manifest; no table per backed-up object is required. | Verified publication/readback remains H05 work. | [Recovery design](../hosting/design/mvp/recovery.md) · [Lifecycle and retention](lifecycle-and-validation.md) |
+| Immutable off-host manifests | Recovery object membership, integrity and key references. Catalog rows are verified projections, not another editable manifest; no table per backed-up object is required. | Verified live on Cloudflare R2 + GCP Cloud KMS in H06. | [Recovery design](../hosting/design/mvp/recovery.md) · [Lifecycle and retention](lifecycle-and-validation.md) |
 
 Keep these boundaries even on one VM:
 
@@ -68,8 +68,8 @@ tests use them too, rather than a separate handwritten validator/test schema.
 The hosted-access runtime creator has been removed. Current initialization/validation
 APIs and installed-resource failure behavior are documented once in the
 [schema resource guide](schema-resources.md), with
-[identity-specific persistence](../hosting/foundation/identity-persistence.md) in its
-owning implementation guide.
+[live hosted architecture](../hosting/ARCHITECTURE.md#2-state--store-ownership-6-sqlite-stores) in its
+owning guide.
 
 Development uses those same resources with isolated synthetic stores. All four
 portals may run locally for development, without merging store/actor authority or
@@ -164,8 +164,8 @@ flowchart LR
 
 [HOSTED-001 delivery](../hosting/design/mvp/delivery-plan.md#implementation-slices)
 owns sequencing; the [hosted design](../hosting/design/HOSTED_MVP_DESIGN.md) owns
-accepted architecture and [H01](../hosting/design/HOSTED_MVP_H01_DESIGN.md) records
-the schema/contracts handoff. Design acceptance and shipped structure are distinct
+future MVP design and [Hosted Live Architecture](../hosting/ARCHITECTURE.md) records
+the delivered Pilot 0 architecture. Design acceptance and shipped structure are distinct
 from service, provider, native-host and final release qualification.
 
 H03 D1–D16 were accepted November 13, 2026. Its accepted extensions are documented in

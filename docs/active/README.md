@@ -6,8 +6,8 @@ The [agent triage design](agent-triage-design.md) is the accepted direction for 
 
 ## Immediate hosted and portal delivery
 
-- [H01 detailed design](../hosting/design/HOSTED_MVP_H01_DESIGN.md) and [database schema master](../database/overview.md): baseline, Pilot 0 schema, typed contracts and implementation proof handoff.
-- [HOSTED-001 ordered slices](../hosting/design/mvp/delivery-plan.md#implementation-slices): start H01; release the capacity-qualified Free-operator Pilot 0 at H06 before paid automation.
+- [Hosted Live Architecture](../hosting/ARCHITECTURE.md) and [database schema master](../database/overview.md): delivered Pilot 0 (`H01–H06`) architecture, 6-store schema, and accepted decisions.
+- [HOSTED-001 ordered slices](../hosting/design/mvp/delivery-plan.md#implementation-slices): Pilot 0 (`H01–H06`) is LIVE / GO; `H07–H12` remain planned pending the 4-week Pilot 0 repeat-use evaluation.
 - [PORTAL-001/002 and FIN-009 plan](PORTALS_IMPLEMENTATION_PLAN.md): tenant/owner workflows following hosting, shared late-fee source and cross-portal acceptance.
 - [PAY-001](PAY-001_DESIGN.md): qualified payment engine reused by the tenant portal; operator subscriptions are owned by HOSTED-001.
 

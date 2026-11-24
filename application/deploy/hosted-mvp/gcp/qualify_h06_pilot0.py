@@ -67,7 +67,7 @@ SPEC_PATH = (
     / "specifications"
     / "operations_economics.json"
 )
-RUNBOOKS_DIR = REPO_ROOT / "docs" / "hosting" / "runbooks"
+RUNBOOKS_DIR = REPO_ROOT / "docs" / "hosting" / "operations"
 WORKSHEET_PATH = (
     REPO_ROOT
     / "docs"
@@ -448,7 +448,7 @@ def _case_announced_maintenance_restart(tmp: Path) -> dict[str, object]:
 
 
 def _case_runtime_repair_support() -> dict[str, object]:
-    runbook = RUNBOOKS_DIR / "H06_8_INCIDENT_SUPPORT_AND_RETIREMENT_RUNBOOK.md"
+    runbook = RUNBOOKS_DIR / "pilot0-admission-and-incidents.md"
     if not runbook.is_file() or not hasattr(repair_runtime, "CleanRuntimeRepairer"):
         raise ValueError("Runtime repair implementation or runbook missing.")
     return {

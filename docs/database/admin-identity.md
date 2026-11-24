@@ -8,7 +8,7 @@ H02 delivers these tables in the complete main-Admin structural baseline to sati
 local FK closure. H03 retains all identity/session/invitation population and behavior;
 schema creation itself grants no access and creates no principals or sessions.
 
-The [H03 design](../hosting/design/HOSTED_MVP_H03_DESIGN.md) defines the accepted
+The [Hosted Live Architecture](../hosting/ARCHITECTURE.md#managed-identity--session-security-h03-updated-in-h061) defines the accepted
 [flow-state additions below](#h03-flow-state). D1–D16 were accepted November 13,
 2026. H03.2 implements these additions in the current greenfield Admin baseline; identity behavior remains later H03 work.
 
@@ -301,8 +301,7 @@ column. `redeeming` reserves the single exchange before the external source call
 capability lifetime; an expired reservation may be reconciled read-only, never issue
 a new bearer. A matching retry reports the original safe result, not a second cookie.
 H03.1 seals corresponding state invariants and typed proof contracts in the
-[identity contract baseline](../hosting/foundation/identity-contracts.md); H03.2 implements the equivalent CHECKs/FKs in the executable baseline and
-[dependency-aware cleanup](../hosting/foundation/identity-persistence.md).
+[Hosted Live Architecture](../hosting/ARCHITECTURE.md#managed-identity--session-security-h03-updated-in-h061); H03.2 implements the equivalent CHECKs/FKs and dependency-aware cleanup in the executable baseline.
 
 ## Identity retention and cleanup
 

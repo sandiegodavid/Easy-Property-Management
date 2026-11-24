@@ -144,3 +144,11 @@ component-only rollout, restore its prior compatible artifact without rolling ba
 shared business data. Runtime/schema recovery retains the existing pre-write rollback
 and post-reopen data-preservation rules.
 
+### Post-Pilot 0 SQLite schema upgrade principles (H10 input)
+
+Once Pilot 0 holds real customer records, future releases must evolve existing SQLite stores forward without recreating them:
+- **Append-only Alembic migrations with CI hash-freeze** on released migration files.
+- **Automatic pre-migration verified backup/snapshot** before applying DDL to any live store.
+- **Per-step transactional DDL** and **per-version schema validation** (reject unsupported versions rather than booting blindly).
+- **Expand / migrate / contract** with `head` and `head-1` compatibility slack across staged rollouts, a fleet census pass before contracting old columns, and in-band `payload_version` for structured JSON payloads.
+

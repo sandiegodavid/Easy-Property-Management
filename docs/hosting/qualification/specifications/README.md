@@ -2,8 +2,8 @@
 
 Specifications and document validation are delivered. **No target proof executor or
 new native/cloud/provider/end-user acceptance is delivered.**
-[H01.5](../../design/HOSTED_MVP_H01_DESIGN.md#h015--specify-proof-inputs-reports-and-packaging-handoff)
-assigns these proofs; the [acceptance register](../HOSTED_MVP_ACCEPTANCE.md) records
+[Hosted Live Architecture](../../ARCHITECTURE.md)
+summarizes the delivered contracts; the [acceptance register](../HOSTED_MVP_ACCEPTANCE.md) records
 actual review outcomes. Do not replace historical reports or import their status.
 
 | Proof / reproducible procedure | Accountable owner | Supporting owners | Report scopes (separate reports) |
@@ -83,6 +83,6 @@ credentials; this interface does not imply that setup is already implemented.
 - Release gates require owning review of actual artifacts and security evidence.
   JSON validation proves consistency only and does not authenticate pins or results.
 
-See the [report format](REPORT_FORMAT.md), [packaging handoff](PACKAGING_HANDOFF.md)
-and [quota reuse boundary](../reports/HOSTED_MVP_H02_11_HANDOFF.md). Historical imports stay
+See the [report format](REPORT_FORMAT.md), [packaging handoff](PACKAGING_HANDOFF.md),
+and [local/Lima/GCP qualification guide](../../operations/local-dev-and-qualification.md). Historical imports stay
 byte-for-byte unchanged; new environment/source pins require new reports.

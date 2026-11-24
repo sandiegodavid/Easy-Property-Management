@@ -7,8 +7,8 @@ identity baseline and implements hosted access. H05.1 implements both recovery
 resource sets (`admin_recovery_0001_initial` and `recovery_0001_initial`), completing
 structural baselines for all five hosted stores (`unavailableSchemas = []`).
 The [schema master](overview.md) owns table/column design;
-[H01](../hosting/design/HOSTED_MVP_H01_DESIGN.md#h012--establish-independent-schema-resource-scaffolding)
-owns this handoff. The business baseline and local launcher remain unchanged; the obsolete hosted-demo
+[Hosted Live Architecture](../hosting/ARCHITECTURE.md#2-state--store-ownership-6-sqlite-stores)
+summarizes the delivered 6-store ownership boundary. The business baseline and local launcher remain unchanged; the obsolete hosted-demo
 initializer is closed and its runtime DDL removed.
 H02.4 adds explicit component packaging and installed verification. Existing ignored caches from older resource directories are
 not executable resources and must not be used as fallbacks.
@@ -134,9 +134,9 @@ unimplemented sets unavailable: shipping an empty `versions/` does not qualify a
 No secrets, store contents, default URLs, runtime fallback DDL or alternate test schema
 may ship. H02.4 implements explicit `--component` staging/installation verification,
 per-component file/hash manifests and actual installed OCI/agent-bundle checks. The
-default local script modes and wheel metadata remain unchanged. See the
-[candidate build runbook](../hosting/deployment/packaging-and-installation.md) and
-[scoped evidence](../hosting/qualification/reports/HOSTED_MVP_H02_11_HANDOFF.md).
+default local script modes and wheel metadata remain unchanged. See
+[Host Provisioning & Packaging](../hosting/operations/host-provisioning-and-packaging.md) and
+[Pilot 0 Exit Review](../hosting/qualification/reports/HOSTED_MVP_H06_10_EXIT_REVIEW.md).
 Shipping declared unavailable resource sets does not establish readiness or qualify a release.
 
 ## Store-specific resource notes
@@ -148,7 +148,7 @@ baseline per implemented store, without compatibility revisions or downgrade pat
 
 ### Main Admin
 
-[Resources](../../application/database/admin-migrations/) · [Dictionary](admin-registry.md) · [Identity persistence](../hosting/foundation/identity-persistence.md)
+[Resources](../../application/database/admin-migrations/) · [Dictionary](admin-registry.md) · [Live Architecture](../hosting/ARCHITECTURE.md#2-state--store-ownership-6-sqlite-stores)
 
 `admin_0001_initial` contains 17 tables after the identity-flow extension. The owning
 revision and [shared column helper](../../application/database/hosted_ddl.py) define
@@ -159,7 +159,7 @@ wheel staging alone is not hosted-image qualification.
 
 ### Host inventory
 
-[Resources](../../application/database/host-inventory-migrations/) · [Dictionary](host-inventory.md) · [H02 handoff](../hosting/qualification/reports/HOSTED_MVP_H02_11_HANDOFF.md)
+[Resources](../../application/database/host-inventory-migrations/) · [Dictionary](host-inventory.md) · [Live Architecture](../hosting/ARCHITECTURE.md#2-state--store-ownership-6-sqlite-stores)
 
 `host_inventory_0001_initial` contains six tables for host identity, operator
 principals, resource/project allocations, ingress and child-effect receipts. Schema
@@ -170,7 +170,7 @@ schema readiness for the host agent's operational qualification.
 
 ### Hosted access
 
-[Resources](../../application/database/hosted-access-migrations/) · [Dictionary](operator-access.md) · [Identity persistence](../hosting/foundation/identity-persistence.md)
+[Resources](../../application/database/hosted-access-migrations/) · [Dictionary](operator-access.md) · [Live Architecture](../hosting/ARCHITECTURE.md#2-state--store-ownership-6-sqlite-stores)
 
 `access_0001_initial` contains eight initially empty tables. Schema creation seeds no
 operator, policy, usage measurement or session. The owning initialize-binding command

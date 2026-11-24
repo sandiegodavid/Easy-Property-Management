@@ -1,6 +1,6 @@
 # Shared hosted contracts
 
-[Developer docs](../README.md) · [Contract package](../../application/apps/server/app/platform/hosted_contracts/) · [Identity-specific contracts](../hosting/foundation/identity-contracts.md)
+[Developer docs](../README.md) · [Contract package](../../application/apps/server/app/platform/hosted_contracts/) · [Hosted Live Architecture](../hosting/ARCHITECTURE.md)
 
 H01.3 supplies strict values and pure envelopes for H02–H05 owners. Nothing here
 opens a store, authorizes a request, sends a command or registers an API/CLI.

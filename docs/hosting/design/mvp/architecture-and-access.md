@@ -124,7 +124,7 @@ sessions/verified entitlements survive a temporary provider outage only within t
 existing validity; never extend expired authority indefinitely. No provider request
 on every business read. Exact origin/CSRF and current source authority still apply.
 
-[H03 D1–D16](../HOSTED_MVP_H03_DESIGN.md#resolved-design-decisions), accepted November
+[H03 D1–D16](../../ARCHITECTURE.md#managed-identity--session-security-h03-updated-in-h061), accepted November
 13, 2026, fix the initial policy: provider server cookies last at most fourteen days,
 with explicit fresh-auth renewal inside the original thirty-day EPM remembered-session
 ceiling. Periodic prompts are accepted; no server refresh-token vault or promise of

@@ -6,7 +6,7 @@ Delivered workflows cover portfolio and people, leases and inspections, maintena
 
 ## Immediate delivery
 
-The [backlog](docs/FEATURE_BACKLOG.md#now--hosted-mvp-then-tenant-and-owner-portals) schedules HOSTED-001, followed by tenant PORTAL-001 and owner PORTAL-002. Start [hosted slice H01](docs/hosting/design/mvp/delivery-plan.md#implementation-slices). These are planned capabilities, not deployed services.
+The [backlog](docs/FEATURE_BACKLOG.md#now--hosted-mvp-then-tenant-and-owner-portals) schedules HOSTED-001, followed by tenant PORTAL-001 and owner PORTAL-002. **Pilot 0 (`H01–H06`) is LIVE / GO**; slices `H07–H12` remain planned pending the 4-week Pilot 0 repeat-use evaluation (see [hosted delivery plan](docs/hosting/design/mvp/delivery-plan.md#implementation-slices) and [hosting hub](docs/hosting/README.md)).
 
 The first release milestone is **Pilot 0 at H06**: invited operators within qualified capacity, Free 50 MB workspaces, Admin-lite provisioning, nightly verified off-host backups and rehearsed restore. Keep containers running, use one announced maintenance window, and record manual operational time and gross cost. No Stripe, idle-wake automation or per-operator update scheduling in this pilot.
 
@@ -69,7 +69,7 @@ Keep the separate Lima `epm-quota-test` VM for native Linux quota/sandbox/host-a
 and reboot tests, stopped when unused. Preserve its baseline before installing Docker
 or changing its environment, and requalify the new setup. Docker Desktop integration
 tests do not establish native quota or Google Cloud acceptance. See the [environment
-and qualification guide](docs/hosting/qualification/HOSTED_PROJECT_QUOTA_REUSE.md#development-versus-native-qualification).
+and qualification guide](docs/hosting/operations/local-dev-and-qualification.md).
 
 ### Configure and initialize a workspace
 

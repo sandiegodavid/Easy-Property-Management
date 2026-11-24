@@ -6,9 +6,9 @@ Consolidated October 11, 2026. Existing backlog status is preserved; source/mode
 
 | Reference | Scope and status |
 | --- | --- |
-| [HOSTED_MVP_DESIGN.md](hosting/design/HOSTED_MVP_DESIGN.md) | HOSTED-001 design index and focused topic guides; H01–H12 delivery plan, Pilot 0 at H06; no deployment acceptance implied |
+| [Hosting Hub](hosting/README.md) & [HOSTED_MVP_DESIGN.md](hosting/design/HOSTED_MVP_DESIGN.md) | HOSTED-001 Pilot 0 (`H01–H06`) **LIVE / GO** (2026-11-24); `H07–H12` planned pending 4-week Pilot 0 evaluation |
 | [PORTALS_IMPLEMENTATION_PLAN.md](active/PORTALS_IMPLEMENTATION_PLAN.md) | Planned PORTAL-001/002 and FIN-009, with PAY-001/002 source dependencies; not Pilot 0 |
-| [Hosted acceptance register](hosting/qualification/HOSTED_MVP_ACCEPTANCE.md) | Stage-specific proof; earlier demo evidence does not qualify the fresh target |
+| [Hosted acceptance register](hosting/qualification/HOSTED_MVP_ACCEPTANCE.md) | Pilot 0 (`H01–H06`) **GO** (6/6 live GCP launch-day gates complete); `H07–H12` remain open |
 
 ## Existing source disposition
 

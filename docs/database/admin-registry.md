@@ -18,7 +18,7 @@ FKs intact. Table phase labels describe owning behavior/population, not independ
 partial database baselines. H02 initializes protected deployment metadata only;
 H03/H04 own identity, policy/operator population and application actions. H05 owns
 workspace protection reporting. No operator, session or fake qualified release is
-created by schema initialization. See [accepted H02 decisions](../hosting/design/HOSTED_MVP_H02_DESIGN.md#resolved-design-decisions).
+created by schema initialization. See [Hosted Live Architecture](../hosting/ARCHITECTURE.md#control-plane-commands--host-runtime-h01h02).
 
 ### `control_meta` — H02 protected initialization
 

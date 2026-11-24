@@ -10,7 +10,7 @@ In this guide: [Host identity](#host_identity) · [Operator principals](#operato
 
 H02.2 delivers the [six-table current baseline](schema-resources.md#host-inventory)
 and separate protected metadata binding. H02.3 adds the
-[private command/reservation boundary](../hosting/qualification/reports/HOSTED_MVP_H02_11_HANDOFF.md).
+[private command/reservation boundary](../hosting/ARCHITECTURE.md#control-plane-commands--host-runtime-h01h02).
 Native verification and Docker/gateway effects remain later slices; schema creation
 itself creates no operator resources.
 
@@ -239,7 +239,7 @@ loads only the matching command in one SQL query, not the target's entire histor
 
 ## H03 authentication routing extension
 
-Accepted November 13, 2026 under [H03 D7/D8](../hosting/design/HOSTED_MVP_H03_DESIGN.md#resolved-design-decisions);
+Accepted November 13, 2026 under [H03 D7/D8](../hosting/ARCHITECTURE.md#managed-identity--session-security-h03-updated-in-h061);
 implemented in the owning greenfield inventory resources during H03.6.
 Native deployment qualification remains open. No runtime DDL or
 compatibility migration. These fields are host-owned routing evidence, not source

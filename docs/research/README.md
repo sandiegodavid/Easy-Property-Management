@@ -7,7 +7,7 @@ These are dated investigations and candidate approaches. They describe external 
 - [Meta Muse](META_MUSE_RESEARCH.md): reported agent/model distinction and proposed file exchange.
 - [Perplexity integration](PERPLEXITY_INTEGRATION_RESEARCH.md): feasibility, benefits and setup.
 - [Universal Reader](universal-reader/UNIVERSAL_READER_RESEARCH.md): experimental arbitrary-spreadsheet extraction with explicit reviewed import and independent parallel backlog.
-- [Hosting documentation](../hosting/README.md): current **HOSTED-001** architecture, H01–H04 delivered designs/evidence, GCP setup, and operations runbooks.
+- [Hosting documentation](../hosting/README.md): current **HOSTED-001** live Pilot 0 (`H01–H06`) architecture, operations handbook, qualification evidence, and `H07–H12` design.
 - [Oracle A1 deployment runbook](ORACLE_A1_DEPLOYMENT.md): ARM VM research experiment for isolated workspaces and backup/restore.
 
 Current optional AI boundaries are in [AI governance](../modules/ai-governance.md). Proposed domain/transport delivery is in [active designs](../active/README.md); scopes and dependencies remain in [the backlog](../FEATURE_BACKLOG.md).

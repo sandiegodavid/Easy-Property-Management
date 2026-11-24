@@ -43,7 +43,7 @@ For a specific change, read its owning module, relevant shared platform contract
   synthetic workspace setup and seeded-demo browser acceptance.
 - [Shared hosted contract rules](platform/hosted-contracts.md): canonical intent,
   original outcomes and bounded read envelopes; identity-specific behavior remains
-  in its [owning guide](hosting/foundation/identity-contracts.md).
+  in [Hosted MVP Live Architecture](hosting/ARCHITECTURE.md).
 - [Database schema master](database/overview.md): start with shared ownership and conventions, then use the focused per-store dictionaries in `database/` for Admin, inventory, access and recovery. It also links initialization and validation guidance.
 
 - [Persistence, transactions and validation](platform/persistence.md).
@@ -57,7 +57,7 @@ For a specific change, read its owning module, relevant shared platform contract
 
 [Decisions](DECISIONS.md) preserves agreed rationale, including future product decisions. [Roadmap](ROADMAP.md) groups intended delivery. [Research](research/README.md) contains dated external investigations and experiments; findings need verification before implementing a changing provider/runtime capability.
 
-[Hosting](hosting/README.md) contains the **HOSTED-001** status index, [topic-based infrastructure guides](hosting/foundation/README.md), [Hosted MVP design](hosting/design/HOSTED_MVP_DESIGN.md), [deployment](hosting/deployment/README.md) and [operations](hosting/operations/README.md) runbooks, and [latest qualification evidence](hosting/qualification/README.md).
+[Hosting](hosting/README.md) contains the **HOSTED-001** status index, [live Pilot 0 architecture & decisions](hosting/ARCHITECTURE.md), [operations & deployment handbook](hosting/operations/README.md), [Hosted MVP design (`H07–H12`)](hosting/design/HOSTED_MVP_DESIGN.md), and [qualification evidence](hosting/qualification/README.md).
 
 ## Historical material and traceability
 

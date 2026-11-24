@@ -4,7 +4,7 @@
 
 Part of the schema master. Proposed hosted tables are design contracts, not claims of implemented schema. Executable definitions belong exclusively under `application/database/`; see [resource ownership](overview.md#required-schema-definition-location).
 
-The [H03 design](../hosting/design/HOSTED_MVP_H03_DESIGN.md) defines accepted
+The [Hosted Live Architecture](../hosting/ARCHITECTURE.md#managed-identity--session-security-h03-updated-in-h061) defines accepted
 [authentication state](#h03-authentication-state) below under D1–D16. H03 delivers
 the complete current access-store structural baseline; H04 retains real policy/usage
 population and growth-admission behavior. H03.2 delivers the current structural baseline; its initialization grants no authentication or usage authority.

@@ -84,7 +84,7 @@ The bundled [release_demo.py](../../application/scripts/release_demo.py) helper 
 checkpoints and stopped configuration switching; invoke it through the wizards.
 
 Sources: [Mac](../../application/scripts/epm-release-mac.sh), [VM](../../application/scripts/epm-release-vm.sh).
-Use the [hosting deployment runbooks](../hosting/deployment/README.md)
+Use the [hosting operations handbook](../hosting/operations/README.md)
 for prerequisites, saved selections, safeguards and recovery limitations. Both scripts
 accept `--help`. Do not run them through a pipe or run the VM wizard as root.
 

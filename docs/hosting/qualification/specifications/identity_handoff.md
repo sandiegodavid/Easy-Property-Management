@@ -20,7 +20,7 @@ source-channel authentication; old Cloudflare Access assertions are not substitu
 
 Currently exits 3. H03.1 supplies typed inputs/assertions and revision-2 cases, not an
 executor. H03.12 must pin real provider/browser launch and cleanup commands; no identity
-calls are performed by the contract tests. See the [contract baseline](../../foundation/identity-contracts.md).
+calls are performed by the contract tests. See [Hosted Live Architecture](../../ARCHITECTURE.md#managed-identity--session-security-h03-updated-in-h061).
 
 The [H04/H05 handoff](../../design/mvp/delivery-plan.md#deployed-operator-handoff-and-session-qualification)
 assigns the deployed cases that need a ready workspace or verified recovery
@@ -55,7 +55,7 @@ Record unavailable MFA/provider as unavailable, never a component pass promoted 
 production. Revoke dedicated test grants, retire invitations and owned test resources
 only after retaining failures; keep authority/receipt evidence and no real tokens in git.
 
-The [accepted H03 decisions](../../design/HOSTED_MVP_H03_DESIGN.md#resolved-design-decisions)
+The [accepted H03 decisions](../../ARCHITECTURE.md#managed-identity--session-security-h03-updated-in-h061)
 govern these cases: real Google/email-link provenance, completed Google/TOTP Admin MFA,
 explicit renewal under the original thirty-day ceiling, bounded five-minute provider
 revocation freshness and source-local/current external fences. A two-week managed

@@ -94,21 +94,9 @@ payment features available locally.
 
 ### Local development and Linux qualification environments
 
-Use Docker Desktop on the Mac for routine hosted-container development and browser/API
-integration testing. Existing native Python/Vite local-Operator development remains
-supported. Container build/launch configuration still requires H02's detailed design;
-this environment choice does not imply those workflows are already implemented.
+Use Docker Desktop on the Mac for routine hosted-container development and browser/API integration testing. Existing native Python/Vite local-Operator development remains supported.
 
-Retain the separate Lima ARM64 `epm-quota-test` VM as the isolated native Linux
-qualification lab for filesystem quotas, privileged host-agent boundaries, sandbox
-escape tests and actual reboot persistence. Keep it stopped when unused. No extra VM
-is needed for ordinary portal work, and Docker Desktop tests do not replace native
-quota or exact Google-host qualification. See the [quota reuse guide](../../qualification/reports/HOSTED_MVP_H02_11_HANDOFF.md#development-versus-native-qualification).
+Retain the separate Lima ARM64 `epm-quota-test` VM as the isolated native Linux qualification lab for filesystem quotas, privileged host-agent boundaries, sandbox escape tests, and actual reboot persistence (keep stopped when unused). Docker Desktop tests do not replace native quota or exact GCP host qualification. See [Local Development, Lima Native Lab & GCP Qualification](../../operations/local-dev-and-qualification.md).
 
-Preserve upstream evidence/source pins and existing lab trees. Before installing
-Docker, changing the kernel/filesystem/tooling or otherwise altering the retained lab,
-retain a recoverable baseline and record a new environment/source identity; rerun the
-applicable native tests. H02 must specify any such changes before implementation.
-Use synthetic data and isolated source snapshots; do not share production workspaces,
-cloud credentials or Mac virtual environments with the qualification guest.
+Use synthetic data and isolated source snapshots; do not share production workspaces, cloud credentials, or Mac virtual environments with the qualification guest.
 

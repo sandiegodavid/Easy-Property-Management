@@ -1,8 +1,9 @@
 # HOSTED-001 Slice H06.10 Exit Review — Pilot 0 Go/No-Go & Real-Customer Admission Gate
 
-**Date:** 2026-11-23  
+**Date:** 2026-11-24  
 **Slice:** H06 (H06.1–H06.10)  
-**Owning Design:** [HOSTED_MVP_H06_DESIGN.md](../../design/HOSTED_MVP_H06_DESIGN.md)  
+**Live Architecture:** [ARCHITECTURE.md](../../ARCHITECTURE.md)  
+**Operations Handbook:** [operations/README.md](../../operations/README.md)  
 **Acceptance Register:** [HOSTED_MVP_ACCEPTANCE.md](../HOSTED_MVP_ACCEPTANCE.md)  
 **Code Review Closure:** [HOSTED_MVP_H06_74cca39c_REVIEW_RESPONSE.txt](../../../pending_code_review_comments/HOSTED_MVP_H06_74cca39c_REVIEW_RESPONSE.txt) (47/47 findings addressed)
 
@@ -19,18 +20,18 @@
 
 ## 2. Slice Completion Summary (H06.1–H06.10)
 
-| Slice | Deliverable | Evidence | Status |
+| Slice | Deliverable | Evidence / Handbook | Status |
 | --- | --- | --- | --- |
-| **H06.1** | H05 41/41 re-review closure, `provider_email_sends_per_day: 100` re-pin (`5d93ef82...`), live Cloud KMS (`epm-h05-recovery`) + bootstrap authority, native GCP `H05.9` ext4 `prjquota` sizing | [H06.1 checkpoint](HOSTED_MVP_H06_1_CHECKPOINT_2026-11-23.md) · [H05.9 sizing JSON](HOSTED_MVP_H05_9_RECOVERY_SIZING.json) · [Runbook](../../runbooks/H06_1_GCP_RECOVERY_PROVISIONING_RUNBOOK.md) | Done (Live GCP) |
-| **H06.2** | Production runtime & host-service wiring (`shared_identity_entry`, `admin_entry`, `backup_proxy` CLI + systemd unit, `supervisor.py` production `HostAgent`) | [H06.2 checkpoint](HOSTED_MVP_H06_2_CHECKPOINT_2026-11-23.md) · [Runbook](../../runbooks/H06_2_HOST_SERVICES_OPERATIONS_RUNBOOK.md) | Done |
-| **H06.3** | Nightly backup schedulers (`scheduler.py`), async `SO_PEERCRED`+Ed25519 summary relay (`recovery_status_ingest.py`), external alerting (`alerting.py`), maintenance notice (`maintenance_notice.py`) | [H06.3 checkpoint](HOSTED_MVP_H06_3_CHECKPOINT_2026-11-23.md) · [Runbook](../../runbooks/H06_3_SCHEDULER_RELAY_AND_MAINTENANCE_RUNBOOK.md) | Done |
-| **H06.4** | HTTP security headers (`HSTS`, `Permissions-Policy`, `nosniff`, CSP) across all hosted apps/Caddy routes & redacted structured JSON logging (`hosted_logging.py`) | [H06.4 checkpoint](HOSTED_MVP_H06_4_CHECKPOINT_2026-11-23.md) · [Runbook](../../runbooks/H06_4_SECURITY_HEADERS_AND_LOGGING_RUNBOOK.md) | Done |
-| **H06.5** | Pilot 0 UI polish (`supportContact` on Central/Admin, `HostedMaintenanceBanner`, draft-preserving `Updating your workspace` UX, D4 disclosure, Admin-lite cohort overview) | [H06.5 checkpoint](HOSTED_MVP_H06_5_CHECKPOINT_2026-11-23.md) · [Runbook](../../runbooks/H06_5_PILOT0_UI_VERIFICATION_RUNBOOK.md) | Done |
-| **H06.6** | Production Dockerfiles + loopback `/health/live` & `/health/ready`, 9-case `image_schema.json` component proof, and **live GCP R2 (`epm-hosted-recovery`) + Cloud KMS + `epm-backup-proxy` end-to-end recovery proof** | [H06.6 checkpoint](HOSTED_MVP_H06_6_CHECKPOINT_2026-11-23.md) · [Component image JSON](HOSTED_MVP_H06_6_IMAGE_ALL_STORES.json) · [Live R2+KMS JSON](HOSTED_MVP_H06_6_LIVE_R2_KMS_RECOVERY.json) · [Runbook](../../runbooks/H06_6_IMAGE_AND_LIVE_R2_KMS_RUNBOOK.md) | Component + Live R2/KMS Done (`docker_linux` OCI promotion pending) |
-| **H06.7** | Reviewed GCP observability/Ops Agent/budget plans (`cloud_plan.py`), live GCP Logging/Monitoring/Budgets APIs, IAM (`logWriter`/`metricWriter`), 30d retention, live log-based metrics (`epm_hosted_recovery_alerts`, `epm_host_guardian_containment`), synthetic alert/recovery verification | [H06.7 checkpoint](HOSTED_MVP_H06_7_CHECKPOINT_2026-11-23.md) · [Component alert JSON](HOSTED_MVP_H06_7_OBSERVABILITY_AND_ALERTS.json) · [Runbook](../../runbooks/H06_7_GCP_OBSERVABILITY_AND_BUDGET_RUNBOOK.md) | Live APIs/Metrics + Component Done (owner channel/policies/budget/Ops Agent install pending) |
-| **H06.8** | Pilot 0 Admission & Capacity, Incident/Break-Glass/7-Day Retirement, Announced Maintenance Window runbooks, and Before-Credit Cost/Admin-Minutes/4-Week Adoption Worksheet | [H06.8 checkpoint](HOSTED_MVP_H06_8_CHECKPOINT_2026-11-23.md) · [Worksheet](PILOT_0_COST_AND_OPS_WORKSHEET.md) | Done (owner/credits fields to seal at launch) |
-| **H06.9** | 9-case `operations_economics.json` qualification harness bound to `HOSTED_MVP_H05_9_RECOVERY_SIZING.json` | [H06.9 checkpoint](HOSTED_MVP_H06_9_CHECKPOINT_2026-11-23.md) · [Component ops/econ JSON](HOSTED_MVP_H06_9_OPERATIONS_ECONOMICS.json) | Component Done (live `manual`/`gcp`/`deployed_browser` rehearsal pending) |
-| **H06.10** | Pilot 0 Go/No-Go Exit Review, 47/47 review-finding closure, 6/6 live launch-day gates executed, and `HOSTED_MVP_ACCEPTANCE.md` flipped to **GO** | This report · [H06.10 launch runbook](../../runbooks/H06_10_PILOT0_LAUNCH_GATES_RUNBOOK.md) · [Review response](../../../pending_code_review_comments/HOSTED_MVP_H06_74cca39c_REVIEW_RESPONSE.txt) | **GO (6/6 Live Gates Complete)** |
+| **H06.1** | H05 41/41 re-review closure, `provider_email_sends_per_day: 100` re-pin (`5d93ef82...`), live Cloud KMS (`epm-h05-recovery`) + bootstrap authority, native GCP `H05.9` ext4 `prjquota` sizing | [H05.9 sizing JSON](HOSTED_MVP_H05_9_RECOVERY_SIZING.json) · [Provisioning guide](../../operations/host-provisioning-and-packaging.md) | Done (Live GCP) |
+| **H06.2** | Production runtime & host-service wiring (`shared_identity_entry`, `admin_entry`, `backup_proxy` CLI + systemd unit, `supervisor.py` production `HostAgent`) | [Host services guide](../../operations/host-services-and-networking.md) | Done |
+| **H06.3** | Nightly backup schedulers (`scheduler.py`), async `SO_PEERCRED`+Ed25519 summary relay (`recovery_status_ingest.py`), external alerting (`alerting.py`), maintenance notice (`maintenance_notice.py`) | [Backup & maintenance guide](../../operations/backup-restore-and-maintenance.md) | Done |
+| **H06.4** | HTTP security headers (`HSTS`, `Permissions-Policy`, `nosniff`, CSP) across all hosted apps/Caddy routes & redacted structured JSON logging (`hosted_logging.py`) | [Host services](../../operations/host-services-and-networking.md) · [Observability](../../operations/observability-and-budgets.md) | Done |
+| **H06.5** | Pilot 0 UI polish (`supportContact` on Central/Admin, `HostedMaintenanceBanner`, draft-preserving `Updating your workspace` UX, D4 disclosure, Admin-lite cohort overview) | [Local & qualification guide](../../operations/local-dev-and-qualification.md) | Done |
+| **H06.6** | Production Dockerfiles + loopback `/health/live` & `/health/ready`, immutable `docker_linux` 6-store OCI verification, and live GCP R2 + Cloud KMS + `epm-backup-proxy` proof | [Docker Linux image JSON](HOSTED_MVP_H06_10_DOCKER_LINUX_IMAGE_SCHEMA.json) · [Live R2+KMS JSON](HOSTED_MVP_H06_6_LIVE_R2_KMS_RECOVERY.json) | Done (Live GCP) |
+| **H06.7** | Live GCP Cloud Logging/Monitoring/Budgets APIs, IAM, 30d retention, 3 log-based metrics, 7 alert policies, uptime check, `$250/mo` budget, and `google-cloud-ops-agent` | [Live observability JSON](HOSTED_MVP_H06_10_LIVE_OBSERVABILITY.json) · [Observability guide](../../operations/observability-and-budgets.md) | Done (Live GCP) |
+| **H06.8** | Pilot 0 Admission & Capacity, Incident/Break-Glass/7-Day Retirement, Announced Maintenance Window guides, and sealed Cost/Ops Worksheet | [Admission & incidents guide](../../operations/pilot0-admission-and-incidents.md) · [Worksheet](PILOT_0_COST_AND_OPS_WORKSHEET.md) | Done |
+| **H06.9** | 9-case `operations_economics.json` qualification harness bound to `HOSTED_MVP_H05_9_RECOVERY_SIZING.json` | [Live GCP ops/econ JSON](HOSTED_MVP_H06_10_GCP_OPERATIONS_ECONOMICS.json) | Done (Live GCP) |
+| **H06.10** | Pilot 0 Go/No-Go Exit Review, 47/47 review-finding closure, 6/6 live launch-day gates executed, and `HOSTED_MVP_ACCEPTANCE.md` flipped to **GO** | This report · [Review response](../../../pending_code_review_comments/HOSTED_MVP_H06_74cca39c_REVIEW_RESPONSE.txt) | **GO (6/6 Live Gates Complete)** |
 
 ---
 

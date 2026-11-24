@@ -2,8 +2,8 @@
 
 [Manual contents](README.md) · [Build from a checkout](installation.md)
 
-For updates to the already-configured Google Cloud hosted demo, use the
-[ongoing Google Cloud runbook](../docs/hosting/operations/GOOGLE_CLOUD_ONGOING_RUNBOOK.md).
+For updates to the Google Cloud hosted deployment, use the
+[hosted operations handbook](../docs/hosting/operations/README.md).
 The installation below describes a new local-mode VM, not that hosted service.
 
 This guide starts with a built release wheel and a clean VM. It is for the installer, not the daily operator. The commands below use a **Linux VM with Ubuntu 24.04**, a normal login user with sudo rights, and network access to install Python dependencies. Other supported hosts need equivalent Python/virtual-environment provisioning.
