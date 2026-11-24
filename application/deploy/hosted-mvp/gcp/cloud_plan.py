@@ -246,6 +246,7 @@ def ops_agent_config() -> str:
     parse_docker_json:
       type: parse_json
       time_key: time
+      time_format: "%Y-%m-%dT%H:%M:%S.%L%z"
   service:
     pipelines:
       epm_systemd_logs:
@@ -389,6 +390,16 @@ def observability_plan(
             p,
         ],
         [
+            "logging",
+            "metrics",
+            "create",
+            "epm_host_inode_headroom",
+            "--description=Host inode utilization > 80% alerts (H06.7)",
+            '--log-filter=jsonPayload.event="host_inode_headroom_alert" OR '
+            'textPayload:"host_inode_headroom_alert"',
+            p,
+        ],
+        [
             "monitoring",
             "uptime",
             "create",
@@ -423,14 +434,20 @@ def observability_plan(
         "backup_alerts": _alert_policy(
             "EPM Backup Overdue or Failure Alert",
             "epm_hosted_recovery_alerts > 0",
-            'metric.type="logging.googleapis.com/user/epm_hosted_recovery_alerts"',
+            (
+                'metric.type="logging.googleapis.com/user/epm_hosted_recovery_alerts" '
+                'AND resource.type="gce_instance"'
+            ),
             threshold_value=0.0,
             options=("0s", "COMPARISON_GT", "ALIGN_SUM"),
         ),
         "containment_alerts": _alert_policy(
             "EPM Host Guardian Containment Alert",
             "epm_host_guardian_containment > 0",
-            'metric.type="logging.googleapis.com/user/epm_host_guardian_containment"',
+            (
+                'metric.type="logging.googleapis.com/user/epm_host_guardian_containment" '
+                'AND resource.type="gce_instance"'
+            ),
             threshold_value=0.0,
             options=("0s", "COMPARISON_GT", "ALIGN_SUM"),
         ),
@@ -447,14 +464,13 @@ def observability_plan(
         ),
         "inode_headroom": _alert_policy(
             "EPM Host Inode Utilization > 80%",
-            "Inode percent_used > 80%",
+            "epm_host_inode_headroom > 0",
             (
-                'metric.type="agent.googleapis.com/disk/inode_percent_used" '
-                'AND resource.type="gce_instance" '
-                'AND metric.labels.state="used"'
+                'metric.type="logging.googleapis.com/user/epm_host_inode_headroom" '
+                'AND resource.type="gce_instance"'
             ),
-            threshold_value=80.0,
-            options=("300s", "COMPARISON_GT", "ALIGN_MEAN"),
+            threshold_value=0.0,
+            options=("0s", "COMPARISON_GT", "ALIGN_SUM"),
         ),
         "memory_headroom": _alert_policy(
             "EPM Host Memory Utilization > 85%",

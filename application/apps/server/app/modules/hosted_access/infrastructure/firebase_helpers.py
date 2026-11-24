@@ -75,7 +75,13 @@ class FirebaseHelpers:
         else:
             try:
                 body, mime = await run_in_threadpool(self.fetch, path, query)
-                response = Response(body, headers={**headers, "Content-Type": mime})
+                response_headers = {**headers, "Content-Type": mime}
+                if path in {"/__/auth/handler", "/__/auth/iframe"}:
+                    # Firebase-owned auth helper HTML dynamically loads gapi/gstatic scripts
+                    # and cross-origin OAuth frames; retain HSTS/Permissions-Policy/nosniff
+                    # while letting Firebase's helper execute unmodified.
+                    response_headers.pop("Content-Security-Policy", None)
+                response = Response(body, headers=response_headers)
             except ProviderUnavailable:
                 response = Response(status_code=503, headers=headers)
         await response(scope, receive, send)

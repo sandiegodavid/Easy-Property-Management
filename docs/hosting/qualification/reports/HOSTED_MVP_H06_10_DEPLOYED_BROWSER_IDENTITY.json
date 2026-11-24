@@ -1,0 +1,96 @@
+{
+  "suite": "HOSTED_MVP_H06_10_DEPLOYED_BROWSER_IDENTITY",
+  "gate": "Gate 5 — Deployed 4-Browser Positive identity_handoff.json Rehearsal",
+  "proof": "identity_handoff",
+  "level": "deployed_browser",
+  "status": "passed",
+  "executed_at_utc": "2026-11-24T05:17:00Z",
+  "environment": {
+    "target": "gcp_deployed_browser",
+    "project_id": "project-47b72bb7-ba90-42c9-910",
+    "zone": "us-west1-b",
+    "instance": "epm-h02-host",
+    "admin_origin": "https://admin.epmdemo.xyz",
+    "central_origin": "https://login.epmdemo.xyz",
+    "support_contact": "dctech92130@gmail.com",
+    "admin_image_id": "sha256:22506437168079fc65f56a2a0d9dacad61749bd5ca46484fae1f1ebf492cc70f",
+    "operator_image_id": "sha256:7b0e6791a60ddf3faac7d7633e992fcbcb0fd557021aaf001b2f144a7427864e"
+  },
+  "live_findings_caught_and_resolved": [
+    {
+      "issue": "API_SECURITY_HEADERS CSP on /__/auth/handler and /__/auth/iframe blocked Firebase gapi/relyingparty/getProjectConfig inside the Google sign-in popup.",
+      "fix": "Updated application/apps/server/app/modules/hosted_access/infrastructure/firebase_helpers.py to omit Content-Security-Policy on the two Firebase-owned HTML helpers while retaining HSTS, Permissions-Policy, nosniff, no-referrer, and Cache-Control: no-store, and rebuilt immutable epm-pilot0-admin:h0610."
+    }
+  ],
+  "browser_contexts_verified": {
+    "context_1_admin_signin_and_dashboard": {
+      "google_totp_mfa_passed": true,
+      "admin_dashboard_loaded": true,
+      "free_pilot_plan_honest": "Free pilot (50.00 MB logical storage allowance)",
+      "capacity_fail_closed_visible": "Capacity observation unavailable",
+      "qualified_release_fail_closed_visible": true,
+      "support_contact_visible": "dctech92130@gmail.com",
+      "sign_out_and_refresh_revoked": true
+    },
+    "context_2_incognito_isolation": {
+      "admin_origin_isolated": true,
+      "central_operator_signin_loaded": true,
+      "support_contact_visible": "dctech92130@gmail.com"
+    },
+    "context_3_fresh_reauth_and_signout": {
+      "fresh_google_totp_mfa_after_logout_passed": true,
+      "revocation_recorded_in_admin_sqlite": true
+    },
+    "context_4_uninvited_operator_denial": {
+      "uninvited_email_tested": "uninvited.epm@gmail.com",
+      "clean_denial_message_visible": "Sign-in could not be completed. Request a new link or start again from your workspace.",
+      "zero_internal_state_leaked": true
+    }
+  },
+  "server_evidence_admin_sessions": {
+    "session_count": 4,
+    "revoked_count": 2,
+    "all_mfa_verified": true,
+    "sessions": [
+      {
+        "generation": 3,
+        "authenticated_at": 1795495759000,
+        "mfa_verified_at": 1795495759000,
+        "expires_at": 1795524559000,
+        "revoked_at": null,
+        "revocation_valid_until": 1795496062319
+      },
+      {
+        "generation": 3,
+        "authenticated_at": 1795495872000,
+        "mfa_verified_at": 1795495872000,
+        "expires_at": 1795524672000,
+        "revoked_at": 1795496277842,
+        "revocation_valid_until": 1795496062319
+      },
+      {
+        "generation": 3,
+        "authenticated_at": 1795496487000,
+        "mfa_verified_at": 1795496487000,
+        "expires_at": 1795525287000,
+        "revoked_at": 1795496829870,
+        "revocation_valid_until": 1795496788079
+      },
+      {
+        "generation": 3,
+        "authenticated_at": 1795497172000,
+        "mfa_verified_at": 1795497172000,
+        "expires_at": 1795525972000,
+        "revoked_at": null,
+        "revocation_valid_until": 1795497472444
+      }
+    ]
+  },
+  "security_headers_verified_live": {
+    "strict_transport_security": "max-age=31536000; includeSubDomains",
+    "permissions_policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+    "x_content_type_options": "nosniff",
+    "referrer_policy": "no-referrer",
+    "cache_control": "no-store"
+  }
+}

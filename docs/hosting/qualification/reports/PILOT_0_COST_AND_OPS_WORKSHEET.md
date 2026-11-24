@@ -1,10 +1,10 @@
 # Pilot 0 Before-Credit Cost, Admin-Minutes & 4-Week Adoption Worksheet
 
-**Owner:** `<Named Operational Owner — fill before H06.10>`  
-**Support Contact (`EPM_SUPPORT_CONTACT`):** `<Real Monitored Support Email — fill before H06.10>`  
-**Deployment:** `epm-h02-host` (`project-47b72bb7-ba90-42c9-910`, `us-west1-b`, `epmdemo.xyz`)  
+**Owner:** `DC Technology`  
+**Support Contact (`EPM_SUPPORT_CONTACT`):** `dctech92130@gmail.com`  
+**Deployment:** `epm-h02-host` (`project-47b72bb7-ba90-42c9-910` / Project Number `732190125040`, Billing Account `0129C0-EFF863-71F114`, `us-west1-b`, `epmdemo.xyz`)  
 **Gross Monthly Launch Budget Target (Before Credits):** `$250.00 / month` (`250_000_000` USD micros)  
-**GCP Credits Expiry Date (D9):** `<Confirm exact billing-console end date before H06.10>`
+**GCP Credits Expiry Date (D9):** `January 22, 2027`
 
 > **Accounting Rules (D9 / `operations_economics.md`):**
 > - Record all monetary amounts in **integer USD micros** (`$1.00 = 1_000_000` micros) **before credits** (never subtract promotional credits when evaluating viability).
@@ -33,7 +33,7 @@
 
 | Week | Interval (UTC) | GCE VM + Disk (USD Micros) | KMS + Secrets + Logs (USD Micros) | R2 Storage + Ops (USD Micros) | Network / Mail (USD Micros) | **Total Observed Gross (USD Micros)** | Budget Utilization vs `$250/mo` | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Rehearsal (H06.9) | *TBD* | | | | | | | |
+| Rehearsal (H06.10) | `2026-11-24T03:35Z` – `2026-11-24T05:18Z` | `111_667` (est. 100m `e2-standard-2` @ `$0.067/hr`; reconcile w/ GCP billing export) | `0` (within KMS/Logs free tier) | `0` (5 disposable R2 objects cleaned) | `0` | **`111_667` (est. `$0.11` before credits)** | `0.04%` | All 6 live GCP Gates (1–6) executed on `epm-h02-host`; VM stopped after run. |
 | Week 1 | *TBD* | | | | | | | |
 | Week 2 | *TBD* | | | | | | | |
 | Week 3 | *TBD* | | | | | | | |
@@ -45,7 +45,8 @@
 
 | Date (UTC) | Actor | Task Category (`admission`, `retry`, `maintenance`, `incident`, `recovery`, `retirement`) | Operator ID (or `cohort`) | Elapsed Minutes (Int) | Outcome (`completed`, `needs_attention`, `unknown`) | Follow-Up / Friction Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| *TBD* | | | | | | |
+| `2026-11-24T03:35Z` | `DC Technology` | `admission` / `recovery` / `maintenance` | `cohort` (rehearsal) | `45` | `completed` | Executed live GCP Gates 1–4 & 6 (Observability/Ops Agent/Budget, OCI builds & zero-checkout proof, 17-case `recovery.json`, 9-case `operations_economics.json`). |
+| `2026-11-24T04:26Z` | `DC Technology` | `admission` / `incident` | `cohort` (Gate 5) | `50` | `completed` | Executed live deployed 4-browser Gate 5 rehearsal on `epmdemo.xyz`; caught & fixed Firebase helper CSP in `firebase_helpers.py`, rebuilt `epm-pilot0-admin:h0610` (`sha256:225064371680...`), verified Google + TOTP MFA sign-in, session isolation, fail-closed capacity/release checks, sign-out revocation, and uninvited denial. VM stopped. |
 
 ---
 

@@ -1,0 +1,88 @@
+{
+  "suite": "HOSTED_MVP_H06_10_DOCKER_LINUX_IMAGE_SCHEMA",
+  "gate": "Gate 2 — Immutable Production OCI Images & Zero-Checkout Verification",
+  "proof": "image_schema",
+  "level": "docker_linux",
+  "status": "passed",
+  "executed_at_utc": "2026-11-24T04:22:00Z",
+  "environment": {
+    "target": "gcp_docker_linux",
+    "project_id": "project-47b72bb7-ba90-42c9-910",
+    "zone": "us-west1-b",
+    "instance": "epm-h02-host",
+    "architecture": "amd64",
+    "base_image": "docker.io/library/python@sha256:1faf2343e747208b2a36e5f2b5ff908ec3b2d0078a6a7bfe73b535698fe83909",
+    "checkout_present_in_container": false,
+    "pythonpath_empty": true
+  },
+  "artifacts": {
+    "admin_image": {
+      "tag": "epm-pilot0-admin:h0610",
+      "image_id": "sha256:22506437168079fc65f56a2a0d9dacad61749bd5ca46484fae1f1ebf492cc70f",
+      "manifest_sha256": "sha256:ce913ed24829b5c58781325109b50f4048540b4d09965ba274c87af9d6059fba",
+      "dependency_lock_sha256": "e273cfbf1b3c1901c8e40c012fe44797152eef76b7efcdca805f8e481259706d",
+      "ui": "compiled_identity",
+      "stores": {
+        "admin": {
+          "revision": "admin_0001_initial",
+          "first": "initialized",
+          "second": "already_initialized"
+        },
+        "admin-recovery": {
+          "revision": "admin_recovery_0001_initial",
+          "first": "initialized",
+          "second": "already_initialized"
+        }
+      },
+      "wrong_store_rejected": true,
+      "entrypoints_verified": [
+        "app.modules.hosted_access.infrastructure.shared_identity_entry",
+        "app.modules.hosted_access.infrastructure.admin_entry",
+        "app.modules.hosted_access.infrastructure.health_probes"
+      ]
+    },
+    "operator_image": {
+      "tag": "epm-pilot0-operator:h0610",
+      "image_id": "sha256:7b0e6791a60ddf3faac7d7633e992fcbcb0fd557021aaf001b2f144a7427864e",
+      "source_sha256": "3237d79e8611da576125e09b7f3c69fbc09ce828d974759ed53213db810b5fa5",
+      "dependency_lock_sha256": "e273cfbf1b3c1901c8e40c012fe44797152eef76b7efcdca805f8e481259706d",
+      "wheel_sha256": "5bb5c56a6cc1c5c77584982bdc24db6f6fe700eca970263599f01e8aa81c83a1",
+      "ui": "compiled_operator",
+      "stores": {
+        "business": {
+          "revision": "0001_initial_schema",
+          "validated": true
+        },
+        "hosted-access": {
+          "revision": "access_0001_initial",
+          "first": "initialized",
+          "second": "already_initialized"
+        },
+        "recovery": {
+          "revision": "recovery_0001_initial",
+          "first": "initialized",
+          "second": "already_initialized"
+        }
+      },
+      "wrong_store_rejected": true,
+      "entrypoints_verified": [
+        "app.modules.hosted_access.infrastructure.operator_entry",
+        "app.modules.hosted_access.infrastructure.health_probes"
+      ]
+    },
+    "host_agent_archive": {
+      "archive": "host-agent.tar.gz",
+      "archive_sha256": "61af280717f49de0577b0291d3a1e2716fc4c0990174a18bdbd7bffbf3c74314",
+      "source_sha256": "f2067af8e7f8c57cec3a76dde027483fd520b3967370fc3e2df3a2a5f9422171",
+      "dependency_lock_sha256": "e273cfbf1b3c1901c8e40c012fe44797152eef76b7efcdca805f8e481259706d",
+      "wheel_sha256": "f34b1898b7c57e095c8a2f6af472dba046dd07576d589a58408477bb458a1a89",
+      "stores": {
+        "host-inventory": {
+          "revision": "host_inventory_0001_initial",
+          "first": "initialized",
+          "second": "already_initialized"
+        }
+      }
+    }
+  }
+}

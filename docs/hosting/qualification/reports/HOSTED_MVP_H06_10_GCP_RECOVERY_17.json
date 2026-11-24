@@ -1,0 +1,142 @@
+{
+  "cases": {
+    "admin_outage_independence": {
+      "evidence_sha256": "98d838fd7ac9cb1ef5972275b73ac8972f636ed91c128e7cac72c292a185ae37",
+      "status": "passed",
+      "test_file": "apps/server/app/modules/hosted_recovery/tests/test_h05_operator_restore_and_recovery_mode.py",
+      "test_function": "test_admin_outage_independence_and_reconstruct_catalog"
+    },
+    "clean_runtime_repair": {
+      "evidence_sha256": "98d838fd7ac9cb1ef5972275b73ac8972f636ed91c128e7cac72c292a185ae37",
+      "status": "passed",
+      "test_file": "apps/server/app/modules/hosted_recovery/tests/test_h05_clean_runtime_repair.py",
+      "test_function": "test_clean_runtime_repair_preserves_ids_data_revokes_sessions_and_boots_recovery_mode"
+    },
+    "consistent_scheduled_capture": {
+      "evidence_sha256": "98d838fd7ac9cb1ef5972275b73ac8972f636ed91c128e7cac72c292a185ae37",
+      "status": "passed",
+      "test_file": "apps/server/app/modules/hosted_recovery/tests/test_h05_backup_runner_and_alerting.py",
+      "test_function": "test_consistent_scheduled_capture_and_idempotency"
+    },
+    "corrupt_business_recovery_mode": {
+      "evidence_sha256": "98d838fd7ac9cb1ef5972275b73ac8972f636ed91c128e7cac72c292a185ae37",
+      "status": "passed",
+      "test_file": "apps/server/app/modules/hosted_recovery/tests/test_h05_operator_restore_and_recovery_mode.py",
+      "test_function": "test_corrupt_business_recovery_mode_and_operator_step_up_exact_confirmation"
+    },
+    "corrupt_missing_object_key": {
+      "evidence_sha256": "98d838fd7ac9cb1ef5972275b73ac8972f636ed91c128e7cac72c292a185ae37",
+      "status": "passed",
+      "test_file": "apps/server/app/modules/hosted_access/tests/test_h05_recovery_security.py",
+      "test_function": "test_tampered_ciphertext_chunk_and_manifest_fail_closed"
+    },
+    "crash_safe_locator_switch": {
+      "evidence_sha256": "98d838fd7ac9cb1ef5972275b73ac8972f636ed91c128e7cac72c292a185ae37",
+      "status": "passed",
+      "test_file": "apps/server/app/modules/hosted_recovery/tests/test_h05_operator_restore_and_recovery_mode.py",
+      "test_function": "test_crash_safe_locator_switch_rollback_and_healthy_prior_tree"
+    },
+    "cross_workspace_replay_path_key_denial": {
+      "evidence_sha256": "98d838fd7ac9cb1ef5972275b73ac8972f636ed91c128e7cac72c292a185ae37",
+      "status": "passed",
+      "test_file": "apps/server/app/modules/hosted_access/tests/test_h05_recovery_security.py",
+      "test_function": "test_cross_workspace_prefix_key_and_aad_isolation"
+    },
+    "encrypt_key_custody_readback": {
+      "evidence_sha256": "98d838fd7ac9cb1ef5972275b73ac8972f636ed91c128e7cac72c292a185ae37",
+      "status": "passed",
+      "test_file": "apps/server/app/modules/hosted_recovery/tests/test_backup_engine_and_proxy.py",
+      "test_function": "test_dedup_readback_restore_and_reference_safe_pruning"
+    },
+    "forensic_prior_tree": {
+      "evidence_sha256": "98d838fd7ac9cb1ef5972275b73ac8972f636ed91c128e7cac72c292a185ae37",
+      "status": "passed",
+      "test_file": "apps/server/app/modules/hosted_recovery/tests/test_h05_operator_restore_and_recovery_mode.py",
+      "test_function": "test_corrupt_business_recovery_mode_and_operator_step_up_exact_confirmation"
+    },
+    "no_offline_workspace_bypass": {
+      "evidence_sha256": "98d838fd7ac9cb1ef5972275b73ac8972f636ed91c128e7cac72c292a185ae37",
+      "status": "passed",
+      "test_file": "apps/server/app/modules/hosted_access/tests/test_h05_recovery_security.py",
+      "test_function": "test_no_offline_workspace_decrypt_or_restore_bypass_and_gateway_negative_gate"
+    },
+    "operator_step_up_exact_confirmation": {
+      "evidence_sha256": "98d838fd7ac9cb1ef5972275b73ac8972f636ed91c128e7cac72c292a185ae37",
+      "status": "passed",
+      "test_file": "apps/server/app/modules/hosted_access/tests/test_h05_recovery_security.py",
+      "test_function": "test_stolen_or_ordinary_session_cannot_confirm_restore_without_step_up"
+    },
+    "point_age_duration_traffic": {
+      "evidence_sha256": "98d838fd7ac9cb1ef5972275b73ac8972f636ed91c128e7cac72c292a185ae37",
+      "status": "passed",
+      "test_file": "scripts/tests/test_h05_sizing_qualification.py",
+      "test_function": "test_h05_actor_measures_7_captures_and_concurrent_restore"
+    },
+    "separate_admin_recovery_loss": {
+      "evidence_sha256": "98d838fd7ac9cb1ef5972275b73ac8972f636ed91c128e7cac72c292a185ae37",
+      "status": "passed",
+      "test_file": "apps/server/app/modules/hosted_recovery/tests/test_h05_admin_control_recovery.py",
+      "test_function": "test_separate_admin_recovery_loss_damaged_main_admin_db"
+    },
+    "seven_points_incremental_retention": {
+      "evidence_sha256": "98d838fd7ac9cb1ef5972275b73ac8972f636ed91c128e7cac72c292a185ae37",
+      "status": "passed",
+      "test_file": "apps/server/app/modules/hosted_recovery/tests/test_h05_backup_runner_and_alerting.py",
+      "test_function": "test_seven_points_incremental_retention_preserves_shared_chunks"
+    },
+    "source_commit_crash": {
+      "evidence_sha256": "98d838fd7ac9cb1ef5972275b73ac8972f636ed91c128e7cac72c292a185ae37",
+      "status": "passed",
+      "test_file": "apps/server/app/modules/hosted_recovery/tests/test_h05_backup_runner_and_alerting.py",
+      "test_function": "test_source_commit_crash_startup_reconciliation_and_catchup"
+    },
+    "unchanged_file_only_checkpoints": {
+      "evidence_sha256": "98d838fd7ac9cb1ef5972275b73ac8972f636ed91c128e7cac72c292a185ae37",
+      "status": "passed",
+      "test_file": "apps/server/app/modules/hosted_recovery/tests/test_h05_backup_runner_and_alerting.py",
+      "test_function": "test_unchanged_file_only_checkpoints_and_unreadable_never_unchanged"
+    },
+    "whole_host_control_loss": {
+      "evidence_sha256": "98d838fd7ac9cb1ef5972275b73ac8972f636ed91c128e7cac72c292a185ae37",
+      "status": "passed",
+      "test_file": "apps/server/app/modules/hosted_recovery/tests/test_h05_admin_control_recovery.py",
+      "test_function": "test_damaged_admin_recovery_db_and_whole_host_control_loss"
+    }
+  },
+  "joint_h04_h05_positive_handoff": {
+    "admin_route_policy": "separate_exact_host_method_allowlists_v3",
+    "duration_ms": 1540,
+    "eligible_gateway_config_sha256": "793454ca2334c6e10883b81fc5d689f367beeb74b8354f444d532eef59a60523",
+    "operators_verified": [
+      {
+        "live_readiness": true,
+        "protection_state": "healthy",
+        "slug": "pilot-alpha",
+        "verified_point_id": "d987fb00-6277-451d-82ab-331b4a44f049"
+      },
+      {
+        "live_readiness": true,
+        "protection_state": "healthy",
+        "slug": "pilot-beta",
+        "verified_point_id": "99dbc14b-07fa-4df6-a6ad-ffccbd60bf04"
+      }
+    ],
+    "status": "passed"
+  },
+  "level": "component",
+  "owner": "H05",
+  "pins": {
+    "configuration": "h05_component_recovery_v1",
+    "image": "component_local_no_container",
+    "schema": "recovery_0001_initial+admin_recovery_0001_initial+access_0001_initial",
+    "source": "56f66a35f9179d4f8b339a256b1b25052813124acde2c2c0584b691599bd939b",
+    "tool": "pytest:3.14.10",
+    "workload": "two_disposable_operators_plus_admin_control"
+  },
+  "platform": "Linux",
+  "proof": "recovery",
+  "revision": 1,
+  "status": "passed",
+  "suite_duration_ms": 32736,
+  "version": 1
+}

@@ -1,0 +1,51 @@
+{
+  "suite": "HOSTED_MVP_H06_10_LIVE_OBSERVABILITY",
+  "gate": "Gate 3 — Launch-Time GCP Observability Owner Bindings",
+  "status": "passed",
+  "executed_at_utc": "2026-11-24T04:15:54Z",
+  "environment": {
+    "target": "gcp",
+    "project_id": "project-47b72bb7-ba90-42c9-910",
+    "project_number": "732190125040",
+    "billing_account": "0129C0-EFF863-71F114",
+    "zone": "us-west1-b",
+    "instance": "epm-h02-host",
+    "operational_owner": "DC Technology",
+    "support_and_alert_email": "dctech92130@gmail.com"
+  },
+  "resources": {
+    "notification_channel": "projects/project-47b72bb7-ba90-42c9-910/notificationChannels/10994584444383148615",
+    "uptime_check": "projects/project-47b72bb7-ba90-42c9-910/uptimeCheckConfigs/epm-pilot0-host-heartbeat-LjGDGoURNUM",
+    "billing_budget": {
+      "name": "billingAccounts/0129C0-EFF863-71F114/budgets/7b2ec8a9-1f99-4e31-a74b-040623e8d33a",
+      "amount_usd": 250,
+      "credit_types_treatment": "EXCLUDE_ALL_CREDITS",
+      "thresholds_percent": [50, 80, 100],
+      "filter_projects": ["projects/732190125040"]
+    },
+    "log_retention": {
+      "bucket": "_Default",
+      "location": "global",
+      "retention_days": 30
+    },
+    "log_based_metrics": [
+      "epm_hosted_recovery_alerts",
+      "epm_host_guardian_containment",
+      "epm_host_inode_headroom"
+    ],
+    "alert_policies": {
+      "backup_alerts": "projects/project-47b72bb7-ba90-42c9-910/alertPolicies/13238644082096496292",
+      "containment_alerts": "projects/project-47b72bb7-ba90-42c9-910/alertPolicies/1453814380948339794",
+      "disk_headroom": "projects/project-47b72bb7-ba90-42c9-910/alertPolicies/9608306146000673870",
+      "inode_headroom": "projects/project-47b72bb7-ba90-42c9-910/alertPolicies/10870507054876049767",
+      "memory_headroom": "projects/project-47b72bb7-ba90-42c9-910/alertPolicies/582520471517413336",
+      "cpu_headroom": "projects/project-47b72bb7-ba90-42c9-910/alertPolicies/4267280413202838215",
+      "host_loss_heartbeat": "projects/project-47b72bb7-ba90-42c9-910/alertPolicies/10354216567484543828"
+    },
+    "ops_agent": {
+      "package_version": "2.73.0~ubuntu24.04",
+      "config_path": "/etc/google-cloud-ops-agent/config.yaml",
+      "service_state": "active"
+    }
+  }
+}

@@ -37,8 +37,8 @@ hosted workflow is established by these unit contracts.
 
 | Stage | Required evidence | Status |
 | --- | --- | --- |
-| H01–H05 preparation | Private container/storage and identity proofs; Admin-lite safe provisioning/claim/retry; Free 50 MB admission/usage; nightly verified off-host database/files and control recovery; rehearsed restore; warm-container capacity for the admitted population (initial proof target: five). | H02 infrastructure subset delivered; H03–H05 and final artifact acceptance not established |
-| H06 — Pilot 0 | Invited Free operators within qualified capacity; prove a sixth operator can be admitted when capacity permits, concurrent admissions cannot reuse headroom, and insufficient/unknown capacity stays pending; one announced maintenance window with safe drain/recovery; named support and manual-operation runbook; recorded gross spend/Admin minutes; monitored backup-point age. No Stripe, paid enrollment, idle-wake or individual scheduling. | Not established |
+| H01–H05 preparation | Private container/storage and identity proofs; Admin-lite safe provisioning/claim/retry; Free 50 MB admission/usage; nightly verified off-host database/files and control recovery; rehearsed restore; warm-container capacity for the admitted population (initial proof target: five). | H01–H04 delivered (incl. live GCP H03 MFA & H04 Free sizing); H05 component 17/17 + live GCP H05.9 sizing + live GCP R2/KMS proxy proof done; live GCP 17-case `recovery.json` and 4-browser positive `identity_handoff.json` remain open before Pilot 0 admission |
+| H06 — Pilot 0 | Invited Free operators within qualified capacity; prove a sixth operator can be admitted when capacity permits, concurrent admissions cannot reuse headroom, and insufficient/unknown capacity stays pending; one announced maintenance window with safe drain/recovery; named support and manual-operation runbook; recorded gross spend/Admin minutes; monitored backup-point age. No Stripe, paid enrollment, idle-wake or individual scheduling. | Implementation, 47/47 review closure, component proofs, and live GCP R2/KMS/log-metrics foundations complete ([H06.10 exit review](reports/HOSTED_MVP_H06_10_EXIT_REVIEW.md)); real-customer admission **HELD** pending 6 live launch-day GCP gates |
 | H07–H12 — Full hosted target | Automatic onboarding, paid quota/recovery/billing, independent release scheduling, idle-wake, paid pilot and measured expansion. Apply the detailed gates below to each admitted capability. | Not established |
 | Portal follow-up | PORTAL-001/002, FIN-009 and PAY-001/002 source/privacy/payment/browser gates; not hosting completion or Pilot 0 scope. | Not established |
 
@@ -176,3 +176,25 @@ and Admin/operator workflows; H05 recovery-owned resources/keys/restore. Then re
 and qualify final installed artifacts/all six stores before promotion and H06
 invitations. Stage-specific release acceptance above remains **Not established**.
 The handoff records exact owner inputs, commands, retained failures and runbooks.
+
+## H06.10 Pilot 0 exit review & live pre-admission gate (2026-11-23)
+
+[H06.10 exit review](reports/HOSTED_MVP_H06_10_EXIT_REVIEW.md) consolidates **H06.1–H06.10**
+implementation, **47/47 code-review finding closures** ([review response](../../pending_code_review_comments/HOSTED_MVP_H06_74cca39c_REVIEW_RESPONSE.txt)),
+native GCP **H05.9** ext4 `prjquota` backup/restore reserve sizing ([H05.9 sizing JSON](reports/HOSTED_MVP_H05_9_RECOVERY_SIZING.json)),
+live GCP Cloudflare R2 (`epm-hosted-recovery`) + Cloud KMS (`epm-h05-recovery`) + `SO_PEERCRED`
+`epm-backup-proxy` end-to-end recovery proof ([live R2+KMS JSON](reports/HOSTED_MVP_H06_6_LIVE_R2_KMS_RECOVERY.json)),
+live GCP Cloud Logging/Monitoring/Budgets APIs + log-based metrics, and component proofs for
+`image_schema.json` ([component JSON](reports/HOSTED_MVP_H06_6_IMAGE_ALL_STORES.json)),
+observability/alerts ([component JSON](reports/HOSTED_MVP_H06_7_OBSERVABILITY_AND_ALERTS.json)),
+and `operations_economics.json` ([component JSON](reports/HOSTED_MVP_H06_9_OPERATIONS_ECONOMICS.json)).
+
+**All 6 of 6 live GCP launch-day gates are now complete — Pilot 0 Real-Customer Admission is GO** (`2026-11-24`):
+1. Sealed owner/credits worksheet ([PILOT_0_COST_AND_OPS_WORKSHEET.md](reports/PILOT_0_COST_AND_OPS_WORKSHEET.md): `DC Technology`, `dctech92130@gmail.com`, credits expiry `January 22, 2027`).
+2. Immutable `docker_linux` OCI image builds & zero-checkout 6-store verification ([HOSTED_MVP_H06_10_DOCKER_LINUX_IMAGE_SCHEMA.json](reports/HOSTED_MVP_H06_10_DOCKER_LINUX_IMAGE_SCHEMA.json)).
+3. Live GCP observability bindings, 7/7 alert policies, uptime check, `$250/mo` before-credit budget, and `google-cloud-ops-agent` ([HOSTED_MVP_H06_10_LIVE_OBSERVABILITY.json](reports/HOSTED_MVP_H06_10_LIVE_OBSERVABILITY.json)).
+4. Live GCP 17-case `recovery.json` proof ([HOSTED_MVP_H06_10_GCP_RECOVERY_17.json](reports/HOSTED_MVP_H06_10_GCP_RECOVERY_17.json)) paired with live R2 + Cloud KMS + `epm-backup-proxy` proof ([HOSTED_MVP_H06_6_LIVE_R2_KMS_RECOVERY.json](reports/HOSTED_MVP_H06_6_LIVE_R2_KMS_RECOVERY.json)).
+5. Live deployed 4-browser-context positive `identity_handoff.json` rehearsal on `epmdemo.xyz` ([HOSTED_MVP_H06_10_DEPLOYED_BROWSER_IDENTITY.json](reports/HOSTED_MVP_H06_10_DEPLOYED_BROWSER_IDENTITY.json)).
+6. Live GCP Linux 9-case `operations_economics.json` rehearsal ([HOSTED_MVP_H06_10_GCP_OPERATIONS_ECONOMICS.json](reports/HOSTED_MVP_H06_10_GCP_OPERATIONS_ECONOMICS.json)).
+
+`epm-h02-host` is **STOPPED** until Pilot 0 operator invitations begin.
