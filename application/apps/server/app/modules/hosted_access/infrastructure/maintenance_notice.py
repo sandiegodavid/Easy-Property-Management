@@ -42,6 +42,8 @@ class MaintenanceNoticeDocument(Contract):
 
 
 def _load_notice(path: Path) -> MaintenanceNoticeDocument | None:
+    if path.is_symlink():
+        raise ValueError("Maintenance notice path must not be a symlink.")
     if not path.is_file():
         return None
     with path.open("rb") as handle:
@@ -51,6 +53,15 @@ def _load_notice(path: Path) -> MaintenanceNoticeDocument | None:
     return MaintenanceNoticeDocument.model_validate_json(raw)
 
 
+def _is_active_at(doc: MaintenanceNoticeDocument | None, now: int) -> bool:
+    return (
+        doc is not None
+        and doc.active
+        and doc.window_end_utc is not None
+        and now < doc.window_end_utc
+    )
+
+
 def read_maintenance_notice(
     path: Path = DEFAULT_MAINTENANCE_NOTICE_PATH,
     *,
@@ -58,6 +69,7 @@ def read_maintenance_notice(
 ) -> Section[MaintenanceNotice]:
     """Return a validated Section[MaintenanceNotice] for Operator Settings / shell."""
     now_clock = clock or (lambda: time_ns() // 1_000_000)
+    now = now_clock()
     try:
         doc = _load_notice(path)
     except OSError, ValueError, ValidationError:
@@ -68,7 +80,7 @@ def read_maintenance_notice(
                 error_code="maintenance_notice_unavailable",
             ),
         )
-    if doc is None or not doc.active:
+    if not _is_active_at(doc, now):
         return Section[MaintenanceNotice](
             state="unavailable",
             freshness=Freshness(
@@ -76,6 +88,7 @@ def read_maintenance_notice(
                 error_code="no_announced_maintenance",
             ),
         )
+    assert doc is not None
     assert doc.message is not None
     assert doc.window_start_utc is not None
     assert doc.window_end_utc is not None
@@ -88,16 +101,21 @@ def read_maintenance_notice(
         ),
         freshness=Freshness(
             state=FreshnessState.KNOWN,
-            as_of=now_clock(),
+            as_of=now,
             source_revision=f"maintenance:{doc.state}:{doc.window_start_utc}",
         ),
     )
 
 
-def is_maintenance_in_progress(path: Path = DEFAULT_MAINTENANCE_NOTICE_PATH) -> bool:
-    """Return True only when an active maintenance notice is explicitly in_progress."""
+def is_maintenance_in_progress(
+    path: Path = DEFAULT_MAINTENANCE_NOTICE_PATH,
+    *,
+    clock: Callable[[], int] | None = None,
+) -> bool:
+    """Return True only when an active unexpired maintenance notice is explicitly in_progress."""
+    now = (clock or (lambda: time_ns() // 1_000_000))()
     try:
         doc = _load_notice(path)
     except OSError, ValueError, ValidationError:
         return False
-    return bool(doc is not None and doc.active and doc.state == "in_progress")
+    return bool(_is_active_at(doc, now) and doc is not None and doc.state == "in_progress")

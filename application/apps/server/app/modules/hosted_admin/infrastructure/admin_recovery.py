@@ -1480,20 +1480,22 @@ def build_bootstrap_recovery_authenticator(
         claims = verify_firebase_token(token)
         issuer = str(claims.get("iss") or "")
         subject = str(claims.get("sub") or "")
-        mfa_verified = bool(claims.get("totp_mfa_verified") or claims.get("firebase_mfa_totp"))
+        raw_mfa = claims.get("mfa_verified_at")
+        mfa_verified_at = (
+            raw_mfa if isinstance(raw_mfa, int) and not isinstance(raw_mfa, bool) else None
+        )
         revoked = bool(claims.get("revoked"))
-        if revoked:
+        if revoked or mfa_verified_at is None:
             raise ProviderDenied()
-        authority, authority_ref = load_bootstrap_authority(bootstrap_authority_path)
+        authority, _authority_ref = load_bootstrap_authority(bootstrap_authority_path)
         principal = authority.verify_identity(
-            issuer=issuer, subject=subject, mfa_verified=mfa_verified
+            issuer=issuer, subject=subject, mfa_verified_at=mfa_verified_at
         )
         return AdminRecoveryAuthority(
             deployment_id=authority.deployment_id,
             bootstrap_principal_ref=principal.principal_ref,
-            bootstrap_authority_ref=authority_ref,
             current_mfa_proof_ref=f"mfa:{principal.subject}",
-            mfa_verified_at=clock(),
+            step_up_at=mfa_verified_at,
             confirmed_request_hash=confirmed_request_hash or ("0" * 64),
         )
 
@@ -1506,14 +1508,37 @@ def create_admin_recovery_app(
     authenticate_recovery,
 ):
     """Standalone Admin recovery-mode ASGI app that boots without opening admin.sqlite (#22)."""
-    from fastapi import FastAPI, Request as FastAPIRequest
+    from fastapi import FastAPI, HTTPException, Request as FastAPIRequest
     from app.modules.hosted_admin.api.recovery_router import build_admin_recovery_router
+    from app.platform.hosted_security_headers import API_SECURITY_HEADERS
+
+    max_recovery_body_bytes = 64 * 1024
 
     async def _read_body(request: FastAPIRequest) -> dict[str, object]:
-        raw = await request.json()
+        chunks: list[bytes] = []
+        total = 0
+        async for chunk in request.stream():
+            total += len(chunk)
+            if total > max_recovery_body_bytes:
+                raise HTTPException(status_code=413, detail="Request body too large.")
+            chunks.append(chunk)
+        if not chunks:
+            return {}
+        try:
+            raw = json.loads(b"".join(chunks).decode("utf-8"))
+        except (UnicodeDecodeError, ValueError) as error:
+            raise HTTPException(status_code=400, detail="Malformed JSON body.") from error
         return raw if isinstance(raw, dict) else {}
 
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+
+    @app.middleware("http")
+    async def _security_headers_middleware(request: FastAPIRequest, call_next):
+        response = await call_next(request)
+        for header_name, header_val in API_SECURITY_HEADERS.items():
+            response.headers.setdefault(header_name, header_val)
+        return response
+
     app.include_router(
         build_admin_recovery_router(
             recovery,

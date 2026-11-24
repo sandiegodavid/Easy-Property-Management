@@ -76,12 +76,12 @@ gcloud logging buckets update _Default \
 # 4. Create log-based metrics for backup alerts and host guardian containment
 gcloud logging metrics create epm_hosted_recovery_alerts \
   --description="Hosted recovery overdue/failure alerts (H05/H06)" \
-  --log-filter='jsonPayload.event="hosted_recovery_alert" OR textPayload:"hosted_recovery_alert"' \
+  --log-filter='(jsonPayload.event="hosted_recovery_alert" OR textPayload:"hosted_recovery_alert") AND severity>=WARNING AND NOT textPayload:"\"backup_recovered\""' \
   --project="${PROJECT}"
 
 gcloud logging metrics create epm_host_guardian_containment \
   --description="Host guardian container containment events (H02/H06)" \
-  --log-filter='jsonPayload.event="host_guardian_containment" OR textPayload:"host_guardian_containment"' \
+  --log-filter='jsonPayload.event="runtime_containment_attention" OR textPayload:"runtime_containment_attention"' \
   --project="${PROJECT}"
 ```
 
@@ -114,12 +114,13 @@ gcloud monitoring uptime create epm-pilot0-host-heartbeat \
   --timeout=10 \
   --project="${PROJECT}"
 
-# 3. Create the $250/month before-credit Billing Budget (50%, 80%, 100% thresholds)
+# 3. Resolve numeric project number and create the $250/month before-credit Billing Budget (50%, 80%, 100% thresholds)
+PROJECT_NUMBER=$(gcloud projects describe "${PROJECT}" --format='value(projectNumber)')
 gcloud billing budgets create \
   --billing-account="${BILLING_ACCOUNT}" \
   --display-name="EPM Pilot 0 Monthly Gross Spend (\$250)" \
   --budget-amount=250USD \
-  --filter-projects="projects/${PROJECT}" \
+  --filter-projects="projects/${PROJECT_NUMBER}" \
   --credit-types-treatment=exclude-all-credits \
   --threshold-rule=percent=0.5 \
   --threshold-rule=percent=0.8 \

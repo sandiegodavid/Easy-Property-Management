@@ -140,7 +140,7 @@ class AdminWorkspaceReadiness:
                 connection.execute(
                     text(
                         "SELECT o.setup_state, o.desired_access, o.access_epoch, "
-                        "       rec.protection_state "
+                        "       rec.protection_state, rec.source_epoch, rec.verified_at "
                         "FROM main.operators o "
                         "LEFT JOIN main.workspace_recovery_status rec "
                         "  ON rec.operator_id = o.operator_id "
@@ -158,15 +158,20 @@ class AdminWorkspaceReadiness:
             and int(row["access_epoch"]) == int(access_epoch)
             and row["setup_state"] in {"ready_for_claim", "active"}
             and row["protection_state"] in {"healthy", "unchanged"}
+            and row["source_epoch"] is not None
+            and int(row["source_epoch"]) == int(row["access_epoch"])
+            and row["verified_at"] is not None
         )
 
 
 async def _recovery_mode_central_unavailable(scope, receive, send):
+    from app.platform.hosted_security_headers import API_SECURITY_HEADERS
+
     await Response(
         content='{"code":"admin_recovery_mode_active","message":"Sign-in is unavailable during Admin recovery."}',
         status_code=503,
         media_type="application/json",
-        headers={"Cache-Control": "no-store"},
+        headers=API_SECURITY_HEADERS,
     )(scope, receive, send)
 
 
@@ -187,6 +192,34 @@ def owned_identity_socket(directory, scope_id):
         inode = path.lstat().st_ino
         try:
             path.chmod(0o600)
+            listener.listen(8)
+            yield listener
+        finally:
+            try:
+                if path.lstat().st_ino == inode:
+                    path.unlink()
+            except FileNotFoundError:
+                pass
+
+
+@contextmanager
+def owned_relay_status_socket(directory: Path):
+    """Bind recovery-status.sock for Ed25519 + SO_PEERCRED authenticated protection summaries."""
+    info = directory.stat()
+    if (
+        not directory.is_absolute()
+        or directory.resolve(strict=True) != directory
+        or info.st_uid != os.geteuid()
+        or stat.S_IMODE(info.st_mode) & 0o022
+        or not stat.S_ISDIR(info.st_mode)
+    ):
+        raise ValueError("Use a private owned socket directory for recovery-status.sock.")
+    path = directory / "recovery-status.sock"
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
+        listener.bind(str(path))
+        inode = path.lstat().st_ino
+        try:
+            path.chmod(0o666)
             listener.listen(8)
             yield listener
         finally:
@@ -231,7 +264,9 @@ class SharedIdentityHTTP:
                 key in {b"forwarded", b"x-forwarded-host", b"x-forwarded-for"} for key, _ in headers
             )
         ):
-            await Response(status_code=421)(scope, receive, send)
+            from app.platform.hosted_security_headers import API_SECURITY_HEADERS
+
+            await Response(status_code=421, headers=API_SECURITY_HEADERS)(scope, receive, send)
             return
         if hosts == [self.admin_host]:
             await self.admin(scope, receive, send)
@@ -239,7 +274,9 @@ class SharedIdentityHTTP:
             handler = self.helpers if scope["path"] in HELPER_PATHS else self.central
             await handler(scope, receive, send)
         else:
-            await Response(status_code=421)(scope, receive, send)
+            from app.platform.hosted_security_headers import API_SECURITY_HEADERS
+
+            await Response(status_code=421, headers=API_SECURITY_HEADERS)(scope, receive, send)
 
 
 def create_app(config_path):
@@ -363,10 +400,11 @@ def create_app(config_path):
         )
 
         @asynccontextmanager
-        async def lifespan(_app):
+        async def lifespan(lifespan_app):
             stop_scheduler = asyncio.Event()
             scheduler_task = None
             relay_server = None
+            lifespan_app.state.epm_ready = False
             try:
                 with HostedWriterLock(deployment.writer_lock):
                     async with AsyncExitStack() as stack:
@@ -391,36 +429,39 @@ def create_app(config_path):
                             )
                         if registry.sources:
                             summary_listener = stack.enter_context(
-                                owned_identity_socket(
-                                    configuration.socket_directory, "recovery-status"
-                                )
+                                owned_relay_status_socket(configuration.socket_directory)
                             )
                             relay_server = RecoveryStatusRelayServer(
                                 summary_listener,
                                 recovery_ingest,
-                                allowed_uid=configuration.host_relay_uid,
+                                allowed_uids=None,
                             )
                             relay_server.start()
                         if admin_scheduler is not None:
                             scheduler_task = asyncio.create_task(
                                 admin_scheduler.run_forever(stop_scheduler)
                             )
-                        yield
+                        lifespan_app.state.epm_ready = not bundle.recovery_mode
+                        try:
+                            yield
+                        finally:
+                            lifespan_app.state.epm_ready = False
+                            stop_scheduler.set()
+                            if scheduler_task is not None:
+                                scheduler_task.cancel()
+                                try:
+                                    await scheduler_task
+                                except asyncio.CancelledError:
+                                    pass
+                            if relay_server is not None:
+                                await asyncio.to_thread(relay_server.stop)
             finally:
-                stop_scheduler.set()
-                if scheduler_task is not None:
-                    scheduler_task.cancel()
-                    try:
-                        await scheduler_task
-                    except asyncio.CancelledError:
-                        pass
-                if relay_server is not None:
-                    relay_server.stop()
                 if bundle.admin_recovery_engine is not None:
                     bundle.admin_recovery_engine.dispose()
                 engine.dispose()
 
         app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None, lifespan=lifespan)
+        app.state.epm_ready = False
         app.mount(
             "/",
             SharedIdentityHTTP(
@@ -449,7 +490,9 @@ def main():
         if load_manifest(application_root() / "hosted-candidate.json").ui != "compiled_identity":
             raise ValueError("Install the shared identity package.")
         app, configuration = create_app(args.configuration)
-        with internal_health_server(lambda: True, port=args.health_port):
+        with internal_health_server(
+            lambda: bool(getattr(app.state, "epm_ready", False)), port=args.health_port
+        ):
             run_identity_tls(app, configuration.listen_address, args)
     except Exception:
         parser.exit(3, "The protected shared identity candidate is unavailable.\n")

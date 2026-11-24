@@ -35,7 +35,7 @@
     "runtime_repair_support": {
       "no_admin_offline_decrypt_bypass": true,
       "repair_module_verified": true,
-      "runbook_sha256": "234918156572f040781fa33e220c7502d50834796b797a1639fceb30afc3b516",
+      "runbook_sha256": "b0c10ad830799049794f6217cfbf8bb996eb53f9e218c0b6a1abb59cd716c05e",
       "status": "passed"
     },
     "seed_failure_disabled": {
@@ -53,18 +53,19 @@
       "unknown_capacity_fails_closed": true
     }
   },
-  "level": "manual",
+  "level": "component",
+  "live_manual_rehearsal_pending": true,
   "owner": "H06.9",
   "pins": {
     "configuration": "pilot0_v1",
     "image": "production_entrypoints_h06_6",
     "schema": "all_6_stores_implemented",
-    "source": "42fbdc54d91c2b949691ae89fe04032434248236569cfca379fed5144c0721cf",
+    "source": "40fb758aebb16c8debfb303d6240d35bbf7e72b09a770080518775668d1f148c",
     "tool": "python-admin-control-pilot0",
     "workload": "pilot0_empty_and_synthetic_cohort"
   },
   "proof": "operations_economics",
-  "recorded_at_ms": 1795477100237,
+  "recorded_at_ms": 1795489151123,
   "revision": 1,
   "status": "passed",
   "version": 1

@@ -11,7 +11,7 @@
 | Alert Source | Signal | First-Response Action |
 | --- | --- | --- |
 | **Backup Overdue / Failure** (`epm_hosted_recovery_alerts` / webhook) | `backup_overdue`, `backup_failed`, `backup_unknown` | Inspect Cloud Logging for `hosted_recovery_alert` (operator ID, error code, consecutive failures). Check `epm-backup-proxy.service`, R2 reachability, and Cloud KMS IAM. **Do not clear alert** until a new verified recovery point succeeds and `backup_recovered` emits. |
-| **Host Guardian Containment** (`epm_host_guardian_containment`) | `host_guardian_containment` | Inspect `journalctl -u epm-host-guardian.service` for the contained container and reason. Verify no cross-operator boundary breach; repair runtime before re-enabling ingress. |
+| **Host Guardian Containment** (`epm_host_guardian_containment`) | `runtime_containment_attention` | Inspect `journalctl -u epm-host-guardian.service` for the contained container and reason. Verify no cross-operator boundary breach; repair runtime before re-enabling ingress. |
 | **Host Disk / RAM / CPU Headroom** | Disk > 80%, RAM > 85%, CPU > 85% (10m) | Pause new Pilot 0 admissions immediately. Inspect per-tree `repquota -P /srv/epm/data`, Docker logs, and container RSS. Clear only after headroom returns below thresholds. |
 | **External Host-Loss Heartbeat** (`epm-pilot0-host-heartbeat`) | Uptime check failed > 5m | Check GCP VM status (`epm-h02-host`) and `epm-tunnel.service` / `epm-gateway.service`. If host is lost, execute whole-host recovery from [H05_RECOVERY_OPERATIONS_RUNBOOK.md](H05_RECOVERY_OPERATIONS_RUNBOOK.md) (4h RTO engineering objective). |
 

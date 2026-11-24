@@ -104,31 +104,43 @@ export function HostedMaintenanceBanner() {
 
   useEffect(() => {
     if (!hosted) return;
-    const controller = new AbortController();
     let active = true;
-    fetchHostedSettings(controller.signal)
-      .then((payload) => {
-        if (!active) return;
-        if (payload.maintenance.state === "ready" && payload.maintenance.data?.message) {
-          const start = formatWindowBoundary(payload.maintenance.data.starts_at);
-          const end = formatWindowBoundary(payload.maintenance.data.ends_at);
-          setNotice({
-            inProgress: isMaintenanceInProgressRevision(
-              payload.maintenance.freshness?.source_revision,
-            ),
-            message: payload.maintenance.data.message,
-            windowLabel: start && end ? `${start} – ${end}` : null,
-          });
-        } else {
-          setNotice(null);
-        }
-      })
-      .catch(() => {
-        // Non-blocking banner: never interrupt active workspace editing on background fetch error.
-      });
+    let controller: AbortController | null = null;
+    const refresh = () => {
+      if (!active || document.visibilityState === "hidden") return;
+      controller?.abort();
+      controller = new AbortController();
+      fetchHostedSettings(controller.signal)
+        .then((payload) => {
+          if (!active) return;
+          if (payload.maintenance.state === "ready" && payload.maintenance.data?.message) {
+            const start = formatWindowBoundary(payload.maintenance.data.starts_at);
+            const end = formatWindowBoundary(payload.maintenance.data.ends_at);
+            setNotice({
+              inProgress: isMaintenanceInProgressRevision(
+                payload.maintenance.freshness?.source_revision,
+              ),
+              message: payload.maintenance.data.message,
+              windowLabel: start && end ? `${start} – ${end}` : null,
+            });
+          } else {
+            setNotice(null);
+          }
+        })
+        .catch(() => {
+          // Non-blocking banner: never interrupt active workspace editing on background fetch error.
+        });
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 60_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
     return () => {
       active = false;
-      controller.abort();
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+      controller?.abort();
     };
   }, [hosted]);
 

@@ -79,7 +79,7 @@ def test_maintenance_notice_reader_handles_missing_inactive_malformed_and_active
     assert sec.data.message == "Scheduled Pilot 0 maintenance window."
     assert sec.freshness is not None
     assert sec.freshness.source_revision == f"maintenance:announced:{NOW_MS + 60_000}"
-    assert is_maintenance_in_progress(missing) is False
+    assert is_maintenance_in_progress(missing, clock=lambda: NOW_MS) is False
 
     missing.write_text(
         json.dumps(
@@ -93,7 +93,8 @@ def test_maintenance_notice_reader_handles_missing_inactive_malformed_and_active
         ),
         encoding="utf-8",
     )
-    assert is_maintenance_in_progress(missing) is True
+    assert is_maintenance_in_progress(missing, clock=lambda: NOW_MS) is True
+    assert is_maintenance_in_progress(missing, clock=lambda: NOW_MS + 600_000) is False
 
 
 def test_build_alert_emitter_validates_webhook_url():

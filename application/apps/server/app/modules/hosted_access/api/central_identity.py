@@ -1,6 +1,7 @@
 """Central-only identity routes composed with authenticated source and readiness owners."""
 
 import asyncio
+from html import escape
 import json
 from pathlib import Path
 from secrets import token_urlsafe
@@ -159,7 +160,13 @@ def build_central_identity_app(
             "history.replaceState(null,'',location.pathname);"
         )
         script = f'<script nonce="{request.state.nonce}">{scrub}</script>' if email else ""
-        content = content.replace("<head>", "<head>" + script, 1)
+        support_val = str(web_config.get("supportContact") or "")
+        support_meta = (
+            f'<meta name="epm-support-contact" content="{escape(support_val, quote=True)}">'
+            if support_val
+            else ""
+        )
+        content = content.replace("<head>", "<head>" + support_meta + script, 1)
         response = HTMLResponse(content)
         if email:
             set_cookie(response, cookies.central_challenge, token_urlsafe(32), 900)

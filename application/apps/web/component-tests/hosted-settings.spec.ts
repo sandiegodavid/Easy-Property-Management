@@ -106,7 +106,9 @@ test("hosted mode reports unavailable storage usage honestly without fabricating
     page.getByText("Degraded — latest verified point: 2026-11-22T20:00:00.000Z"),
   ).toBeVisible();
   await expect(page.getByRole("progressbar")).toHaveCount(0);
-  await expect(page.getByText("Planned maintenance Sunday 02:00 UTC.")).toBeVisible();
+  await expect(page.getByTestId("hosted-maintenance-announced")).toContainText(
+    "Planned maintenance Sunday 02:00 UTC.",
+  );
 });
 
 test("local mode does not render HostedSettings or call /api/hosted/settings", async ({ page }) => {
@@ -179,7 +181,9 @@ test("H06.5 Pilot 0 maintenance updating notice and disclosure render cleanly at
     for (const width of [390, 900, 1440]) {
       await page.setViewportSize({ width, height: 844 });
       await page.goto(`${fixture}?mode=hosted`);
-      await expect(page.getByText("Updating your workspace:")).toBeVisible();
+      await expect(page.getByTestId("hosted-maintenance-in-progress")).toContainText(
+        "Updating your workspace:",
+      );
       await expect(page.getByTestId("pilot0-disclosure")).toContainText("No contractual SLA");
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth > document.documentElement.clientWidth,

@@ -60,12 +60,10 @@ class FirebaseHelpers:
             connection.close()
 
     async def __call__(self, scope, receive, send):
+        from app.platform.hosted_security_headers import API_SECURITY_HEADERS
+
         path, query = scope["path"], scope["query_string"]
-        headers = {
-            "Cache-Control": "no-store",
-            "X-Content-Type-Options": "nosniff",
-            "Referrer-Policy": "no-referrer",
-        }
+        headers = dict(API_SECURITY_HEADERS)
         if scope["method"] != "GET" or scope.get("raw_path") != path.encode("ascii"):
             response = Response(status_code=404, headers=headers)
         elif path == INIT_PATH:

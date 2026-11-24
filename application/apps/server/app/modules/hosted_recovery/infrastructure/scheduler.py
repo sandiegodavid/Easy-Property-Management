@@ -45,6 +45,35 @@ def deterministic_nightly_jitter_seconds(
     return int.from_bytes(digest[:4], "big") % window_seconds
 
 
+def _is_nightly_slot_due(
+    *, now: int, last_protected_at: int | None, interval_ms: int, jitter_ms: int
+) -> bool:
+    """Anchor nightly capture to a deterministic UTC slot (day_start + jitter) with zero drift."""
+    if last_protected_at is None:
+        return True
+    day_start_ms = (now // interval_ms) * interval_ms
+    slot_ms = day_start_ms + jitter_ms
+    if now >= slot_ms:
+        return last_protected_at < slot_ms
+    prev_slot_ms = slot_ms - interval_ms
+    return last_protected_at < prev_slot_ms
+
+
+async def _run_tick_shielded(fn: Callable[[], bool], error_message: str) -> None:
+    """Run a blocking scheduler tick in a thread and shield it from cancellation until done."""
+    task = asyncio.create_task(asyncio.to_thread(fn))
+    try:
+        await asyncio.shield(task)
+    except asyncio.CancelledError:
+        try:
+            await task
+        except Exception:
+            logger.warning(error_message)
+        raise
+    except Exception:
+        logger.warning(error_message)
+
+
 class WorkspaceBackupScheduler:
     """In-process nightly capture + hourly overdue/dirty watchdog for one Operator workspace."""
 
@@ -74,15 +103,27 @@ class WorkspaceBackupScheduler:
 
     def run_once(self) -> bool:
         """Evaluate freshness/watchdog and run nightly capture if due. Returns True if captured."""
+        if hasattr(self.recovery_service, "mark_dirty_if_diverged"):
+            self.recovery_service.mark_dirty_if_diverged()
         snap = self.recovery_service.evaluate_freshness()
         now = self.clock()
-        due = (
-            snap.last_verified_at is None
-            or (now - snap.last_verified_at) >= self.nightly_interval_ms + self.jitter_ms
+        last_protected_at = snap.last_verified_at
+        if (
+            getattr(snap, "protection_state", None) == "unchanged"
+            and last_protected_at is not None
+            and getattr(snap, "last_checked_at", None) is not None
+        ):
+            last_protected_at = max(last_protected_at, int(snap.last_checked_at))
+        due = _is_nightly_slot_due(
+            now=now,
+            last_protected_at=last_protected_at,
+            interval_ms=self.nightly_interval_ms,
+            jitter_ms=self.jitter_ms,
         )
         if not due:
             return False
         day_bucket = now // NIGHTLY_INTERVAL_MS
+        rev = max(1, snap.revision)
         scope = WorkspaceScope(operator_id=self.operator_id, workspace_id=self.workspace_id)
         actor = ServiceAuthority(
             deployment_id=self.deployment_id,
@@ -94,16 +135,16 @@ class WorkspaceBackupScheduler:
             deployment_id=self.deployment_id,
             scope=scope,
             kind="capture",
-            expected_revision=max(1, snap.revision),
+            expected_revision=rev,
             access_epoch=1,
             payload=Capture(
                 capture_policy_ref="free-nightly-v1",
-                expected_checkpoint_revision=max(1, snap.revision),
+                expected_checkpoint_revision=rev,
             ),
         )
         command = WorkspaceRecoveryCommand(
             operation_id=str(uuid4()),
-            idempotency_key=f"nightly:{self.operator_id}:{day_bucket}",
+            idempotency_key=f"nightly:{self.operator_id}:{day_bucket}:r{rev}",
             intent=intent,
             request_hash=semantic_hash(intent),
         )
@@ -112,10 +153,9 @@ class WorkspaceBackupScheduler:
 
     async def run_forever(self, stop_event: asyncio.Event) -> None:
         while not stop_event.is_set():
-            try:
-                await asyncio.to_thread(self.run_once)
-            except Exception:
-                logger.warning("Workspace nightly backup scheduler tick failed.")
+            await _run_tick_shielded(
+                self.run_once, "Workspace nightly backup scheduler tick failed."
+            )
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=self.watchdog_interval_seconds)
             except TimeoutError:
@@ -166,13 +206,16 @@ class AdminControlBackupScheduler:
         """Run nightly control-plane capture if due. Returns True if captured."""
         last_verified, revision = self._read_last_verified_and_revision()
         now = self.clock()
-        due = (
-            last_verified is None
-            or (now - last_verified) >= self.nightly_interval_ms + self.jitter_ms
+        due = _is_nightly_slot_due(
+            now=now,
+            last_protected_at=last_verified,
+            interval_ms=self.nightly_interval_ms,
+            jitter_ms=self.jitter_ms,
         )
         if not due:
             return False
         day_bucket = now // NIGHTLY_INTERVAL_MS
+        rev = max(1, revision)
         scope = DeploymentScope()
         actor = ServiceAuthority(
             deployment_id=self.deployment_id,
@@ -184,16 +227,16 @@ class AdminControlBackupScheduler:
             deployment_id=self.deployment_id,
             scope=scope,
             kind="capture_control",
-            expected_revision=max(1, revision),
+            expected_revision=rev,
             access_epoch=1,
             payload=CaptureControl(
                 capture_policy_ref="admin-nightly-v1",
-                expected_checkpoint_revision=max(1, revision),
+                expected_checkpoint_revision=rev,
             ),
         )
         command = AdminRecoveryCommand(
             operation_id=str(uuid4()),
-            idempotency_key=f"admin-nightly:{self.deployment_id}:{day_bucket}",
+            idempotency_key=f"admin-nightly:{self.deployment_id}:{day_bucket}:r{rev}",
             intent=intent,
             request_hash=semantic_hash(intent),
         )
@@ -202,10 +245,9 @@ class AdminControlBackupScheduler:
 
     async def run_forever(self, stop_event: asyncio.Event) -> None:
         while not stop_event.is_set():
-            try:
-                await asyncio.to_thread(self.run_once)
-            except Exception:
-                logger.warning("Admin nightly control backup scheduler tick failed.")
+            await _run_tick_shielded(
+                self.run_once, "Admin nightly control backup scheduler tick failed."
+            )
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=self.watchdog_interval_seconds)
             except TimeoutError:

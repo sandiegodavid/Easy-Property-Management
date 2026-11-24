@@ -2,7 +2,7 @@
 
 import asyncio
 from collections.abc import Callable
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import asynccontextmanager, contextmanager, nullcontext
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -26,6 +26,7 @@ from app.modules.hosted_access.api.managed_business import (
 )
 from app.modules.hosted_access.domain.models import HostedAccessError
 from app.modules.hosted_access.infrastructure.managed_draft_leases import ManagedDraftLeases
+from app.platform.hosted_security_headers import API_SECURITY_HEADERS
 from app.platform.web_delivery import PackagedWebMiddleware, browser_route
 from app.modules.hosted_access.api.operator_recovery import (
     RECOVERY_ROUTE_PREFIX,
@@ -111,7 +112,9 @@ class DestinationHTTP:
             or [value for name, value in scope["headers"] if name == b"host"]
             != [self.host.encode("ascii")]
         ):
-            await JSONResponse({"state": "rejected"}, status_code=403)(scope, receive, send)
+            await JSONResponse(
+                {"state": "rejected"}, status_code=403, headers=API_SECURITY_HEADERS
+            )(scope, receive, send)
         elif scope["type"] == "http" and (
             scope["path"] in AUTH_PATHS | SECURITY_ROUTES | {SETTINGS_ROUTE}
             or scope["path"].startswith(RECOVERY_ROUTE_PREFIX)
@@ -121,6 +124,7 @@ class DestinationHTTP:
             await JSONResponse(
                 {"code": "recovery_mode_active", "message": "Workspace is in recovery mode."},
                 status_code=503,
+                headers=API_SECURITY_HEADERS,
             )(scope, receive, send)
         elif self.business and scope["type"] == "http" and scope["path"].startswith("/api/"):
             await self.business.dispatch(self.app, scope, receive, send, self.origin)
@@ -133,7 +137,9 @@ class DestinationHTTP:
             )
         ):
             response = JSONResponse(
-                {"message": "Workspace access is unavailable."}, status_code=503
+                {"message": "Workspace access is unavailable."},
+                status_code=503,
+                headers=API_SECURITY_HEADERS,
             )
             await response(scope, receive, send)
         elif scope["type"] == "websocket":
@@ -348,18 +354,13 @@ def create_minimal_recovery_app(
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
-        task: asyncio.Task[None] | None = None
-        if serve_identity is not None:
-            task = asyncio.create_task(serve_identity())
-        try:
-            yield
-        finally:
-            if task is not None:
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
+        lock_ctx = inputs.writer_lock if inputs.writer_lock is not None else nullcontext()
+        with lock_ctx:
+            if serve_identity is not None:
+                async with serve_identity():
+                    yield
+            else:
+                yield
 
     app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None, lifespan=lifespan)
     default_web_root = Path(__file__).resolve().parents[3] / "web_build"
@@ -384,9 +385,10 @@ def create_minimal_recovery_app(
         lifecycle_proof_owner=inputs.lifecycle_proof_owner,
         support_contact=inputs.support_contact,
         business=None,
-        writer_lock=None,
+        writer_lock=inputs.writer_lock,
         usage_reader=inputs.usage_reader,
         protection_reader=inputs.protection_reader,
+        maintenance_reader=inputs.maintenance_reader,
         recovery_service=inputs.recovery_service,
         recovery_mode=True,
     )

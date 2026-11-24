@@ -27,11 +27,22 @@ SENSITIVE_KEY_MARKERS = (
     "grant",
     "payload",
     "business_data",
+    "csrf",
+    "oobcode",
+    "oob_code",
+    "handoff",
+    "assertion",
+    "signing_key",
+    "access_key",
 )
 
-_BEARER_RE = re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{8,}")
-_JWT_RE = re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b")
-_COOKIE_KV_RE = re.compile(r"(?i)\b(__Host-[A-Za-z0-9_.-]+|session|csrf)=[^;\s]{4,}")
+_BEARER_RE = re.compile(r"(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{6,}")
+_JWT_RE = re.compile(
+    r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}(?![A-Za-z0-9_-])"
+)
+_COOKIE_KV_RE = re.compile(
+    r"(?i)\b(__Host-[A-Za-z0-9_.-]+|session|csrf|oobCode|apiKey|key|code|token|x-csrf-token|x-epm-csrf)=[^;&\s]{4,}"
+)
 
 
 def _is_sensitive_key(key: str) -> bool:
@@ -40,8 +51,8 @@ def _is_sensitive_key(key: str) -> bool:
 
 
 def redact_string(value: str) -> str:
-    """Strip Bearer tokens, JWTs, and host-only cookie values from log strings."""
-    cleaned = _BEARER_RE.sub("Bearer [REDACTED]", value)
+    """Strip Bearer/Basic tokens, JWTs, query secrets, and cookie values from log strings."""
+    cleaned = _BEARER_RE.sub(r"\1 [REDACTED]", value)
     cleaned = _JWT_RE.sub(REDACTED, cleaned)
     cleaned = _COOKIE_KV_RE.sub(r"\1=[REDACTED]", cleaned)
     if len(cleaned) > MAX_STRING_VALUE_LEN:
@@ -55,7 +66,7 @@ def redact_value(value: object, *, key: str = "") -> object:
         result: object = REDACTED
     elif isinstance(value, dict):
         result = {str(k): redact_value(v, key=str(k)) for k, v in value.items()}
-    elif isinstance(value, (list, tuple)):
+    elif isinstance(value, (list, tuple, set, frozenset)):
         result = [redact_value(item) for item in value]
     elif isinstance(value, str):
         result = redact_string(value)

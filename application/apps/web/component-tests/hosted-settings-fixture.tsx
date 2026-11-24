@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
-import { HostedSettings } from "../src/app/hosted-settings";
+import { HostedMaintenanceBanner, HostedSettings } from "../src/app/hosted-settings";
 import { mutation, MutationFailure } from "../src/shared/mutations";
 
 const params = new URLSearchParams(window.location.search);
@@ -58,6 +58,7 @@ function StorageLimitForm() {
 
 createRoot(document.getElementById("root")!).render(
   <main>
+    <HostedMaintenanceBanner />
     <h1>Settings</h1>
     <HostedSettings />
     <StorageLimitForm />

@@ -16,6 +16,7 @@ from app.modules.hosted_access.application.managed_provider import (
 from app.modules.hosted_access.infrastructure.source_sessions import SessionExpired, session_hash
 from app.platform.hosted_contracts.values import CanonicalId, Contract
 from app.platform.hosted_contracts.operations import SemanticConflict
+from app.platform.hosted_security_headers import API_SECURITY_HEADERS
 
 SESSION = "/api/hosted/session"
 SECURITY_ROUTES = frozenset(
@@ -27,7 +28,7 @@ SECURITY_ROUTES = frozenset(
         "/api/hosted/sessions",
     }
 )
-HEADERS = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
+HEADERS = API_SECURITY_HEADERS
 
 
 class OriginDenied(ProviderDenied):

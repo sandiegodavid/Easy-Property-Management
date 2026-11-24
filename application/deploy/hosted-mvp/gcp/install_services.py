@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import pwd
+import runpy
 import subprocess
 from tempfile import TemporaryDirectory
 import time
@@ -210,6 +211,13 @@ def install(project, domain, tunnel_id):
     if not Path(layout.tunnel_secret).exists():
         credential(project, tunnel_id)
     validate_tunnel_credential(Path(layout.tunnel_secret), tunnel_id)
+    if not Path(layout.backup_proxy_secret).exists() and os.environ.get("EPM_H05_R2_SECRET"):
+        r2_credential(project, secret_name=os.environ["EPM_H05_R2_SECRET"])
+    if Path("/etc/google-cloud-ops-agent").is_dir():
+        ops_yaml = runpy.run_path(str(Path(__file__).resolve().with_name("cloud_plan.py")))[
+            "ops_agent_config"
+        ]()
+        install_ops_agent_config(ops_yaml)
     publish_units(config, identities)
 
 
@@ -254,7 +262,12 @@ def publish_units(config, identities):
         )
     backup_proxy_identity = account("epm-backup-proxy")
     bp_name = backup_proxy_identity.pw_name
-    tmpfiles.append(f"d {layout.backup_proxy_runtime} 0750 {bp_name} {bp_name} -")
+    tmpfiles.extend(
+        [
+            f"d {layout.backup_proxy_runtime} 0711 {bp_name} {bp_name} -",
+            f"d /run/epm-projections/backup-proxy 0750 root {bp_name} -",
+        ]
+    )
     Path("/etc/tmpfiles.d/epm-host.conf").write_text("\n".join(tmpfiles) + "\n")
     call("systemd-tmpfiles", "--create", "/etc/tmpfiles.d/epm-host.conf")
     for component, name in {
@@ -271,6 +284,10 @@ def publish_units(config, identities):
     runner = (
         layout.installation + "/bin/python -B -m app.modules.host_agent.infrastructure.supervisor"
     )
+    guardian_exec = (
+        f"{runner} --registry {layout.stops} --config {layout.config} "
+        "--profile /etc/epm/runtime-profile.json"
+    )
     guardian = f"""[Unit]
 Description=EPM single containment-only runtime guardian
 Requires=docker.service srv-epm-data.mount
@@ -279,13 +296,13 @@ After=docker.service srv-epm-data.mount epm-network-policy.service
 Type=simple
 User=root
 UMask=0077
-ExecStart={runner} --registry {layout.stops} --config {layout.config}
+ExecStart={guardian_exec}
 ExecStopPost={runner} --registry {layout.stops} --contain-all
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=yes
 ProtectSystem=strict
-ReadWritePaths={layout.stops}
+ReadWritePaths={layout.stops} {Path(layout.inventory).parent}
 PrivateTmp=yes
 LimitCORE=0
 TasksMax=32
@@ -295,21 +312,17 @@ WantedBy=multi-user.target
 """
     Path("/etc/systemd/system/epm-host-guardian.service").write_text(guardian)
     call("systemctl", "daemon-reload")
-    call(
-        "systemctl",
-        "enable",
+    enabled_units = [
         "epm-gateway.service",
         "epm-tunnel.service",
         "epm-egress.service",
         "epm-host-guardian.service",
-    )
+    ]
+    if Path(layout.backup_proxy_secret).exists() and Path(layout.backup_proxy_config).exists():
+        enabled_units.append("epm-backup-proxy.service")
+    call("systemctl", "enable", *enabled_units)
     call("systemctl", "start", "epm-network-policy.service", "epm-ingress-projection.service")
-    for name in (
-        "epm-gateway.service",
-        "epm-egress.service",
-        "epm-tunnel.service",
-        "epm-host-guardian.service",
-    ):
+    for name in enabled_units:
         call("systemctl", "start", name)
     print("Protected empty inventory and closed services installed; admission unavailable.")
 

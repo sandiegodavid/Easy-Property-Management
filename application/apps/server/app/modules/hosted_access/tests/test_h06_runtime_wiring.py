@@ -20,6 +20,7 @@ from app.modules.host_agent.infrastructure.backup_proxy import (
     build_cli_parser,
     load_r2_credentials,
 )
+from app.modules.host_agent.infrastructure.container_policy import RuntimeProfile
 from app.modules.host_agent.infrastructure.host_services import TunnelSettings, service_unit
 from app.modules.host_agent.infrastructure.network_policy import NetworkSettings
 from app.modules.host_agent.infrastructure.schema_store import HostMetadata, bind_host
@@ -386,14 +387,40 @@ def test_supervisor_builds_production_host_agent_and_emits_structured_alert(tmp_
     cfg_path.write_text(inputs.model_dump_json(), encoding="utf-8")
     cfg_path.chmod(0o600)
 
+    with pytest.raises(ValueError, match="--profile"):
+        build_supervision_agent(
+            cfg_path,
+            registry=StopRegistry(stops_dir),
+            engine=object(),
+            owner=os.getuid(),
+        )
+
+    profile_path = root / "runtime-profile.json"
+    profile_path.write_text(
+        RuntimeProfile(
+            architecture="amd64",
+            apparmor_sha256="a" * 64,
+            memory_bytes=512 * 1024 * 1024,
+            cpu_millicores=1000,
+            pids=128,
+            file_descriptors=1024,
+            log_bytes=8 * 1024 * 1024,
+            log_files=3,
+        ).model_dump_json(),
+        encoding="utf-8",
+    )
+    profile_path.chmod(0o600)
+
     agent = build_supervision_agent(
         cfg_path,
         registry=StopRegistry(stops_dir),
         engine=object(),
+        profile_path=profile_path,
         owner=os.getuid(),
     )
     assert agent.inventory is not None
     assert agent.driver is not None
+    assert agent.driver.networks is not None
 
     line = _emit_containment_alert()
     payload = json.loads(line)

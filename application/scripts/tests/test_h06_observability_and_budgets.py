@@ -33,7 +33,7 @@ def test_observability_plan_covers_logging_monitoring_uptime_and_budget():
         target,
         notification_email="owner@epmdemo.xyz",
         heartbeat_host="epmdemo.xyz",
-        billing_account="01ABCD-23EF45-6789AB",
+        billing=("01ABCD-23EF45-6789AB", "732190125040"),
         monthly_budget_usd=250,
     )
     commands = obs["commands"]
@@ -44,11 +44,15 @@ def test_observability_plan_covers_logging_monitoring_uptime_and_budget():
     assert any("roles/logging.logWriter" in line for line in flat)
     assert any("roles/monitoring.metricWriter" in line for line in flat)
     assert any("--retention-days=30" in line for line in flat)
-    assert any("epm_hosted_recovery_alerts" in line for line in flat)
-    assert any("epm_host_guardian_containment" in line for line in flat)
+    assert any(
+        "epm_hosted_recovery_alerts" in line and "severity>=WARNING" in line for line in flat
+    )
+    assert any("runtime_containment_attention" in line for line in flat)
     assert any("epm-pilot0-host-heartbeat" in line for line in flat)
     assert any(
-        "--budget-amount=250USD" in line and "--credit-types-treatment=exclude-all-credits" in line
+        "--budget-amount=250USD" in line
+        and "--filter-projects=projects/732190125040" in line
+        and "--credit-types-treatment=exclude-all-credits" in line
         for line in flat
     )
 
@@ -57,13 +61,17 @@ def test_observability_plan_covers_logging_monitoring_uptime_and_budget():
         "backup_alerts",
         "containment_alerts",
         "disk_headroom",
+        "inode_headroom",
         "memory_headroom",
         "cpu_headroom",
         "host_loss_heartbeat",
     }
+    backup_agg = policies["backup_alerts"]["conditions"][0]["conditionThreshold"]["aggregations"][0]
+    assert backup_agg["perSeriesAligner"] == "ALIGN_SUM"
     heartbeat_cond = policies["host_loss_heartbeat"]["conditions"][0]["conditionThreshold"]
     assert heartbeat_cond["comparison"] == "COMPARISON_LT"
     assert heartbeat_cond["thresholdValue"] == 1.0
+    assert heartbeat_cond["aggregations"][0]["perSeriesAligner"] == "ALIGN_FRACTION_TRUE"
 
 
 @pytest.mark.parametrize(
@@ -72,7 +80,8 @@ def test_observability_plan_covers_logging_monitoring_uptime_and_budget():
         {"notification_email": "not-an-email"},
         {"notification_email": "owner@epmdemo.xyz", "heartbeat_host": "bad host"},
         {"notification_email": "owner@epmdemo.xyz", "monthly_budget_usd": 0},
-        {"notification_email": "owner@epmdemo.xyz", "billing_account": "invalid"},
+        {"notification_email": "owner@epmdemo.xyz", "billing": ("invalid", "732190125040")},
+        {"notification_email": "owner@epmdemo.xyz", "billing": ("01ABCD-23EF45-6789AB", "bad")},
     ],
 )
 def test_observability_plan_rejects_invalid_inputs(kwargs):

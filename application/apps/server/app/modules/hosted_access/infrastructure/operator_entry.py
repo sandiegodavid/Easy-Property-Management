@@ -29,6 +29,7 @@ from app.modules.hosted_access.infrastructure.handoff_signing import IdentitySig
 from app.modules.hosted_access.infrastructure.health_probes import internal_health_server
 from app.modules.hosted_access.infrastructure.maintenance_notice import (
     DEFAULT_MAINTENANCE_NOTICE_PATH,
+    is_maintenance_in_progress,
     read_maintenance_notice,
 )
 from app.modules.hosted_access.infrastructure.operator_identity_runtime import (
@@ -79,6 +80,7 @@ class OperatorDeployment(Contract):
     backup_proxy_socket: Path | None = None
     backup_proxy_uid: Uid | None = None
     recovery_status_socket: Path | None = None
+    recovery_status_peer_uid: Uid | None = None
     alert_webhook_url: str | None = None
     maintenance_notice_path: Path = DEFAULT_MAINTENANCE_NOTICE_PATH
     release_ref: Reference = "rel-hosted-mvp"
@@ -112,6 +114,22 @@ class TrustedSourceHTTP:
             await Response(status_code=421)(scope, receive, send)
         else:
             await self.app(scope, receive, send)
+
+
+def _is_maintenance_active(access_engine, notice_path: Path, clock) -> bool:
+    """Return True when maintenance_operation_id is set or shared notice marks in_progress."""
+    if is_maintenance_in_progress(notice_path, clock=clock):
+        return True
+    try:
+        with access_engine.connect() as conn:
+            row = (
+                conn.execute(text("SELECT maintenance_operation_id FROM access_meta"))
+                .mappings()
+                .one_or_none()
+            )
+        return row is not None and row["maintenance_operation_id"] is not None
+    except Exception:
+        return False
 
 
 def _live_business_readiness(access_engine, recovery_service) -> bool:
@@ -274,7 +292,11 @@ def candidate(configuration):
                 summary_publisher = (
                     UnixSummaryPublisher(
                         configuration.recovery_status_socket,
-                        expected_peer_uid=configuration.relay_uid,
+                        expected_peer_uid=(
+                            configuration.recovery_status_peer_uid
+                            if configuration.recovery_status_peer_uid is not None
+                            else configuration.relay_uid
+                        ),
                     )
                     if configuration.recovery_status_socket is not None
                     else None
@@ -332,17 +354,21 @@ def candidate(configuration):
                             central_origin=configuration.central_origin,
                             support_contact=configuration.support_contact,
                             business=None,
-                            writer_lock=None,
+                            writer_lock=HostedWriterLock(configuration.writer_lock),
                             usage_reader=lambda: None,
                             protection_reader=(
                                 recovery_service.protection_section
                                 if recovery_service is not None
                                 else None
                             ),
+                            maintenance_reader=lambda: read_maintenance_notice(
+                                configuration.maintenance_notice_path, clock=clock
+                            ),
                             recovery_service=recovery_service,
                             recovery_mode=True,
                         )
                     )
+                    app.state.epm_ready = False
                     yield TrustedSourceHTTP(app, configuration.gateway_address)
                 else:
                     active_workspace = (
@@ -399,6 +425,9 @@ def candidate(configuration):
                                     ),
                                     storage=storage_admission,
                                     files=True,
+                                    maintenance_active=lambda: _is_maintenance_active(
+                                        engine, configuration.maintenance_notice_path, clock
+                                    ),
                                 ),
                                 writer_lock=HostedWriterLock(configuration.writer_lock),
                                 usage_reader=usage_store.read_usage,
@@ -447,7 +476,11 @@ def main():
         inspect("operator")
         configuration = OperatorDeployment.model_validate_json(read_private(args.configuration))
         with candidate(configuration) as app:
-            with internal_health_server(lambda: True, port=args.health_port):
+            inner_app = getattr(app, "app", app)
+            with internal_health_server(
+                lambda: bool(getattr(getattr(inner_app, "state", None), "epm_ready", True)),
+                port=args.health_port,
+            ):
                 run_identity_tls(app, configuration.listen_address, args)
     except Exception:
         parser.exit(3, "The protected Operator authentication candidate is unavailable.\n")

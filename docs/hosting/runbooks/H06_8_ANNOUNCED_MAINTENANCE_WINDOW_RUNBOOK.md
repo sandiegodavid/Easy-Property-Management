@@ -23,11 +23,12 @@ Before announcing a maintenance window:
    {
      "active": true,
      "state": "announced",
-     "window_start_utc": "2026-12-01T06:00:00Z",
-     "window_end_utc": "2026-12-01T06:30:00Z",
+     "window_start_utc": 1796104800000,
+     "window_end_utc": 1796106600000,
      "message": "Scheduled platform maintenance for all Pilot 0 workspaces."
    }
    ```
+   *(Note: `window_start_utc` and `window_end_utc` are integer UTC epoch-millisecond timestamps matching `MaintenanceNoticeDocument`.)*
 2. **Send Cohort Notice Email (D2):**
    - Email all active Pilot 0 operators from `EPM_SUPPORT_CONTACT` with the exact UTC/local start and end window.
 3. **Verify Banner:**
@@ -60,6 +61,6 @@ Before announcing a maintenance window:
 
 ## 5. Phase 4 — Clear Notice & Record Metrics
 
-1. Update `/run/epm/maintenance-notice.json` to `{"active": false, "state": "announced", "window_start_utc": null, "window_end_utc": null, "message": ""}` (or remove the file cleanly).
+1. Update `/run/epm/maintenance-notice.json` to `{"active": false, "state": "announced", "window_start_utc": null, "window_end_utc": null, "message": null}` (or remove the file cleanly).
 2. Verify Operator UI clears the maintenance state, unfinished drafts remain intact, and a post-update read/write smoke check passes.
 3. Record actual outage duration (seconds), pinned release digests, and total Admin minutes in [PILOT_0_COST_AND_OPS_WORKSHEET.md](../qualification/reports/PILOT_0_COST_AND_OPS_WORKSHEET.md).

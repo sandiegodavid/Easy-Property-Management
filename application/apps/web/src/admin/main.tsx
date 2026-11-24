@@ -71,9 +71,11 @@ function Admin() {
   async function google() {
     setBusy(true);
     setMessage("Opening Google sign-in…");
+    let supportContact = support;
     try {
       const start = await request<Start>("/auth/start");
       attempt.current = start.attemptId;
+      supportContact = start.supportContact;
       setSupport(start.supportContact);
       auth.current ??= initializeAuth(initializeApp(start.firebase), {
         persistence: inMemoryPersistence,
@@ -114,7 +116,7 @@ function Admin() {
       }
     } catch {
       setMessage(
-        `Sign-in could not continue. Allow the Google popup and try again, or contact ${support || "the platform owner"}.`,
+        `Sign-in could not continue. Allow the Google popup and try again, or contact ${supportContact || "the platform owner"}.`,
       );
     } finally {
       setBusy(false);

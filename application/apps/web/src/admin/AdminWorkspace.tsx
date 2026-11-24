@@ -809,33 +809,36 @@ export function AdminWorkspace({ session }: { session: AdminSession }) {
         aria-label="Pilot 0 cohort health, headroom, and maintenance overview"
         data-testid="admin-cohort-overview"
       >
-        <p>
-          <strong>Cohort:</strong> {total} operator{total === 1 ? "" : "s"} (
-          {items.filter((op) => op.setup_state === "active").length} active,{" "}
-          {items.filter((op) => op.setup_state === "needs_attention").length} needing attention)
-        </p>
-        <p>
-          <strong>Protection health:</strong>{" "}
-          {
-            items.filter(
-              (op) =>
-                op.protection.state === "ready" &&
-                (op.protection.data?.state === "healthy" ||
-                  op.protection.data?.state === "unchanged" ||
-                  op.protection.data?.status === "protected"),
-            ).length
-          }{" "}
-          protected,{" "}
-          {
-            items.filter(
-              (op) =>
-                op.protection.state !== "ready" ||
-                (op.protection.data?.status === "degraded" &&
-                  op.protection.data?.state !== "unchanged"),
-            ).length
-          }{" "}
-          degraded / unavailable
-        </p>
+        {(() => {
+          const isProtected = (op: OperatorSummary) => {
+            const p = op.protection.data;
+            return (
+              op.protection.state === "ready" &&
+              p != null &&
+              (p.state === "healthy" ||
+                p.state === "unchanged" ||
+                (p.status === "protected" && p.state !== "overdue" && p.state !== "unknown"))
+            );
+          };
+          const protectedCount = items.filter(isProtected).length;
+          const degradedCount = items.length - protectedCount;
+          const totalLabel =
+            typeof total === "number" ? `${total} operator${total === 1 ? "" : "s"}` : "—";
+          return (
+            <>
+              <p>
+                <strong>Cohort:</strong> {totalLabel} (page: {items.length} shown,{" "}
+                {items.filter((op) => op.setup_state === "active").length} active,{" "}
+                {items.filter((op) => op.setup_state === "needs_attention").length} needing
+                attention)
+              </p>
+              <p>
+                <strong>Protection health (this page):</strong> {protectedCount} protected,{" "}
+                {degradedCount} degraded / unavailable
+              </p>
+            </>
+          );
+        })()}
         <p>
           <strong>Host headroom:</strong>{" "}
           {bootstrap?.capacity.available
@@ -843,7 +846,7 @@ export function AdminWorkspace({ session }: { session: AdminSession }) {
             : "Capacity review required"}
         </p>
         <p>
-          <strong>Maintenance window:</strong> Shared Pilot 0 announced window (Free pilot)
+          <strong>Maintenance policy:</strong> Shared Pilot 0 announced window (Free pilot)
         </p>
       </section>
 

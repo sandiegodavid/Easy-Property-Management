@@ -77,6 +77,15 @@ WORKSHEET_PATH = (
     / "PILOT_0_COST_AND_OPS_WORKSHEET.md"
 )
 REQUIRED_CLI_ARGS = 2
+EXPECTED_DELIVERED_ALERTS = 2
+H05_9_SIZING_PATH = (
+    REPO_ROOT
+    / "docs"
+    / "hosting"
+    / "qualification"
+    / "reports"
+    / "HOSTED_MVP_H05_9_RECOVERY_SIZING.json"
+)
 DEPLOYMENT_ID = "00000000-0000-4000-8000-000000000901"
 PRINCIPAL_ID = "00000000-0000-4000-8000-000000000902"
 RELEASE_ID = "00000000-0000-4000-8000-000000000903"
@@ -91,11 +100,22 @@ def load_spec() -> dict[str, object]:
 
 
 def _free_budget() -> OperatorBudget:
+    sizing = json.loads(H05_9_SIZING_PATH.read_text(encoding="utf-8"))
+    prof = sizing["derived_trees"]
     return OperatorBudget(
         trees=ResourceLimits(
-            workspace=TreeLimits(byte_ceiling=128 * MIB, inode_ceiling=4096),
-            control=TreeLimits(byte_ceiling=16 * MIB, inode_ceiling=1024),
-            scratch=TreeLimits(byte_ceiling=64 * MIB, inode_ceiling=1024),
+            workspace=TreeLimits(
+                byte_ceiling=int(prof["workspace"]["byte_ceiling"]),
+                inode_ceiling=int(prof["workspace"]["inode_ceiling"]),
+            ),
+            control=TreeLimits(
+                byte_ceiling=int(prof["control"]["byte_ceiling"]),
+                inode_ceiling=int(prof["control"]["inode_ceiling"]),
+            ),
+            scratch=TreeLimits(
+                byte_ceiling=int(prof["scratch"]["byte_ceiling"]),
+                inode_ceiling=int(prof["scratch"]["inode_ceiling"]),
+            ),
         ),
         memory_bytes=256 * MIB,
         cpu_millicores=500,
@@ -476,7 +496,7 @@ def _case_backup_alert_support() -> dict[str, object]:
         recorded_at=NOW + 60_000,
         last_verified_at=NOW + 59_000,
     )
-    if not (first and not dup and rec) or len(delivered) != REQUIRED_CLI_ARGS:
+    if not (first and not dup and rec) or len(delivered) != EXPECTED_DELIVERED_ALERTS:
         raise ValueError("Backup alert & recovery clearing check failed.")
     return {
         "status": "passed",
@@ -600,7 +620,8 @@ def run_pilot0_qualification(output_path: Path | None = None) -> dict[str, objec
         "proof": "operations_economics",
         "owner": "H06.9",
         "revision": 1,
-        "level": "manual",
+        "level": "component",
+        "live_manual_rehearsal_pending": True,
         "status": "passed",
         "recorded_at_ms": time_ns() // 1_000_000,
         "pins": {

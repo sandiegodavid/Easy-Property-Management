@@ -177,15 +177,28 @@ function Gate({ children }: { children: ReactNode }) {
     if (bootstrap.error instanceof RecoveryModeActiveError) {
       return <HostedRecovery forceVisible />;
     }
+    const errorMessage =
+      bootstrap.error instanceof BootstrapFailure && bootstrap.error.explanation
+        ? bootstrap.error.explanation
+        : bootstrap.error instanceof BootstrapFailure && bootstrap.error.network
+          ? "Cannot connect to the local server. Check that it is running."
+          : "The local server returned an unusable response. Workspace access is paused.";
+    if (bootstrap.data?.state === "ready") {
+      return (
+        <>
+          <div role="alert" data-testid="workspace-refetch-banner">
+            <p>{errorMessage}</p>
+            <button onClick={retry}>Retry connection</button>
+          </div>
+          <div hidden aria-hidden="true">
+            <Admitted bootstrap={bootstrap.data}>{children}</Admitted>
+          </div>
+        </>
+      );
+    }
     return (
       <>
-        <p role="alert">
-          {bootstrap.error instanceof BootstrapFailure && bootstrap.error.explanation
-            ? bootstrap.error.explanation
-            : bootstrap.error instanceof BootstrapFailure && bootstrap.error.network
-              ? "Cannot connect to the local server. Check that it is running."
-              : "The local server returned an unusable response. Workspace access is paused."}
-        </p>
+        <p role="alert">{errorMessage}</p>
         <button onClick={retry}>Retry connection</button>
       </>
     );

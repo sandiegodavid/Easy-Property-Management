@@ -206,9 +206,9 @@ def build_admin_recovery_runtime(
             primary = auth_provider.verifier.google(token, admin=True)
             auth_provider.lookup_status(primary)
             return {
-                "iss": primary.issuer,
+                "iss": primary.realm,
                 "sub": primary.subject,
-                "totp_mfa_verified": primary.mfa_verified_at is not None,
+                "mfa_verified_at": primary.mfa_verified_at,
                 "revoked": False,
             }
 

@@ -21,6 +21,7 @@ from time import time_ns
 from alembic import command as alembic_command
 from alembic.config import Config as AlembicConfig
 
+from app.platform.hosted_artifacts import ArtifactInvalid, validate_path
 from app.platform.hosted_schema import HostedSchemaError, initialize_store, validate_schema
 from app.platform.schema_resources import (
     IMPLEMENTED_REVISIONS,
@@ -111,12 +112,25 @@ def _case_fresh_initialize_all_stores(tmp: Path) -> dict[str, object]:
 
 
 def _case_existing_store_read_only(tmp: Path) -> dict[str, object]:
+    digests: dict[str, str] = {}
+    for store in HostedStore:
+        db_path = tmp / f"{store.value}.sqlite"
+        before = _sha256_file(db_path)
+        result = initialize_store(store, db_path, application_directory=APPLICATION_ROOT)
+        if result.value != "already_initialized":
+            raise ValueError(
+                f"Repeated initialize_store did not report already_initialized for {store.value}."
+            )
+        after = _sha256_file(db_path)
+        if before != after:
+            raise ValueError(
+                f"Repeated initialize_store mutated existing {store.value} store bytes."
+            )
+        digests[store.value] = after
     admin_db = tmp / "admin.sqlite"
-    before = _sha256_file(admin_db)
     engine = create_sqlite_engine(admin_db)
     try:
         with engine.connect() as conn:
-            validate_schema(conn, HostedStore.ADMIN, application_directory=APPLICATION_ROOT)
             try:
                 validate_schema(conn, HostedStore.RECOVERY, application_directory=APPLICATION_ROOT)
                 raise ValueError("Wrong-store validation unexpectedly succeeded.")
@@ -124,10 +138,7 @@ def _case_existing_store_read_only(tmp: Path) -> dict[str, object]:
                 pass
     finally:
         engine.dispose()
-    after = _sha256_file(admin_db)
-    if before != after:
-        raise ValueError("Read-only validation mutated existing store bytes.")
-    return {"status": "passed", "unchanged_sha256": after}
+    return {"status": "passed", "unchanged_stores": sorted(digests), "digests": digests}
 
 
 def _case_missing_wrong_resources(tmp: Path) -> dict[str, object]:
@@ -144,16 +155,24 @@ def _case_missing_wrong_resources(tmp: Path) -> dict[str, object]:
     return {"status": "passed", "rejected_before_file_creation": True}
 
 
-def _case_wrong_component_manifest(tmp: Path) -> dict[str, object]:
-    manifest_dir = tmp / "wrong-component"
-    manifest_dir.mkdir(parents=True)
-    (manifest_dir / "hosted-candidate.json").write_text(
-        json.dumps({"component": "admin", "ui": "compiled_identity"}), encoding="utf-8"
-    )
-    loaded = json.loads((manifest_dir / "hosted-candidate.json").read_text(encoding="utf-8"))
-    if loaded["component"] == "operator":
-        raise ValueError("Component mismatch check failed.")
-    return {"status": "passed", "admin_rejected_for_operator": True}
+def _case_wrong_component_manifest(_tmp: Path) -> dict[str, object]:
+    admin_rejected = False
+    try:
+        validate_path("package", "admin_build/dist/index.html", "operator")
+    except ArtifactInvalid:
+        admin_rejected = True
+    operator_rejected = False
+    try:
+        validate_path("resource", "alembic.ini", "admin")
+    except ArtifactInvalid:
+        operator_rejected = True
+    if not (admin_rejected and operator_rejected):
+        raise ValueError("hosted_artifacts.validate_path failed cross-component rejection.")
+    return {
+        "status": "passed",
+        "admin_rejected_for_operator": admin_rejected,
+        "operator_rejected_for_admin": operator_rejected,
+    }
 
 
 def _case_partial_initializer(tmp: Path) -> dict[str, object]:
@@ -275,6 +294,7 @@ def run_image_schema_qualification(output_path: Path | None = None) -> dict[str,
         "owner": "H06.6",
         "revision": 1,
         "level": "component",
+        "docker_linux_release_promotion_pending": True,
         "status": "passed",
         "recorded_at_ms": time_ns() // 1_000_000,
         "pins": {

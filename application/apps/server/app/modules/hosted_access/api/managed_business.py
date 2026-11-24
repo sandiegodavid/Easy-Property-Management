@@ -44,6 +44,7 @@ class ManagedBusinessInputs:
     readiness: Callable[[], bool]
     storage: object
     files: bool = False
+    maintenance_active: Callable[[], bool] | None = None
 
 
 class ManagedSessionLost(RuntimeError):
@@ -151,6 +152,10 @@ class ManagedBusiness:
             cookie, csrf, write, files, size, edit, prepared = self._request(scope, origin)
 
             def admit():
+                if self.inputs.maintenance_active is not None and self.inputs.maintenance_active():
+                    raise HostedAccessError(
+                        "maintenance_in_progress", "Updating your workspace.", 503
+                    )
                 capabilities = self.capabilities()
                 if not capabilities:
                     raise ProviderUnavailable()

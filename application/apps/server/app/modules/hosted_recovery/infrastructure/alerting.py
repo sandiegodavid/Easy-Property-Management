@@ -5,7 +5,9 @@ from __future__ import annotations
 from ipaddress import ip_address
 import json
 import logging
+import socket
 import ssl
+import threading
 from typing import Literal, Protocol
 from urllib.error import URLError
 from urllib.parse import urlsplit
@@ -28,15 +30,36 @@ class _NoRedirectHandler(HTTPRedirectHandler):
 def _validate_webhook_url(webhook_url: str) -> str:
     parsed = urlsplit(webhook_url)
     host = (parsed.hostname or "").strip().lower().rstrip(".")
-    if parsed.scheme != "https" or not host or host in _FORBIDDEN_WEBHOOK_HOSTS:
+    if (
+        parsed.scheme != "https"
+        or not host
+        or parsed.username is not None
+        or parsed.password is not None
+        or host in _FORBIDDEN_WEBHOOK_HOSTS
+        or host.endswith(".localhost")
+        or host.endswith(".internal")
+    ):
         raise ValueError("Alert webhook URL must use HTTPS to a public non-local host.")
     try:
         addr = ip_address(host)
     except ValueError:
         return webhook_url
-    if addr.is_loopback or addr.is_link_local or addr.is_private or addr.is_unspecified:
-        raise ValueError("Alert webhook URL cannot target loopback, link-local, or private IPs.")
+    if not addr.is_global:
+        raise ValueError("Alert webhook URL cannot target private or non-global IP addresses.")
     return webhook_url
+
+
+def _assert_resolved_ips_global(webhook_url: str) -> None:
+    parsed = urlsplit(webhook_url)
+    host = (parsed.hostname or "").strip().lower().rstrip(".")
+    port = parsed.port or 443
+    infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    if not infos:
+        raise URLError("Alert webhook host did not resolve.")
+    for _family, _type, _proto, _canon, sockaddr in infos:
+        addr = ip_address(sockaddr[0])
+        if not addr.is_global:
+            raise URLError("Alert webhook resolved to a non-global IP address.")
 
 
 AlertKind = Literal["backup_failed", "backup_overdue", "backup_unknown", "backup_recovered"]
@@ -95,6 +118,7 @@ class WebhookAlertSink:
             if self._opener is not None:
                 self._opener(request, self.timeout_seconds)
             else:
+                _assert_resolved_ips_global(self.webhook_url)
                 http_opener = build_opener(
                     HTTPSHandler(context=self._ssl_context), _NoRedirectHandler()
                 )
@@ -110,6 +134,7 @@ class DeduplicatingAlertEmitter:
     def __init__(self, sinks: list[AlertSink] | tuple[AlertSink, ...]):
         self._sinks = tuple(sinks)
         self._active: dict[str, set[AlertKind]] = {}
+        self._lock = threading.Lock()
 
     def _deliver(self, alert: RecoveryAlert) -> None:
         for sink in self._sinks:
@@ -122,10 +147,11 @@ class DeduplicatingAlertEmitter:
         """Emit an incident alert if not already active for (operator_id, alert_kind)."""
         if alert.alert_kind == "backup_recovered":
             raise ValueError("Use notify_recovered for recovery notices.")
-        active_for_op = self._active.setdefault(alert.operator_id, set())
-        if alert.alert_kind in active_for_op:
-            return False
-        active_for_op.add(alert.alert_kind)
+        with self._lock:
+            active_for_op = self._active.setdefault(alert.operator_id, set())
+            if alert.alert_kind in active_for_op:
+                return False
+            active_for_op.add(alert.alert_kind)
         self._deliver(alert)
         return True
 
@@ -140,10 +166,11 @@ class DeduplicatingAlertEmitter:
         last_verified_at: int | None,
     ) -> bool:
         """Emit a single backup_recovered notice if any incident was active for operator_id."""
-        active_for_op = self._active.get(operator_id)
-        if not active_for_op:
-            return False
-        active_for_op.clear()
+        with self._lock:
+            active_for_op = self._active.get(operator_id)
+            if not active_for_op:
+                return False
+            active_for_op.clear()
         self._deliver(
             RecoveryAlert(
                 deployment_id=deployment_id,
@@ -161,7 +188,8 @@ class DeduplicatingAlertEmitter:
         return True
 
     def active_kinds(self, operator_id: str) -> frozenset[AlertKind]:
-        return frozenset(self._active.get(operator_id, ()))
+        with self._lock:
+            return frozenset(self._active.get(operator_id, ()))
 
 
 def build_alert_emitter(

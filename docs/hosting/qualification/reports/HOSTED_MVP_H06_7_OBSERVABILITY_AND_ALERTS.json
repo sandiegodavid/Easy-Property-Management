@@ -14,6 +14,8 @@
       "webhook_delivery_count": 2
     }
   },
+  "level": "component",
+  "live_gcp_owner_bindings_pending": true,
   "owner": "H06.7",
   "plan_summary": {
     "alert_policy_names": [
@@ -22,6 +24,7 @@
       "cpu_headroom",
       "disk_headroom",
       "host_loss_heartbeat",
+      "inode_headroom",
       "memory_headroom"
     ],
     "budget_excludes_credits": true,
@@ -30,7 +33,7 @@
     "monthly_budget_usd": 250
   },
   "proof": "h06_7_observability_alerts_and_budget",
-  "recorded_at_ms": 1795476332308,
+  "recorded_at_ms": 1795489149258,
   "status": "passed",
   "version": 1
 }

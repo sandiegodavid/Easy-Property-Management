@@ -225,10 +225,15 @@ _DOMAIN_RE = re.compile(
     r"(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$"
 )
 _BILLING_RE = re.compile(r"^[A-F0-9]{6}-[A-F0-9]{6}-[A-F0-9]{6}$")
+_PROJECT_NUM_RE = re.compile(r"^[0-9]{6,20}$")
 
 
 def ops_agent_config() -> str:
-    """Return hardened GCP Ops Agent YAML for epm-h02-host (30d Cloud Logging + host metrics)."""
+    """Return hardened GCP Ops Agent YAML for epm-h02-host (30d Cloud Logging + host metrics).
+
+    Secret redaction is enforced strictly at the application logger (`hosted_logging.py`).
+    Docker JSON logs and systemd journald streams use separate pipelines with matching parsers.
+    """
     return """logging:
   receivers:
     epm_systemd:
@@ -238,14 +243,16 @@ def ops_agent_config() -> str:
       include_paths:
         - /var/lib/docker/containers/*/*-json.log
   processors:
-    parse_epm_json:
+    parse_docker_json:
       type: parse_json
-      time_key: timestamp
+      time_key: time
   service:
     pipelines:
-      epm_logs:
-        receivers: [epm_systemd, epm_docker_json]
-        processors: [parse_epm_json]
+      epm_systemd_logs:
+        receivers: [epm_systemd]
+      epm_docker_logs:
+        receivers: [epm_docker_json]
+        processors: [parse_docker_json]
 metrics:
   receivers:
     hostmetrics:
@@ -264,9 +271,9 @@ def _alert_policy(
     metric_filter: str,
     *,
     threshold_value: float,
-    options: tuple[str, str] = ("0s", "COMPARISON_GT"),
+    options: tuple[str, str, str] = ("0s", "COMPARISON_GT", "ALIGN_MEAN"),
 ) -> dict[str, object]:
-    duration, comparison = options
+    duration, comparison, aligner = options
     return {
         "displayName": display_name,
         "combiner": "OR",
@@ -281,7 +288,7 @@ def _alert_policy(
                     "aggregations": [
                         {
                             "alignmentPeriod": "60s",
-                            "perSeriesAligner": "ALIGN_MEAN",
+                            "perSeriesAligner": aligner,
                         }
                     ],
                 },
@@ -295,7 +302,7 @@ def observability_plan(
     *,
     notification_email: str,
     heartbeat_host: str = "epmdemo.xyz",
-    billing_account: str | None = None,
+    billing: tuple[str, str] | None = None,
     monthly_budget_usd: int = 250,
 ) -> dict[str, object]:
     """Explicit reviewed GCP Monitoring, Logging, Ops Agent & Budget plan (H06.7 / D3 / D9)."""
@@ -305,8 +312,16 @@ def observability_plan(
         raise ValueError("A canonical heartbeat_host domain is required.")
     if not (1 <= monthly_budget_usd <= MAX_BUDGET_USD):
         raise ValueError("monthly_budget_usd must be between 1 and 1000.")
-    if billing_account is not None and not _BILLING_RE.fullmatch(billing_account):
-        raise ValueError("Canonical GCP billing account ID (XXXXXX-XXXXXX-XXXXXX) is required.")
+    billing_account: str | None = None
+    project_number: str | None = None
+    if billing is not None:
+        billing_account, project_number = billing
+        if not _BILLING_RE.fullmatch(billing_account):
+            raise ValueError("Canonical GCP billing account ID (XXXXXX-XXXXXX-XXXXXX) is required.")
+        if not _PROJECT_NUM_RE.fullmatch(project_number):
+            raise ValueError(
+                "Numeric GCP project_number is required for --filter-projects in Billing Budgets."
+            )
 
     p = "--project=" + target.project
     sa = target.service_account + "@" + target.project + ".iam.gserviceaccount.com"
@@ -358,8 +373,9 @@ def observability_plan(
             "create",
             "epm_hosted_recovery_alerts",
             "--description=Hosted recovery overdue/failure alerts (H05/H06)",
-            '--log-filter=jsonPayload.event="hosted_recovery_alert" OR '
-            'textPayload:"hosted_recovery_alert"',
+            '--log-filter=(jsonPayload.event="hosted_recovery_alert" OR '
+            'textPayload:"hosted_recovery_alert") AND severity>=WARNING '
+            'AND NOT textPayload:"\\"backup_recovered\\""',
             p,
         ],
         [
@@ -368,8 +384,8 @@ def observability_plan(
             "create",
             "epm_host_guardian_containment",
             "--description=Host guardian container containment events (H02/H06)",
-            '--log-filter=jsonPayload.event="host_guardian_containment" OR '
-            'textPayload:"host_guardian_containment"',
+            '--log-filter=jsonPayload.event="runtime_containment_attention" OR '
+            'textPayload:"runtime_containment_attention"',
             p,
         ],
         [
@@ -386,7 +402,7 @@ def observability_plan(
             p,
         ],
     ]
-    if billing_account is not None:
+    if billing_account is not None and project_number is not None:
         commands.append(
             [
                 "billing",
@@ -395,7 +411,7 @@ def observability_plan(
                 "--billing-account=" + billing_account,
                 "--display-name=EPM Pilot 0 Monthly Gross Spend ($" + str(monthly_budget_usd) + ")",
                 "--budget-amount=" + str(monthly_budget_usd) + "USD",
-                "--filter-projects=projects/" + target.project,
+                "--filter-projects=projects/" + project_number,
                 "--credit-types-treatment=exclude-all-credits",
                 "--threshold-rule=percent=0.5",
                 "--threshold-rule=percent=0.8",
@@ -409,12 +425,14 @@ def observability_plan(
             "epm_hosted_recovery_alerts > 0",
             'metric.type="logging.googleapis.com/user/epm_hosted_recovery_alerts"',
             threshold_value=0.0,
+            options=("0s", "COMPARISON_GT", "ALIGN_SUM"),
         ),
         "containment_alerts": _alert_policy(
             "EPM Host Guardian Containment Alert",
             "epm_host_guardian_containment > 0",
             'metric.type="logging.googleapis.com/user/epm_host_guardian_containment"',
             threshold_value=0.0,
+            options=("0s", "COMPARISON_GT", "ALIGN_SUM"),
         ),
         "disk_headroom": _alert_policy(
             "EPM Host Disk Utilization > 80%",
@@ -425,7 +443,18 @@ def observability_plan(
                 'AND metric.labels.state="used"'
             ),
             threshold_value=80.0,
-            options=("300s", "COMPARISON_GT"),
+            options=("300s", "COMPARISON_GT", "ALIGN_MEAN"),
+        ),
+        "inode_headroom": _alert_policy(
+            "EPM Host Inode Utilization > 80%",
+            "Inode percent_used > 80%",
+            (
+                'metric.type="agent.googleapis.com/disk/inode_percent_used" '
+                'AND resource.type="gce_instance" '
+                'AND metric.labels.state="used"'
+            ),
+            threshold_value=80.0,
+            options=("300s", "COMPARISON_GT", "ALIGN_MEAN"),
         ),
         "memory_headroom": _alert_policy(
             "EPM Host Memory Utilization > 85%",
@@ -436,24 +465,25 @@ def observability_plan(
                 'AND metric.labels.state="used"'
             ),
             threshold_value=85.0,
-            options=("300s", "COMPARISON_GT"),
+            options=("300s", "COMPARISON_GT", "ALIGN_MEAN"),
         ),
         "cpu_headroom": _alert_policy(
             "EPM Host CPU Utilization > 85%",
             "CPU utilization > 85% for 10m",
             ('metric.type="agent.googleapis.com/cpu/utilization" AND resource.type="gce_instance"'),
             threshold_value=0.85,
-            options=("600s", "COMPARISON_GT"),
+            options=("600s", "COMPARISON_GT", "ALIGN_MEAN"),
         ),
         "host_loss_heartbeat": _alert_policy(
             "EPM Host Loss External Heartbeat Failure",
             "External HTTPS uptime check failed",
             (
                 'metric.type="monitoring.googleapis.com/uptime_check/check_passed" '
-                'AND resource.type="uptime_url"'
+                'AND resource.type="uptime_url" '
+                'AND metric.labels.check_id="epm-pilot0-host-heartbeat"'
             ),
             threshold_value=1.0,
-            options=("300s", "COMPARISON_LT"),
+            options=("300s", "COMPARISON_LT", "ALIGN_FRACTION_TRUE"),
         ),
     }
 

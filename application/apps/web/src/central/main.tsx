@@ -76,7 +76,9 @@ function Login() {
   const [factors, setFactors] = useState<{ uid: string; displayName?: string | null }[]>([]);
   const [factorId, setFactorId] = useState("");
   const [code, setCode] = useState("");
-  const [support, setSupport] = useState("");
+  const [support, setSupport] = useState(
+    () => document.querySelector('meta[name="epm-support-contact"]')?.getAttribute("content") ?? "",
+  );
   const auth = useRef<Auth | null>(null);
   const attempt = useRef("");
   const resolver = useRef<MultiFactorResolver | null>(null);

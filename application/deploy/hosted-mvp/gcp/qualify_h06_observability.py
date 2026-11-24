@@ -148,7 +148,7 @@ def run_observability_qualification(output_path: Path | None = None) -> dict[str
         target,
         notification_email="ops@epmdemo.xyz",
         heartbeat_host="epmdemo.xyz",
-        billing_account="01ABCD-23EF45-6789AB",
+        billing=("01ABCD-23EF45-6789AB", "732190125040"),
         monthly_budget_usd=250,
     )
     startup_text = (GCP_DIR / "startup.sh").read_text(encoding="utf-8")
@@ -160,6 +160,8 @@ def run_observability_qualification(output_path: Path | None = None) -> dict[str
         "version": 1,
         "proof": "h06_7_observability_alerts_and_budget",
         "owner": "H06.7",
+        "level": "component",
+        "live_gcp_owner_bindings_pending": True,
         "status": "passed",
         "recorded_at_ms": time_ns() // 1_000_000,
         "plan_summary": {

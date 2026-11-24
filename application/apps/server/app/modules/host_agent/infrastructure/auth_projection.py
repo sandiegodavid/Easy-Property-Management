@@ -185,7 +185,7 @@ def _workspace_eligible_routes(origin, endpoint):
             {
                 "handler": "static_response",
                 "status_code": 403,
-                "headers": {"Cache-Control": ["no-store"]},
+                "headers": {"Cache-Control": ["no-store"], **CADDY_SECURITY_RESPONSE_HEADERS},
                 "body": "Request denied.",
             }
         ],

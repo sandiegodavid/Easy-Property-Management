@@ -391,26 +391,52 @@ def handle_proxy_connection(
         pass
 
 
+def _remove_stale_owned_socket(socket_path: Path) -> None:
+    """Remove a stale owned Unix socket left behind by SIGKILL/OOM if no listener responds."""
+    try:
+        info = socket_path.lstat()
+    except FileNotFoundError:
+        return
+    if not stat.S_ISSOCK(info.st_mode) or info.st_uid != os.getuid():
+        raise BackupProxyDenied("Existing path at backup proxy socket is not an owned socket.")
+    probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    probe.settimeout(0.2)
+    try:
+        probe.connect(str(socket_path))
+    except ConnectionRefusedError:
+        socket_path.unlink()
+    except OSError as error:
+        raise BackupProxyDenied("Cannot safely probe existing backup proxy socket.") from error
+    else:
+        raise BackupProxyDenied("Another epm-backup-proxy listener is already active.")
+    finally:
+        probe.close()
+
+
 @contextmanager
 def backup_proxy_listener(
     socket_path: Path,
     *,
     client_gid: int | None = None,
-    socket_mode: int = 0o660,
+    socket_mode: int | None = None,
 ):
-    """Bind a fresh private Unix socket for epm-backup-proxy; never take over an existing socket."""
+    """Bind a fresh private Unix socket for epm-backup-proxy; clean stale owned sockets safely."""
     if not socket_path.is_absolute() or socket_path.parent.resolve() != socket_path.parent:
         raise BackupProxyDenied("Backup proxy socket path must be canonical and absolute.")
     parent = socket_path.parent.stat()
-    if parent.st_uid != os.getuid() or stat.S_IMODE(parent.st_mode) & 0o027:
+    if parent.st_uid != os.getuid() or stat.S_IMODE(parent.st_mode) & 0o022:
         raise BackupProxyDenied("Backup proxy socket directory has unsafe ownership or mode.")
+    _remove_stale_owned_socket(socket_path)
+    effective_mode = (
+        (0o660 if client_gid is not None else 0o666) if socket_mode is None else socket_mode
+    )
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     identity: tuple[int, int] | None = None
     try:
         listener.bind(str(socket_path))
-        if client_gid is not None:
+        if client_gid is not None and client_gid != os.getgid():
             os.chown(socket_path, os.getuid(), client_gid)
-        os.chmod(socket_path, socket_mode)
+        os.chmod(socket_path, effective_mode)
         info = socket_path.lstat()
         identity = (info.st_dev, info.st_ino)
         listener.listen(16)
@@ -696,8 +722,15 @@ def build_cli_parser() -> argparse.ArgumentParser:
 
 def _resolve_cli_settings(args: argparse.Namespace) -> dict[str, object]:
     cfg: dict[str, object] = {}
-    if args.config is not None:
-        raw = args.config.read_bytes()
+    config_path = args.config
+    if config_path is None:
+        cred_dir = os.environ.get("CREDENTIALS_DIRECTORY")
+        if cred_dir:
+            candidate = Path(cred_dir) / "backup-proxy.json"
+            if candidate.is_file():
+                config_path = candidate
+    if config_path is not None:
+        raw = config_path.read_bytes()
         if len(raw) > MAX_CREDENTIALS_BYTES:
             raise BackupProxyDenied("Backup proxy config file is too large.")
         loaded = json.loads(raw.decode("utf-8"))
@@ -724,12 +757,18 @@ def _resolve_cli_settings(args: argparse.Namespace) -> dict[str, object]:
         inventory_raw is None
         or not isinstance(deployment_id, str)
         or not deployment_id
+        or isinstance(admin_uid, bool)
         or not isinstance(admin_uid, int)
+        or admin_uid <= 0
         or not operator_keys
         or not control_keys
         or creds_raw is None
     ):
-        raise BackupProxyDenied("Missing required epm-backup-proxy configuration fields.")
+        raise BackupProxyDenied("Missing or invalid epm-backup-proxy configuration fields.")
+    if client_gid is not None and (
+        isinstance(client_gid, bool) or not isinstance(client_gid, int) or client_gid <= 0
+    ):
+        raise BackupProxyDenied("client_gid must be a positive integer.")
 
     return {
         "socket": socket_path,

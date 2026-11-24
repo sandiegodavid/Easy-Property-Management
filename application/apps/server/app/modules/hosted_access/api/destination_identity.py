@@ -18,6 +18,7 @@ from app.modules.hosted_access.application.managed_provider import (
 )
 
 from app.modules.hosted_access.infrastructure.source_sessions import SessionLimitReached
+from app.platform.hosted_security_headers import API_SECURITY_HEADERS
 
 
 def _identifier(raw):
@@ -88,7 +89,7 @@ def destination_router(
                 else "Start a new sign-in from your workspace.",
             },
             status_code=503 if unavailable else 409 if capped else 401,
-            headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
+            headers=API_SECURITY_HEADERS,
         )
 
     @router.get("/auth/start")

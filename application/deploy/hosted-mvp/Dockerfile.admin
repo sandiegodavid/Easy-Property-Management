@@ -18,4 +18,4 @@ USER 65532:65532
 LABEL epm.component="admin" epm.release_track="pilot0" epm.runtime="production"
 HEALTHCHECK --interval=30s --timeout=3s CMD ["/opt/epm/venv/bin/python", "-B", "-c", "import http.client; c=http.client.HTTPConnection('127.0.0.1',8081,timeout=2); c.request('GET','/health/live'); assert c.getresponse().status==200"]
 ENTRYPOINT ["/opt/epm/venv/bin/python", "-B", "-m", "app.modules.hosted_access.infrastructure.shared_identity_entry"]
-CMD []
+CMD ["--configuration", "/control/deployment.json", "--tls-key", "/control/tls.key", "--tls-certificate", "/control/tls.crt"]

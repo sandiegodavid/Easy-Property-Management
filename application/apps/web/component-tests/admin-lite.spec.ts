@@ -264,3 +264,34 @@ test("H06.5 Admin-lite cohort overview renders cleanly at 390px, 900px, and 1440
     }
   }
 });
+
+test("H06.5 Admin-lite cohort overview handles empty cohort and mixed protection states without overlap", async ({
+  page,
+}) => {
+  await page.route("**/api/admin/session", (route) =>
+    route.fulfill({
+      json: { expiresAt: Date.now() + 3_600_000, csrfToken: "admin-csrf-token" },
+    }),
+  );
+  await page.route("**/api/admin/bootstrap", (route) => route.fulfill({ json: BOOTSTRAP }));
+  await page.route("**/api/admin/operators?*", (route) =>
+    route.fulfill({
+      json: {
+        directory: {
+          state: "ready",
+          data: {
+            items: [],
+            matching_total: null,
+            freshness: { state: "known", as_of: 1_700_000_000_000, source_revision: "registry:1" },
+          },
+        },
+        nextCursor: null,
+        actions: [{ action: "admin_create_assignment", enabled: true }],
+      },
+    }),
+  );
+  await page.goto("/admin/index.html");
+  const overview = page.getByTestId("admin-cohort-overview");
+  await expect(overview).toContainText("Cohort: —");
+  await expect(overview).toContainText("0 protected, 0 degraded / unavailable");
+});

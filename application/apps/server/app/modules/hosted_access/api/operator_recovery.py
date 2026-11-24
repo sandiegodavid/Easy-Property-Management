@@ -36,8 +36,10 @@ from app.platform.hosted_contracts.ui_states import (
 )
 from app.platform.hosted_contracts.values import CanonicalId, Contract, IdempotencyKey
 
+from app.platform.hosted_security_headers import API_SECURITY_HEADERS
+
 RECOVERY_ROUTE_PREFIX = "/api/hosted/recovery/"
-HEADERS = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
+HEADERS = API_SECURITY_HEADERS
 
 
 class PreviewRequest(Contract):

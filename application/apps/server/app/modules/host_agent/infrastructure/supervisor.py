@@ -6,7 +6,6 @@ import json
 import logging
 import os
 from pathlib import Path
-import platform
 import signal
 from threading import Event
 from time import time_ns
@@ -16,6 +15,7 @@ from app.modules.host_agent.application.service import HostAgent
 from app.modules.host_agent.infrastructure.container_policy import RuntimeProfile
 from app.modules.host_agent.infrastructure.docker_engine import DockerEngine
 from app.modules.host_agent.infrastructure.gateway import CaddyAdmin, Gateway, GatewaySettings
+from app.modules.host_agent.infrastructure.operator_networks import OperatorNetworks
 from app.modules.host_agent.infrastructure.private_storage import PrivateStorage
 from app.modules.host_agent.infrastructure.quota_targets import QuotaTargets
 from app.modules.host_agent.infrastructure.runtime_authority import RuntimeAuthority
@@ -90,14 +90,23 @@ def build_supervision_agent(
     owner: int = 0,
 ) -> HostAgent:
     """Compose a production HostAgent for standalone guardian supervision."""
-    inputs = ServiceInputs.model_validate_json(protected_bytes(config_path, owner=owner))
+    if profile_path is None:
+        raise ValueError("A pinned --profile path is required for production supervision.")
+    inputs = ServiceInputs.model_validate_json(
+        protected_bytes(config_path, owner=owner, limit=32768)
+    )
     runtime = ServiceRuntime(inputs)
     inventory = runtime.inventory()
     admin_socket = Path(inputs.layout.gateway_runtime) / "admin.sock"
+    gateway_settings = GatewaySettings(
+        admin_socket,
+        inputs.network.gateway_uid,
+        inputs.network.gateway_port,
+    )
     gateway = Gateway(
         inventory,
-        CaddyAdmin(admin_socket),
-        GatewaySettings(admin_socket, inputs.network.gateway_port),
+        CaddyAdmin(gateway_settings),
+        gateway_settings,
         lambda: registry.contain_all(engine),
         auth_endpoints=runtime.registered_sources(inventory),
     )
@@ -112,21 +121,9 @@ def build_supervision_agent(
         data_root / "scratch",
     )
     storage = PrivateStorage(targets)
-    if profile_path is not None:
-        profile = RuntimeProfile.model_validate_json(protected_bytes(profile_path, owner=owner))
-    else:
-        arch = "arm64" if platform.machine().lower() in {"aarch64", "arm64"} else "amd64"
-        profile = RuntimeProfile(
-            architecture=arch,
-            apparmor_sha256="0" * 64,
-            memory_bytes=512 * 1024 * 1024,
-            cpu_millicores=1000,
-            pids=128,
-            file_descriptors=1024,
-            log_bytes=8 * 1024 * 1024,
-            log_files=3,
-        )
+    profile = RuntimeProfile.model_validate_json(protected_bytes(profile_path, owner=owner))
     authority = RuntimeAuthority(inventory, _InstalledQualificationPort(), gateway)
+    networks = OperatorNetworks(inventory, engine, runtime.firewall, inputs.network)
     effects = NativeEffects(
         storage,
         engine,
@@ -134,6 +131,7 @@ def build_supervision_agent(
         authority,
         _StopDirEvidence(registry),
         stops=registry,
+        networks=networks,
     )
     return HostAgent(
         inventory,
