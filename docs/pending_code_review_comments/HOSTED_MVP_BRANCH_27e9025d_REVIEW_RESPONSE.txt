@@ -1,0 +1,195 @@
+Hosted MVP Branch (27e9025d) Code Review Response
+Date: 2026-11-24
+Reference Review: docs/pending_code_review_comments/HOSTED_MVP_BRANCH_27e9025d_REVIEW_COMMENTS.txt
+
+All 24 actionable findings (4 P0, 10 P1, 8 P2, 2 P3) have been addressed and validated.
+
+================================================================================
+1. Operator Backup, Restore & Runtime Repair
+================================================================================
+
+[P0] 1. Retained files resolved under workspace_dir/files/ during capture and restore
+- application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:298, 378, 2213-2214
+  Updated _read_retained_files() and stage_consistent_snapshot() to resolve local_relative_path under (workspace_dir / "files").resolve(), matching WorkspaceFileStore layout. Removed the confirm_restore() flattening loop that previously moved files out of target_dir / "files" since backup_engine.restore_point() already materializes retained files under target_dir / "files".
+- application/apps/server/app/modules/hosted_recovery/tests/test_h05_backup_runner_and_alerting.py:186
+  Updated _add_retained_file() helper to write fixtures under workspace_incarnation / "files" / rel_path.
+
+[P0] 2. Restored workspace materializes database/ layout and workspace.json; repair_runtime uses _business_db_path()
+- application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:2204-2241
+  Updated confirm_restore() to create database/, files/, exports/, and backups/ (mode 0o700), move flat property-management.sqlite to database/property-management.sqlite (mode 0o600), and write workspace.json (mode 0o600) with workspaceId, formatVersion: 1, createdAt (from workspace_metadata or clock fallback), and databasePath: "database/property-management.sqlite".
+- application/apps/server/app/modules/host_agent/infrastructure/repair_runtime.py:24, 403
+  Imported and used _business_db_path(incarnation_dir) instead of hard-coding incarnation_dir / "property-management.sqlite".
+- application/apps/server/app/modules/hosted_recovery/tests/test_h05_operator_restore_and_recovery_mode.py:496-501
+  Updated restore test assertion to verify workspace.json and open restored database at incarnation-2/database/property-management.sqlite.
+
+[P1] 3. Operator restore lifecycle wired; access_epoch updated dynamically via restore_binding receipt
+- application/apps/server/app/modules/hosted_access/infrastructure/operator_entry.py
+  Updated current_binding() to query main.access_receipts WHERE kind = 'restore_binding' AND access_epoch >= :live_epoch LIMIT 1 (removing the silent broad except Exception: pass), wired a real SourceLifecycle instance into HostedWorkspaceRecoveryService(..., source_lifecycle=recovery_lifecycle), and updated both central_key lambdas (normal and recovery modes) to compare against current_binding() instead of static binding.
+
+[P1] 4. repair_runtime records container state as 'running' after restart
+- application/apps/server/app/modules/host_agent/infrastructure/repair_runtime.py:358
+  Changed post-restart resource_bindings update from state = 'stopped' to state = 'running', last_verified_at = :now.
+
+================================================================================
+2. Admin Control-Plane Backup & Recovery
+================================================================================
+
+[P0] 5. Admin restore post-restore expiration matches terminal state CHECK/trigger exclusions
+- application/apps/server/app/modules/hosted_admin/infrastructure/admin_recovery.py:998-1018
+  Aligned post-restore SQL predicates with admin_0001_initial.py triggers:
+  - login_handoffs: WHERE state NOT IN ('redeemed', 'expired')
+  - login_attempts: WHERE state NOT IN ('completed', 'failed', 'superseded', 'expired')
+  - email_continuations: WHERE state NOT IN ('completed', 'rejected', 'expired')
+
+================================================================================
+3. Hosted Identity, Handoff & Access Control
+================================================================================
+
+[P1] 6. Preserve transfer_form Referrer-Policy: strict-origin on GET /auth/start?continuation=...
+- application/apps/server/app/modules/hosted_access/api/destination_identity.py:158
+  Changed response.headers["Referrer-Policy"] = "no-referrer" to response.headers.setdefault("Referrer-Policy", "no-referrer").
+
+[P1] 7. Wired operator restore step-up verification (recent_challenge / recent_auth_grant) end-to-end
+- application/apps/server/app/modules/hosted_access/api/destination_identity.py:34-44, 159-178
+  Added validated recent_challenge + return_to handling on GET /auth/start redirecting 303 to central_origin /auth/start?recent_challenge=...&source=...&return_to=....
+- application/apps/server/app/modules/hosted_access/api/central_identity.py:26-52, 207-225, 289-325
+  Wired session_authority.start_recent() on GET /auth/start?recent_challenge=...&source=... and session_authority.complete_recent() on POST /auth/complete returning signed grant, challengeId, and targetOrigin.
+- application/apps/server/app/modules/hosted_access/infrastructure/shared_identity_entry.py:347-379
+  Constructed CentralSessionAuthority ahead of build_central_identity_app() and passed session_authority and resolve_origin=registry.by_origin.
+- application/apps/web/src/central/main.tsx:26-148, 257-335
+  Added recent_challenge step-up UI mode that calls /auth/start?recent_challenge=...&source=..., exchanges the fresh Google ID token at /auth/complete, and redirects back to targetOrigin + return_to + #recent_auth_grant=...&challenge_id=....
+- application/apps/web/src/app/hosted-recovery.tsx:347
+  Removed non-standard "noopener=false" from window.open() feature string.
+
+[P1] 8. Forward and consume invitation claim capability in Central sign-in
+- application/apps/web/src/central/main.tsx:29-39, 98-120, 190-204
+  Retained parsed #invitation=...&token=... capability in a ref and sent invitationId/invitationToken on POST /auth/complete and POST /auth/email/continue.
+- application/apps/server/app/modules/hosted_access/api/central_identity.py:35-36, 326-352, 429-456
+  Validated optional invitationId/invitationToken on Completion and invoked service.invitations.claim(...) when present (failing closed if invitations owner is unavailable).
+- application/apps/server/app/modules/hosted_access/infrastructure/shared_identity_entry.py:29, 347-365
+  Wired CentralInvitations into CentralLogin.
+
+[P2] 9. Targeted framing/base/object CSP on Firebase auth helpers
+- application/apps/server/app/modules/hosted_access/infrastructure/firebase_helpers.py:20-25, 80-91
+  Replaced CSP deletion with targeted policies:
+  - /__/auth/handler: Content-Security-Policy: frame-ancestors 'none'; base-uri 'none'; object-src 'none' and X-Frame-Options: DENY
+  - /__/auth/iframe: Content-Security-Policy: frame-ancestors 'self' <admin_origin>; base-uri 'none'; object-src 'none'
+
+[P2] 10. Bounded JSON body parsing and duplicate-header checks on operator recovery POST routes
+- application/apps/server/app/modules/hosted_access/api/operator_recovery.py:5-7, 76, 98-127, 272-274, 316-318, 426-428
+  Added content-type and content-length to _read_cookie_and_origin() duplicate-header checks and replaced await request.json() with _read_bounded_json() (20 KB max, 10s timeout, strict application/json, duplicate-key rejection).
+
+================================================================================
+4. Host Agent, Backup Proxy, Sandbox & GCP Deployment
+================================================================================
+
+[P0] 11. Root-projected read-only inventory snapshot for epm-backup-proxy
+- application/apps/server/app/modules/host_agent/infrastructure/service_config.py:45
+  Added backup_proxy_projection = "/run/epm-projections/backup-proxy" to ServiceLayout.
+- application/apps/server/app/modules/host_agent/infrastructure/service_runtime.py:123-152, 210-212, 290, 318-329
+  Added _publish_backup_proxy_inventory() using SQLite online backup API (PRAGMA journal_mode=DELETE, 0o640 root:epm-backup-proxy, atomic os.replace) invoked on refresh and dedicated backup-proxy-projection CLI action.
+- application/apps/server/app/modules/host_agent/infrastructure/host_services.py:59-105
+  Updated epm-backup-proxy.service to run ExecStartPre=+service_runtime backup-proxy-projection and pass --inventory /run/epm-projections/backup-proxy/inventory.sqlite while preserving zero dependency on epm-ingress-projection.service.
+- application/deploy/hosted-mvp/gcp/install_services.py:266-270
+  Aligned tmpfiles entry with layout.backup_proxy_projection.
+
+[P1] 12. Bind-mount /run/epm-backup-proxy in container_spec() when configured
+- application/apps/server/app/modules/host_agent/infrastructure/container_policy.py:93-95, 131-140
+  Added optional backup_proxy_runtime parameter to container_spec() to emit the /run/epm-backup-proxy bind mount.
+- application/apps/server/app/modules/host_agent/infrastructure/runtime_effects.py:39-75
+  Threaded backup_proxy_runtime through NativeEffects into container_spec() so both container creation and guardian _sandbox() verification permit it.
+- application/apps/server/app/modules/host_agent/infrastructure/supervisor.py:157-170
+  Passed backup_proxy_runtime into NativeEffects when /run/epm-backup-proxy exists.
+
+[P1] 13. Gate epm-host-guardian.service startup on /etc/epm/runtime-profile.json
+- application/deploy/hosted-mvp/gcp/install_services.py:315-324
+  Gated enabling/starting epm-host-guardian.service on Path("/etc/epm/runtime-profile.json").exists(), matching epm-backup-proxy.service and avoiding boot crash loops on empty hosts.
+
+[P1] 14. Periodic host_inode_headroom_alert emitter in epm-host-guardian
+- application/apps/server/app/modules/host_agent/infrastructure/supervisor.py:10, 74-110, 180-235, 263-270
+  Added check_inode_headroom() using os.statvfs() on ("/", "/srv/epm/data") and wired periodic checks in Supervisor.run() to emit structured event host_inode_headroom_alert when inode usage exceeds 80%.
+
+[P2] 15. Restart google-cloud-ops-agent.service after updating config
+- application/deploy/hosted-mvp/gcp/install_services.py:331-352
+  Updated install_ops_agent_config() to run systemctl try-restart google-cloud-ops-agent.service after atomically writing /etc/google-cloud-ops-agent/config.yaml.
+
+[P2] 16. Override entrypoint in lab/compose.yaml for --health-only compatibility
+- application/deploy/hosted-mvp/lab/compose.yaml:6, 24
+  Added entrypoint overrides invoking app.hosted_candidates.admin and app.hosted_candidates.operator so --health-only works against H06.6 production images.
+
+[P3] 17. Explicit chmod(0o711) on /srv/epm/data/{workspace,control,scratch}
+- application/deploy/hosted-mvp/gcp/guest_disk.py:128-130
+  Added (MOUNT / role).chmod(0o711) after mkdir(mode=0o711) so umask 077 does not strip traversal bits.
+
+================================================================================
+5. Frontend Web Application
+================================================================================
+
+[P1] 18. Preserve mounted <Admitted> subtree across bootstrap refetch errors
+- application/apps/web/src/app/workspace-gate.tsx:176-225
+  Consolidated the ready-state rendering path so <Admitted key={`${data.workspaceId}:${data.runtimeEpoch}:${String(data.canWrite)}`} bootstrap={data}> always renders at one stable React tree position whenever bootstrap.data?.state === "ready", toggling only the refetch-error banner above it and hidden/aria-hidden/inert on its wrapper.
+
+================================================================================
+6. Static Validation, Repo Hygiene & Documentation
+================================================================================
+
+[P1] 19. Fixed secret-leak audit command in observability-and-budgets.md
+- docs/hosting/operations/observability-and-budgets.md:18-29
+  Replaced broken grep -E PCRE lookahead pipeline with a python3 regex script with explicit exit codes (0 = clean, 1 = unredacted pattern found).
+
+[P2] 20. Fixed ruff E501 errors and Prettier markdown formatting
+- application/deploy/hosted-mvp/identity/qualify_identity_proof.py:189-191, 330-335, 385-388
+  Wrapped the 4 lines exceeding 100 characters.
+- application/deploy/hosted-mvp/README.md
+  Formatted with Prettier.
+
+[P2] 21. Removed tracked Playwright test-results and updated .gitignore
+- Removed application/apps/web/test-results/ (11 generated files).
+- .gitignore:33-34
+  Updated ignore rules to **/test-results/ and **/playwright-report/.
+
+[P2] 22. Synced database schema dictionaries with executable DDL
+- docs/database/overview.md:35-39
+- docs/database/schema-resources.md:109-110, 153, 175
+- docs/database/admin-registry.md:11-12
+- docs/database/host-inventory.md:207-208
+- docs/database/admin-identity.md:102
+- docs/database/operator-access.md:248-267
+  Updated table counts (admin: 22, hosted-access: 9), Pilot 0 live status, host_receipts.kind (apply_auth_routes), login_handoffs.state (redeeming), and added the source_recent_challenges column table and indexes.
+
+[P2] 23. Corrected epm-gateway.service / host-inventory ownership in hosting docs
+- docs/hosting/operations/host-services-and-networking.md:13
+- docs/hosting/ARCHITECTURE.md:46
+  Documented that epm-gateway.service runs as unprivileged User=epm-caddy reading only /run/epm-projections/caddy/config.json, while Host Agent (epm-host-guardian / service_runtime / epm-ingress-projection) owns inventory.sqlite and projects a read-only copy to /run/epm-projections/backup-proxy/inventory.sqlite for epm-backup-proxy.
+
+[P3] 24. Fixed minor documentation inconsistencies and broken anchors
+- docs/hosting/README.md:11 ("6-store ownership")
+- README.md:65-66 (Pilot 0 live build/launch tooling location)
+- AGENTS.md:53 (repaired archived docs/archive/designs/UI-001_DESIGN.md link)
+- docs/hosting/design/mvp/subscriptions-storage-and-runtime.md:46 (removed broken anchor)
+- docs/hosting/qualification/specifications/identity_handoff.md:25 (removed broken anchor)
+
+================================================================================
+Validation Results
+================================================================================
+
+1. Python lint & format (application/pyproject.toml):
+   - ruff check on all 20 changed Python files: PASSED (0 errors)
+   - ruff format --check on all 20 changed Python files: PASSED (all formatted)
+
+2. Frontend lint, format & typecheck (from application/):
+   - npm run lint (eslint . --max-warnings 0): PASSED
+   - npm run format:check (prettier . --check): PASSED ("All matched files use Prettier code style!")
+   - npm run typecheck (node scripts/typecheck.mjs): PASSED ("Type checking passed (212 source files).")
+
+3. Focused backend & script pytest suites (from application/):
+   - Recovery, host_agent, and GCP script suites (131 tests): 131 passed
+     (test_h05_backup_runner_and_alerting.py, test_h05_operator_restore_and_recovery_mode.py,
+      test_h05_admin_control_recovery.py, test_h05_clean_runtime_repair.py,
+      test_host_services.py, test_runtime_effects.py, test_service_runtime.py,
+      test_supervisor.py, test_hosted_gcp.py, test_hosted_lab.py,
+      test_h06_observability_and_budgets.py)
+   - Hosted access identity & recovery suites (129 tests): 129 passed
+     (test_handoff.py [including AF_UNIX relay test run unsandboxed], test_central_http.py,
+      test_central_login.py, test_h05_recovery_security.py, test_h06_runtime_wiring.py,
+      test_h06_security_headers_and_logging.py, test_provider_transport.py, test_transport.py)

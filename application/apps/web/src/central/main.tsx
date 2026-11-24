@@ -26,6 +26,12 @@ delete window.epmEmailCompletion;
 const searchParams = new URLSearchParams(location.search);
 const flow = searchParams.get("flow");
 const source = searchParams.get("source");
+const recentChallenge = searchParams.get("recent_challenge");
+const recentReturnTo = (() => {
+  const raw = searchParams.get("return_to") ?? "/settings";
+  if (!raw.startsWith("/") || raw.startsWith("//")) return "/settings";
+  return raw;
+})();
 const invitationCapability = (() => {
   if (!location.hash.startsWith("#")) return null;
   const fragment = new URLSearchParams(location.hash.slice(1));
@@ -35,18 +41,22 @@ const invitationCapability = (() => {
   history.replaceState(null, "", location.pathname + location.search);
   return { invitation, token };
 })();
-void invitationCapability;
 
 interface Outcome {
   state: string;
   continuationId?: string;
   continueUrl?: string;
   handoffAttempt?: string;
+  grant?: string;
+  challengeId?: string;
+  targetOrigin?: string;
 }
 interface Start {
   attemptId: string;
   firebase: FirebaseOptions;
   supportContact?: string;
+  mode?: string;
+  targetOrigin?: string;
 }
 async function request<T>(path: string, body?: object): Promise<T> {
   const response = await fetch(path, {
@@ -79,24 +89,37 @@ function Login() {
   const [support, setSupport] = useState(
     () => document.querySelector('meta[name="epm-support-contact"]')?.getAttribute("content") ?? "",
   );
+  const recentMode = Boolean(recentChallenge && source);
   const auth = useRef<Auth | null>(null);
   const attempt = useRef("");
   const resolver = useRef<MultiFactorResolver | null>(null);
   const capability = useRef(emailCompletion);
+  const invitation = useRef(invitationCapability);
   const codeInput = useRef<HTMLInputElement>(null);
 
   async function exchange(token: string) {
-    const saved = await request<Outcome>("/auth/complete", {
-      attemptId: attempt.current,
-      token,
-      remembered,
-    });
-    setResult(saved);
-    setMessage(
-      saved.handoffAttempt
-        ? "Identity verified."
-        : "Identity verified. Workspace setup is not ready yet.",
+    const saved = await request<Outcome>(
+      "/auth/complete",
+      recentMode
+        ? {
+            attemptId: attempt.current,
+            token,
+            recentChallenge,
+            source,
+          }
+        : {
+            attemptId: attempt.current,
+            token,
+            remembered,
+            ...(invitation.current
+              ? {
+                  invitationId: invitation.current.invitation,
+                  invitationToken: invitation.current.token,
+                }
+              : {}),
+          },
     );
+    invitation.current = null;
     if (auth.current)
       await signOut(auth.current).catch(() => {
         setMessage(
@@ -105,15 +128,31 @@ function Login() {
       });
     resolver.current = null;
     setCode("");
+    if (recentMode && saved.grant && saved.targetOrigin) {
+      const challengeId = saved.challengeId ?? recentChallenge ?? "";
+      const hash = new URLSearchParams({
+        recent_auth_grant: saved.grant,
+        challenge_id: challengeId,
+      }).toString();
+      window.location.replace(`${saved.targetOrigin}${recentReturnTo}#${hash}`);
+      return;
+    }
+    setResult(saved);
+    setMessage(
+      saved.handoffAttempt
+        ? "Identity verified."
+        : "Identity verified. Workspace setup is not ready yet.",
+    );
   }
 
   async function google() {
-    if (!flow) return;
+    if (!flow && !recentMode) return;
     setBusy(true);
     try {
-      const start = await request<Start>(
-        `/auth/start?flow=${encodeURIComponent(flow)}&method=google${source ? `&source=${encodeURIComponent(source)}` : ""}`,
-      );
+      const startUrl = recentMode
+        ? `/auth/start?recent_challenge=${encodeURIComponent(recentChallenge ?? "")}&source=${encodeURIComponent(source ?? "")}`
+        : `/auth/start?flow=${encodeURIComponent(flow ?? "")}&method=google${source ? `&source=${encodeURIComponent(source)}` : ""}`;
+      const start = await request<Start>(startUrl);
       attempt.current = start.attemptId;
       if (start.supportContact) setSupport(start.supportContact);
       auth.current ??= initializeAuth(initializeApp(start.firebase), {
@@ -154,7 +193,14 @@ function Login() {
           code: capability.current.code,
           email,
           remembered,
+          ...(invitation.current
+            ? {
+                invitationId: invitation.current.invitation,
+                invitationToken: invitation.current.token,
+              }
+            : {}),
         });
+        invitation.current = null;
         capability.current.code = null;
         capability.current.attempt = null;
         capability.current = undefined;
@@ -208,7 +254,7 @@ function Login() {
   return (
     <section aria-busy={busy}>
       <p className="brand">Easy Property Management</p>
-      <h1>Sign in to your workspace</h1>
+      <h1>{recentMode ? "Confirm your identity" : "Sign in to your workspace"}</h1>
       <p role="status">{message}</p>
       {result ? (
         <>
@@ -222,7 +268,7 @@ function Login() {
             <p>You can return to your workspace to start a new sign-in.</p>
           )}
         </>
-      ) : !flow && !emailMode ? (
+      ) : !flow && !emailMode && !recentMode ? (
         <p>Open Sign in from your workspace, or request a new email link.</p>
       ) : (
         <>
@@ -237,69 +283,73 @@ function Login() {
               Continue with Google
             </button>
           )}
-          <form
-            method="post"
-            action={emailMode ? "/auth/email/continue" : "/auth/email-link"}
-            onSubmit={(event) => {
-              void submit(event);
-            }}
-          >
-            {factors.length ? (
-              <>
-                <label htmlFor="factor">Authenticator</label>
-                <select
-                  id="factor"
-                  name="factor"
-                  value={factorId}
-                  onChange={(event) => setFactorId(event.target.value)}
-                >
-                  {factors.map((factor, index) => (
-                    <option key={factor.uid} value={factor.uid}>
-                      {factor.displayName || `Authenticator ${index + 1}`}
-                    </option>
-                  ))}
-                </select>
-                <label htmlFor="code">Authenticator code (required)</label>
-                <input
-                  id="code"
-                  name="code"
-                  ref={codeInput}
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  pattern="[0-9]{6}"
-                  maxLength={6}
-                  required
-                  value={code}
-                  onChange={(event) => setCode(event.target.value)}
-                />
-              </>
-            ) : (
-              <>
-                <label htmlFor="email">Email address (required)</label>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                />
-              </>
-            )}
-            <label>
-              <input
-                type="checkbox"
-                checked={remembered}
-                onChange={(event) => setRemembered(event.target.checked)}
-              />
-              Remember this browser
-            </label>
-            <button type="submit" disabled={busy}>
-              {factors.length || emailMode ? "Verify and continue" : "Email me a sign-in link"}
-            </button>
-          </form>
+          {(!recentMode || factors.length > 0) && (
+            <form
+              method="post"
+              action={emailMode ? "/auth/email/continue" : "/auth/email-link"}
+              onSubmit={(event) => {
+                void submit(event);
+              }}
+            >
+              {factors.length ? (
+                <>
+                  <label htmlFor="factor">Authenticator</label>
+                  <select
+                    id="factor"
+                    name="factor"
+                    value={factorId}
+                    onChange={(event) => setFactorId(event.target.value)}
+                  >
+                    {factors.map((factor, index) => (
+                      <option key={factor.uid} value={factor.uid}>
+                        {factor.displayName || `Authenticator ${index + 1}`}
+                      </option>
+                    ))}
+                  </select>
+                  <label htmlFor="code">Authenticator code (required)</label>
+                  <input
+                    id="code"
+                    name="code"
+                    ref={codeInput}
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    pattern="[0-9]{6}"
+                    maxLength={6}
+                    required
+                    value={code}
+                    onChange={(event) => setCode(event.target.value)}
+                  />
+                </>
+              ) : (
+                <>
+                  <label htmlFor="email">Email address (required)</label>
+                  <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                  />
+                </>
+              )}
+              {!recentMode && (
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={remembered}
+                    onChange={(event) => setRemembered(event.target.checked)}
+                  />
+                  Remember this browser
+                </label>
+              )}
+              <button type="submit" disabled={busy}>
+                {factors.length || emailMode ? "Verify and continue" : "Email me a sign-in link"}
+              </button>
+            </form>
+          )}
           {pendingEmail && (
             <>
               <button

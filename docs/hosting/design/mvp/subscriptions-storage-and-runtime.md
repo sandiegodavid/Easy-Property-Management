@@ -43,7 +43,7 @@ Exclude backups, scratch, hosted authentication/control and physical database/al
 headroom from advertised usable storage, but reserve and monitor them in host budgets.
 Use bounded application growth reservations plus qualified filesystem hard byte/inode
 limits for private persistent trees. Ext4 project quotas are the preferred candidate
-for H02 evaluation based on the [selectively imported qualification work](implementation-contracts.md#h02-project-quota-reuse-contract), subject
+for H02 evaluation based on the [selectively imported qualification work](implementation-contracts.md), subject
 to fresh native Docker/GCP proof; historical success is not runtime qualification.
 Docker memory/CPU limits do not enforce bind-mounted workspace storage. Do not create
 an OS/filesystem/image per operator solely to express a tier. Qualify the chosen host

@@ -120,6 +120,36 @@ class ServiceRuntime:
             tunnel_config(snapshot, self.inputs.tunnel, shared=shared.manifest if shared else None),
         )
 
+    def _publish_backup_proxy_inventory(self):
+        projection_dir = Path(self.layout.backup_proxy_projection)
+        if not projection_dir.is_dir():
+            return
+        try:
+            bp_identity = pwd.getpwnam("epm-backup-proxy")
+        except KeyError:
+            return
+        source_path = Path(self.layout.inventory)
+        target_path = projection_dir / "inventory.sqlite"
+        staged_path = projection_dir / f".inventory.{os.getpid()}.sqlite.tmp"
+        try:
+            src_conn = sqlite3.connect(f"{source_path.as_uri()}?mode=ro", uri=True)
+            try:
+                dst_conn = sqlite3.connect(str(staged_path))
+                try:
+                    src_conn.backup(dst_conn)
+                    dst_conn.execute("PRAGMA journal_mode=DELETE")
+                    dst_conn.commit()
+                finally:
+                    dst_conn.close()
+            finally:
+                src_conn.close()
+            os.chown(staged_path, 0, bp_identity.pw_gid)
+            os.chmod(staged_path, 0o640)
+            os.replace(staged_path, target_path)
+        finally:
+            if staged_path.exists():
+                staged_path.unlink(missing_ok=True)
+
     def contain(self):
         self.stops.contain_all(self.engine)
 
@@ -177,6 +207,9 @@ class ServiceRuntime:
                 stopping.set()
 
     def run(self, action):
+        if action == "backup-proxy-projection":
+            self._publish_backup_proxy_inventory()
+            return
         if action == "verify-shared":
             inventory = self.inventory()
             with inventory.exclusive():
@@ -264,6 +297,7 @@ class ServiceRuntime:
                     "uid": self.inputs.network.proxy_uid,
                 }
             )
+            self._publish_backup_proxy_inventory()
         except Exception as original:
             try:
                 self.contain()
@@ -282,7 +316,16 @@ def load_inputs(path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "action", choices=("network", "refresh", "verify", "verify-shared", "contain", "relay")
+        "action",
+        choices=(
+            "network",
+            "refresh",
+            "verify",
+            "verify-shared",
+            "contain",
+            "relay",
+            "backup-proxy-projection",
+        ),
     )
     parser.add_argument("--config", type=Path, default=Path("/etc/epm/host-services.json"))
     args = parser.parse_args()

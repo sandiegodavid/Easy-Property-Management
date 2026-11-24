@@ -186,9 +186,8 @@ def execute_component_proof(output_path: Path, companion_path: Path | None = Non
     workload_files = sorted(
         (APPLICATION / "apps/server/app/modules/hosted_access/tests").glob("test_*.py")
     )
-    tool_pin = sha256_bytes(
-        f"{sys.version}|{platform.platform()}|{(APPLICATION / 'pyproject.toml').read_text()}".encode()
-    )
+    pyproject_text = (APPLICATION / "pyproject.toml").read_text()
+    tool_pin = sha256_bytes(f"{sys.version}|{platform.platform()}|{pyproject_text}".encode())
     pins = (
         Pin(
             reference="git-head",
@@ -329,8 +328,10 @@ def execute_component_proof(output_path: Path, companion_path: Path | None = Non
         cases=tuple(cases),
         status=overall,
         remaining_limits=(
-            "Component-level proof uses isolated fixed-clock adapters and does not substitute for deployed GCP/Lima native or live provider qualification.",
-            "H04/H05-owned deployed workspace handoff, eligible claim, and recovery step-up cases remain outside H03 component scope.",
+            "Component-level proof uses isolated fixed-clock adapters and does not substitute "
+            "for deployed GCP/Lima native or live provider qualification.",
+            "H04/H05-owned deployed workspace handoff, eligible claim, and recovery step-up "
+            "cases remain outside H03 component scope.",
         ),
     )
 
@@ -382,7 +383,8 @@ def execute_component_proof(output_path: Path, companion_path: Path | None = Non
             + "\n"
         )
     print(
-        f"Component proof status: {report.status.value} ({len(cases)} cases, {len(evidence_items)} suites)"
+        f"Component proof status: {report.status.value} "
+        f"({len(cases)} cases, {len(evidence_items)} suites)"
     )
     return 0 if report.status == Result.PASSED else 1
 

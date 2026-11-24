@@ -30,8 +30,8 @@ application/packages/*/dist/
 coverage/
 *.tsbuildinfo
 application/dist/
-application/test-results/
-application/playwright-report/
+**/test-results/
+**/playwright-report/
 
 # Generated assets for the checkout-based production server.
 application/apps/server/app/web_build/

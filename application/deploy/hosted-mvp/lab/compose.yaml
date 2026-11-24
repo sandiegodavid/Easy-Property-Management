@@ -3,6 +3,7 @@ services:
   admin:
     image: ${EPM_ADMIN_IMAGE:?Set the exact verified Admin image ID}
     platform: linux/amd64
+    entrypoint: ["/opt/epm/venv/bin/python", "-B", "-m", "app.hosted_candidates.admin"]
     command: ["--health-only"]
     user: "65532:65532"
     read_only: true
@@ -20,6 +21,7 @@ services:
   operator:
     image: ${EPM_OPERATOR_IMAGE:?Set the exact verified Operator image ID}
     platform: linux/amd64
+    entrypoint: ["/opt/epm/venv/bin/python", "-B", "-m", "app.hosted_candidates.operator"]
     command: ["--health-only"]
     user: "65532:65532"
     read_only: true

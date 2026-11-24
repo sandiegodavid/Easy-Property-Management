@@ -63,7 +63,7 @@ Keep this Python environment active for the commands below. `EPM_PYTHON` selects
 
 Use Docker Desktop on the Mac for routine hosted-container development; the native
 Python/Vite Operator workflow below remains supported. Hosted build/launch tooling
-is planned under H02 and requires its detailed design before implementation.
+lives under `application/deploy/hosted-mvp/` (Pilot 0 `H01–H06` live).
 
 Keep the separate Lima `epm-quota-test` VM for native Linux quota/sandbox/host-agent
 and reboot tests, stopped when unused. Preserve its baseline before installing Docker

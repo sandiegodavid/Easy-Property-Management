@@ -36,6 +36,7 @@ from app.modules.hosted_access.infrastructure.operator_identity_runtime import (
     OperatorIdentityInputs,
     create_minimal_recovery_app,
 )
+from app.modules.hosted_access.infrastructure.source_lifecycle import SourceLifecycle
 from app.modules.hosted_access.infrastructure.usage_accounting import UsageAccountingStore
 from app.modules.hosted_admin.infrastructure.recovery_status_ingest import UnixSummaryPublisher
 from app.modules.hosted_recovery.infrastructure.alerting import build_alert_emitter
@@ -55,7 +56,7 @@ from app.platform.hosted_contracts.values import Contract, EmailAddress, Referen
 from app.platform.hosted_schema import validate_schema
 from app.platform.hosted_writer_lock import HostedWriterLock
 from app.platform.schema_resources import HostedStore
-from app.platform.sqlite_engine import create_sqlite_engine
+from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
 
 class OperatorDeployment(Contract):
@@ -221,23 +222,21 @@ def candidate(configuration):
 
         def current_binding():
             # Track post-restore access_epoch advancement when backed by a verified restore_binding receipt (#10).
-            try:
-                with engine.connect() as conn:
-                    live_epoch = conn.execute(
-                        text("SELECT access_epoch FROM access_meta WHERE id = 1")
-                    ).scalar_one_or_none()
-                    if live_epoch is not None and int(live_epoch) > binding.access_epoch:
-                        has_restore_receipt = conn.execute(
-                            text(
-                                "SELECT 1 FROM source_receipts "
-                                "WHERE kind = 'verify_restore_binding' AND state = 'applied' "
-                                "LIMIT 1"
-                            )
-                        ).first()
-                        if has_restore_receipt is not None:
-                            return binding.model_copy(update={"access_epoch": int(live_epoch)})
-            except Exception:
-                pass
+            with engine.connect() as conn:
+                live_epoch = conn.execute(
+                    text("SELECT access_epoch FROM access_meta WHERE id = 1")
+                ).scalar_one_or_none()
+                if live_epoch is not None and int(live_epoch) > binding.access_epoch:
+                    has_restore_receipt = conn.execute(
+                        text(
+                            "SELECT 1 FROM main.access_receipts "
+                            "WHERE kind = 'restore_binding' AND access_epoch >= :live_epoch "
+                            "LIMIT 1"
+                        ),
+                        {"live_epoch": int(live_epoch)},
+                    ).first()
+                    if has_restore_receipt is not None:
+                        return binding.model_copy(update={"access_epoch": int(live_epoch)})
             return binding
 
         def clock():
@@ -301,6 +300,18 @@ def candidate(configuration):
                     if configuration.recovery_status_socket is not None
                     else None
                 )
+
+                @contextmanager
+                def _recovery_mutation():
+                    with immediate_transaction(engine) as tx_conn:
+                        yield tx_conn
+
+                recovery_lifecycle = SourceLifecycle(
+                    engine,
+                    mutation=_recovery_mutation,
+                    binding=current_binding,
+                    clock=clock,
+                )
                 recovery_service = HostedWorkspaceRecoveryService(
                     recovery_engine=recovery_engine,
                     access_engine=engine,
@@ -318,6 +329,7 @@ def candidate(configuration):
                     summary_signer_key=getattr(signer, "key", None),
                     summary_key_id=configuration.signing_key_id,
                     summary_publisher=summary_publisher,
+                    source_lifecycle=recovery_lifecycle,
                     close_business_connections=_close_business_connections,
                 )
                 recovery_service.reconcile_startup()
@@ -339,7 +351,11 @@ def candidate(configuration):
                             central_key=lambda scope, issuer, kid: (
                                 central_key
                                 if (scope, issuer, kid)
-                                == (binding, "central_identity", configuration.central_key_id)
+                                == (
+                                    current_binding(),
+                                    "central_identity",
+                                    configuration.central_key_id,
+                                )
                                 else None
                             ),
                             central=CentralHandoffClient(
@@ -405,7 +421,11 @@ def candidate(configuration):
                                 central_key=lambda scope, issuer, kid: (
                                     central_key
                                     if (scope, issuer, kid)
-                                    == (binding, "central_identity", configuration.central_key_id)
+                                    == (
+                                        current_binding(),
+                                        "central_identity",
+                                        configuration.central_key_id,
+                                    )
                                     else None
                                 ),
                                 central=CentralHandoffClient(

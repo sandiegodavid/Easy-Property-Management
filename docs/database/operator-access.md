@@ -255,6 +255,17 @@ consumes the challenge in its own source write transaction. Rollback leaves
 the challenge available, and expiry cleanup preserves referenced sessions until
 eligible challenges are removed.
 
+| Column | Type | Nullable | Default | Description / column rules |
+| --- | --- | --- | --- | --- |
+| `challenge_id` | `ID` | No | — | One-use step-up challenge identity. PK. Immutable. |
+| `session_id` | `ID` | No | — | Owning local session. FK `access_sessions(session_id)` RESTRICT. Immutable. |
+| `request_hash` | `HASH` | No | — | Canonical hash of the exact sensitive request being confirmed. Immutable. |
+| `created_at` | `TIME` | No | — | Challenge creation time. Immutable. |
+| `expires_at` | `TIME` | No | — | `> created_at` and `<= created_at + 300000` (5-minute cap). Immutable. |
+| `consumed_at` | `TIME` | Yes | — | Nullable consumption timestamp; when set, `created_at <= consumed_at < expires_at`. |
+
+Indexes: `(expires_at)` and `(session_id, expires_at)`.
+
 ### H03 additions to `access_sessions`
 
 | New column | Type | Nullable | Default | Description / column rules |

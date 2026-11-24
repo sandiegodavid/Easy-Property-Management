@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 import signal
 from threading import Event
-from time import time_ns
+from time import monotonic, time_ns
 
 from app.modules.host_agent.application.dispatch import HostAgentUnavailable
 from app.modules.host_agent.application.service import HostAgent
@@ -81,6 +81,36 @@ def _emit_containment_alert() -> str:
     )
 
 
+def check_inode_headroom(
+    paths: tuple[Path, ...] = (Path("/"), Path("/srv/epm/data")),
+    *,
+    threshold_percent: float = 80.0,
+) -> list[str]:
+    """Emit host_inode_headroom_alert for each mounted path whose inode usage exceeds threshold."""
+    emitted: list[str] = []
+    for path in paths:
+        try:
+            stats = os.statvfs(path)
+        except OSError:
+            continue
+        if stats.f_files <= 0:
+            continue
+        used_percent = (1.0 - (stats.f_favail / stats.f_files)) * 100.0
+        if used_percent > threshold_percent:
+            emitted.append(
+                emit_structured_event(
+                    logger,
+                    "epm-host-guardian",
+                    "host_inode_headroom_alert",
+                    severity="WARNING",
+                    message=f"Host inode utilization exceeded {threshold_percent:.0f}% on {path}.",
+                    path=str(path),
+                    inode_percent_used=round(used_percent, 2),
+                )
+            )
+    return emitted
+
+
 def build_supervision_agent(
     config_path: Path,
     *,
@@ -124,6 +154,11 @@ def build_supervision_agent(
     profile = RuntimeProfile.model_validate_json(protected_bytes(profile_path, owner=owner))
     authority = RuntimeAuthority(inventory, _InstalledQualificationPort(), gateway)
     networks = OperatorNetworks(inventory, engine, runtime.firewall, inputs.network)
+    backup_proxy_runtime = (
+        inputs.layout.backup_proxy_runtime
+        if Path(inputs.layout.backup_proxy_runtime).is_dir()
+        else None
+    )
     effects = NativeEffects(
         storage,
         engine,
@@ -132,6 +167,7 @@ def build_supervision_agent(
         _StopDirEvidence(registry),
         stops=registry,
         networks=networks,
+        backup_proxy_runtime=backup_proxy_runtime,
     )
     return HostAgent(
         inventory,
@@ -142,8 +178,19 @@ def build_supervision_agent(
 
 
 class Supervisor:
-    def __init__(self, registry, engine, agent=None):
+    def __init__(
+        self,
+        registry,
+        engine,
+        agent=None,
+        *,
+        inode_check_paths: tuple[Path, ...] = (),
+        inode_check_interval: float = 60.0,
+    ):
         self.registry, self.engine, self.agent = registry, engine, agent
+        self.inode_check_paths = inode_check_paths
+        self.inode_check_interval = inode_check_interval
+        self._next_inode_check = 0.0
 
     def poll(self):
         failures = []
@@ -178,6 +225,9 @@ class Supervisor:
                 while not stop.is_set():
                     if self.poll():
                         notify()  # Sanitized attention, never OS/provider payloads.
+                    if self.inode_check_paths and monotonic() >= self._next_inode_check:
+                        check_inode_headroom(self.inode_check_paths)
+                        self._next_inode_check = monotonic() + self.inode_check_interval
                     stop.wait(interval)
             finally:
                 self.registry.contain_all(self.engine)
@@ -210,7 +260,12 @@ def main(argv=None):
             if args.config is not None
             else None
         )
-        Supervisor(registry, engine, agent=agent).run(stopped, notify=_emit_containment_alert)
+        Supervisor(
+            registry,
+            engine,
+            agent=agent,
+            inode_check_paths=(Path("/"), Path("/srv/epm/data")),
+        ).run(stopped, notify=_emit_containment_alert)
     except Exception:
         parser.exit(3, "Runtime containment requires attention.\n")
 

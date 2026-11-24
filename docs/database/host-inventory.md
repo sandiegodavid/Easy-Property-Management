@@ -205,7 +205,7 @@ including initial preparation, has a registered binding reserved before dispatch
 Matching operation replays observed identity; changed semantics conflict. Inspect actual
 effects after restart/unknown; never reallocate merely because the receipt is incomplete.
 CHECK kind IN (`prepare_resources`, `initialize_container`, `repair_runtime`, `start_container`,
-`stop_container`, `apply_limits`, `apply_ingress_policy`, `stage_restore`, `switch_binding`, `retire_resources`).
+`stop_container`, `apply_limits`, `apply_ingress_policy`, `apply_auth_routes`, `stage_restore`, `switch_binding`, `retire_resources`).
 H02 adds narrow apply/inspect ingress contracts. Stage/switch restore remains unavailable
 without effects until H05 delivers its target/authorization design and implementation.
 Current highest access authority is in ingress_bindings, not inferred by scanning old

@@ -8,7 +8,7 @@ Easy Property Management runs as a single-operator hosted workspace per customer
 
 | Area | Start Here | What It Covers |
 | --- | --- | --- |
-| **Live Architecture & Decisions** | [ARCHITECTURE.md](ARCHITECTURE.md) | Production topology, 8-store ownership, security & isolation boundaries, identity/session contracts, logical storage formula, off-host recovery architecture, and accepted decisions (`H01–H06`). |
+| **Live Architecture & Decisions** | [ARCHITECTURE.md](ARCHITECTURE.md) | Production topology, 6-store ownership, security & isolation boundaries, identity/session contracts, logical storage formula, off-host recovery architecture, and accepted decisions (`H01–H06`). |
 | **Operations & Deployment Handbook** | [operations/README.md](operations/README.md) | Live Pilot 0 host inventory, pinned digests, GCP provisioning & packaging, host services & networking, identity & Admin recovery, backup/restore & maintenance windows, observability & `$250/mo` budget, Pilot 0 admission & incidents, and local/Lima/GCP qualification. |
 | **Future Specification (`H07–H12`)** | [design/HOSTED_MVP_DESIGN.md](design/HOSTED_MVP_DESIGN.md) | Accepted MVP specification ([`design/mvp/`](design/README.md)): H07 automated provisioning, H08 Paid 1/2 sizing & 15-min RPO, H09 Stripe billing, H10 per-operator release scheduling, H11 Free idle suspension/wake, and H12 100-operator qualification. |
 | **Qualification & Live Evidence** | [qualification/README.md](qualification/README.md) | [Acceptance register](qualification/HOSTED_MVP_ACCEPTANCE.md), machine-checked proof specifications (`specifications/`), UI contract fixtures (`fixtures/`), and live Pilot 0 GO evidence + 4-week worksheet (`reports/`). |

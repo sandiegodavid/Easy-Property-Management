@@ -344,7 +344,7 @@ export function HostedRecovery({
   function handleStartStepUp() {
     if (!preview) return;
     const url = buildStepUpUrl(preview.stepUpChallengeId);
-    const popup = window.open(url, "epm-recent-auth", "noopener=false,width=520,height=680");
+    const popup = window.open(url, "epm-recent-auth", "width=520,height=680");
     if (!popup) {
       window.location.assign(url);
     } else {

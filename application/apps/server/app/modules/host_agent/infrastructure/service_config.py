@@ -42,6 +42,7 @@ class ServiceLayout(Contract):
     tunnel_projection: Absolute = "/run/epm-projections/tunnel"
     tunnel_secret: Absolute = "/etc/epm/secrets/tunnel.json"
     backup_proxy_runtime: Absolute = "/run/epm-backup-proxy"
+    backup_proxy_projection: Absolute = "/run/epm-projections/backup-proxy"
     backup_proxy_secret: Absolute = "/etc/epm/secrets/r2.json"
     backup_proxy_config: Absolute = "/etc/epm/backup-proxy.json"
     installation: Absolute = "/opt/epm/host-agent"

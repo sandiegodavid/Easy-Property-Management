@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 import hashlib
 import json
 import logging
+import os
 from pathlib import Path
 import shutil
 import sqlite3
@@ -293,7 +295,7 @@ def _read_retained_files(
         "ORDER BY fcl.local_relative_path, fr.content_sha256"
     ).fetchall()
 
-    resolved_root = workspace_dir.resolve()
+    resolved_root = (workspace_dir / "files").resolve()
     hasher = hashlib.sha256()
     seen_paths: dict[str, tuple[str, int]] = {}
     for rel_path, content_sha, size_bytes in rows:
@@ -373,9 +375,9 @@ def stage_consistent_snapshot(
 
     staged_files: list[RetainedFileInput] = []
     files_stage_root = staging_dir / "files"
-    resolved_workspace = workspace_dir.resolve()
+    resolved_files_root = (workspace_dir / "files").resolve()
     for rel_path, _, _ in entries:
-        src_file = (resolved_workspace / rel_path).resolve()
+        src_file = (resolved_files_root / rel_path).resolve()
         dst_file = files_stage_root / rel_path
         dst_file.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(src_file, dst_file)
@@ -2196,17 +2198,48 @@ class HostedWorkspaceRecoveryService:
                 expected_manifest_sha256=manifest_sha256,
                 destination_dir=target_dir,
             )
-            # Materialize restored files into incarnation root matching local_relative_path layout.
-            restored_files_wrapper = target_dir / "files"
-            if restored_files_wrapper.is_dir():
-                for child in list(restored_files_wrapper.iterdir()):
-                    dest = target_dir / child.name
-                    if child.name == "files" and child.is_dir():
-                        for nested in list(child.iterdir()):
-                            shutil.move(str(nested), str(restored_files_wrapper / nested.name))
-                        child.rmdir()
-                    elif not dest.exists():
-                        shutil.move(str(child), str(dest))
+            # Materialize restored workspace directory layout expected by WorkspaceService.open():
+            # database/property-management.sqlite, files/<local_relative_path>, exports/, backups/,
+            # and workspace.json.
+            for subdir in ("database", "files", "exports", "backups"):
+                subpath = target_dir / subdir
+                subpath.mkdir(mode=0o700, exist_ok=True)
+                os.chmod(subpath, 0o700)
+            flat_db = target_dir / "property-management.sqlite"
+            nested_db = target_dir / "database" / "property-management.sqlite"
+            if flat_db.is_file() and not nested_db.exists():
+                shutil.move(str(flat_db), str(nested_db))
+                os.chmod(nested_db, 0o600)
+            # backup_engine.restore_point() already writes each retained file to
+            # target_dir / "files" / item.relative_path, matching WorkspaceFileStore layout.
+            # Materialize workspace.json manifest from restored workspace_metadata (or clock fallback).
+            manifest_path = target_dir / "workspace.json"
+            if not manifest_path.exists():
+                created_at_iso = datetime.fromtimestamp(self.clock() / 1000, tz=UTC).isoformat()
+                if nested_db.is_file():
+                    meta_conn = sqlite3.connect(nested_db.as_uri() + "?mode=ro", uri=True)
+                    try:
+                        has_meta = meta_conn.execute(
+                            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='workspace_metadata'"
+                        ).fetchone()
+                        if has_meta is not None:
+                            row_meta = meta_conn.execute(
+                                "SELECT created_at FROM workspace_metadata LIMIT 1"
+                            ).fetchone()
+                            if row_meta and isinstance(row_meta[0], str) and row_meta[0].strip():
+                                created_at_iso = row_meta[0]
+                    finally:
+                        meta_conn.close()
+                manifest_payload = {
+                    "workspaceId": self.workspace_id,
+                    "formatVersion": 1,
+                    "createdAt": created_at_iso,
+                    "databasePath": "database/property-management.sqlite",
+                }
+                manifest_path.write_text(
+                    json.dumps(manifest_payload, indent=2) + "\n", encoding="utf-8"
+                )
+                os.chmod(manifest_path, 0o600)
 
             restored_at = self.clock()
             with immediate_transaction(self.recovery_engine) as conn:

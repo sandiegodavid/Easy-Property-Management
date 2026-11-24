@@ -22,6 +22,7 @@ from app.modules.hosted_admin.application.pilot_contracts import AdminResult
 from app.modules.hosted_admin.infrastructure.provisioning_admission import _append_event
 from app.modules.workspace.infrastructure.hosted_recovery import (
     WorkspaceStateUnreadable,
+    _business_db_path,
     probe_live_workspace_state,
 )
 from app.platform.hosted_schema import HostedSchemaError, validate_schema
@@ -355,7 +356,7 @@ class CleanRuntimeRepairer:
             conn.execute(
                 text(
                     "UPDATE resource_bindings SET container_ref = :cref, "
-                    "state = 'stopped', updated_at = :now, revision = revision + 1 "
+                    "state = 'running', last_verified_at = :now, revision = revision + 1 "
                     "WHERE binding_id = :bid AND resource_generation = :gen"
                 ),
                 {
@@ -398,9 +399,7 @@ class CleanRuntimeRepairer:
                 business_db_healthy = True
                 try:
                     incarnation_dir.relative_to(paths.workspace_root.resolve())
-                    probe_live_workspace_state(
-                        incarnation_dir / "property-management.sqlite", incarnation_dir
-                    )
+                    probe_live_workspace_state(_business_db_path(incarnation_dir), incarnation_dir)
                 except ValueError, WorkspaceStateUnreadable:
                     business_db_healthy = False
 

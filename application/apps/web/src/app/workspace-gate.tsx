@@ -173,29 +173,42 @@ function Gate({ children }: { children: ReactNode }) {
   if (bootstrap.isPending) {
     return <p role="status">Checking workspace readiness…</p>;
   }
-  if (bootstrap.isError) {
-    if (bootstrap.error instanceof RecoveryModeActiveError) {
-      return <HostedRecovery forceVisible />;
-    }
-    const errorMessage =
-      bootstrap.error instanceof BootstrapFailure && bootstrap.error.explanation
-        ? bootstrap.error.explanation
-        : bootstrap.error instanceof BootstrapFailure && bootstrap.error.network
-          ? "Cannot connect to the local server. Check that it is running."
-          : "The local server returned an unusable response. Workspace access is paused.";
-    if (bootstrap.data?.state === "ready") {
-      return (
-        <>
+  if (bootstrap.isError && bootstrap.error instanceof RecoveryModeActiveError) {
+    return <HostedRecovery forceVisible />;
+  }
+  const errorMessage = bootstrap.isError
+    ? bootstrap.error instanceof BootstrapFailure && bootstrap.error.explanation
+      ? bootstrap.error.explanation
+      : bootstrap.error instanceof BootstrapFailure && bootstrap.error.network
+        ? "Cannot connect to the local server. Check that it is running."
+        : "The local server returned an unusable response. Workspace access is paused."
+    : null;
+  if (bootstrap.data?.state === "ready") {
+    const data = bootstrap.data;
+    return (
+      <>
+        {errorMessage && (
           <div role="alert" data-testid="workspace-refetch-banner">
             <p>{errorMessage}</p>
             <button onClick={retry}>Retry connection</button>
           </div>
-          <div hidden aria-hidden="true">
-            <Admitted bootstrap={bootstrap.data}>{children}</Admitted>
-          </div>
-        </>
-      );
-    }
+        )}
+        <div
+          hidden={Boolean(errorMessage)}
+          aria-hidden={errorMessage ? "true" : undefined}
+          inert={Boolean(errorMessage) || undefined}
+        >
+          <Admitted
+            key={`${data.workspaceId}:${data.runtimeEpoch}:${String(data.canWrite)}`}
+            bootstrap={data}
+          >
+            {children}
+          </Admitted>
+        </div>
+      </>
+    );
+  }
+  if (errorMessage) {
     return (
       <>
         <p role="alert">{errorMessage}</p>
@@ -204,6 +217,9 @@ function Gate({ children }: { children: ReactNode }) {
     );
   }
   const data = bootstrap.data;
+  if (!data) {
+    return null;
+  }
   if (data.state !== "ready") {
     const reason = data.state === "busy" ? "workspace_busy" : (data.reasonCode ?? "");
     const supportsRetry = data.recoveryActions.some(
@@ -224,14 +240,7 @@ function Gate({ children }: { children: ReactNode }) {
       </>
     );
   }
-  return (
-    <Admitted
-      key={`${data.workspaceId}:${data.runtimeEpoch}:${String(data.canWrite)}`}
-      bootstrap={data}
-    >
-      {children}
-    </Admitted>
-  );
+  return null;
 }
 
 export function WorkspaceGate({ children }: { children: ReactNode }) {

@@ -127,6 +127,7 @@ WantedBy=local-fs.target
         MOUNT.chmod(0o711)
         for role in ("workspace", "control", "scratch"):
             (MOUNT / role).mkdir(mode=0o711)
+            (MOUNT / role).chmod(0o711)
         state = {"phase": "ready", "device": str(DEVICE), "uuid": uuid}
         save(state)
         return state

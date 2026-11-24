@@ -99,7 +99,7 @@ session without sharing cookies across subdomains.
 | `subject` | `TEXT` | Yes | — | Provider subject bound to the identity. |
 | `assignment_revision` | `REV` | No | — | Assignment revision to which this capability is bound. |
 | `access_epoch` | `REV` | No | — | Access authority fence; stale operations must not override it. |
-| `state` | `TEXT` | No | — | Lifecycle state; see table-specific values and transition rules. (`initiated`, `issued`, `redeemed`, `expired`). |
+| `state` | `TEXT` | No | — | Lifecycle state; see table-specific values and transition rules. (`initiated`, `issued`, `redeeming`, `redeemed`, `expired`). |
 | `expires_at` | `TIME` | No | — | Expiry of this temporary capability/session/lease, not of the operator account. |
 | `redeemed_at` | `TIME` | Yes | — | Time the handoff was consumed. |
 | `created_at` | `TIME` | No | — | Creation time. |

@@ -28,6 +28,7 @@ from app.modules.hosted_access.infrastructure.admin_entry import (
 )
 from app.modules.hosted_access.infrastructure.central_attempts import CentralAttempts
 from app.modules.hosted_access.infrastructure.central_handoffs import CentralHandoffs, PairingSource
+from app.modules.hosted_access.infrastructure.central_invitations import CentralInvitations
 from app.modules.hosted_access.infrastructure.central_login import CentralLogin
 from app.modules.hosted_access.infrastructure.central_pairing import CentralPairing
 from app.modules.hosted_access.infrastructure.central_session_authority import (
@@ -347,14 +348,23 @@ def create_app(config_path):
             registry, configuration.host_relay_socket, relay_uid=configuration.host_relay_uid
         )
         attempts = CentralAttempts(engine, setup, source, clock=clock)
-        login = CentralLogin(attempts, bundle.provider, deployment_id=deployment.deployment_id)
+        readiness = AdminWorkspaceReadiness(engine)
+        invitations = CentralInvitations(engine, None, clock=clock, readiness=readiness)
+        login = CentralLogin(
+            attempts,
+            bundle.provider,
+            deployment_id=deployment.deployment_id,
+            readiness=readiness,
+            invitations=invitations,
+        )
         handoffs = CentralHandoffs(
             attempts,
             signer,
             source,
-            AdminWorkspaceReadiness(engine),
+            readiness,
             deployment_id=deployment.deployment_id,
         )
+        authority = CentralSessionAuthority(handoffs, bundle.provider)
         pairing = CentralPairing(
             attempts,
             PairingSource(registry.resolve_key, source.observe_pairing, clock=clock),
@@ -367,6 +377,8 @@ def create_app(config_path):
             network_source=network_source,
             pairing=pairing,
             handoffs=handoffs,
+            session_authority=authority,
+            resolve_origin=registry.by_origin,
         )
         helper = FirebaseHelpers(
             setup, configuration.provider_proxy, public_config=bundle.web_config["firebase"]
@@ -408,7 +420,6 @@ def create_app(config_path):
             try:
                 with HostedWriterLock(deployment.writer_lock):
                     async with AsyncExitStack() as stack:
-                        authority = CentralSessionAuthority(handoffs, bundle.provider)
                         for peer in registry.sources:
                             binding = peer.binding
                             listener = stack.enter_context(

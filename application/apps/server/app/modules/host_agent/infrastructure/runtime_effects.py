@@ -46,11 +46,13 @@ class NativeEffects:
         *,
         stops=None,
         networks=None,
+        backup_proxy_runtime=None,
     ):
         self.storage, self.engine, self.profile = storage, engine, profile
         self.authority, self.evidence = authority, evidence
         self.stops = stops
         self.networks = networks
+        self.backup_proxy_runtime = backup_proxy_runtime
 
     def _policy_hash(self):
         value = policy_hash(self.profile)
@@ -65,7 +67,12 @@ class NativeEffects:
     def _spec(self, command, allocation):
         network = None if self.networks is None else self.networks.verify(command, allocation)
         spec = container_spec(
-            command, allocation, self.storage.targets, self.profile, network=network
+            command,
+            allocation,
+            self.storage.targets,
+            self.profile,
+            network=network,
+            backup_proxy_runtime=self.backup_proxy_runtime,
         )
         spec["Labels"]["epm.policy"] = self._policy_hash()
         return spec

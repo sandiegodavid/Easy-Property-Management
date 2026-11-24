@@ -57,7 +57,12 @@ def service_unit(component, layout=None):
         + " --contain-all"
     )
     if component == "backup_proxy":
-        command = python + " -B -m app.modules.host_agent.infrastructure.backup_proxy"
+        command = (
+            python
+            + " -B -m app.modules.host_agent.infrastructure.backup_proxy --inventory "
+            + layout.backup_proxy_projection
+            + "/inventory.sqlite"
+        )
         return f"""[Unit]
 Description=EPM private off-host backup proxy
 After=network-online.target
@@ -70,6 +75,7 @@ User=epm-backup-proxy
 Group=epm-backup-proxy
 RuntimeDirectory=epm-backup-proxy
 RuntimeDirectoryMode=0711
+ExecStartPre=+{runner} backup-proxy-projection{config}
 ExecStart={command}
 LoadCredential=r2.json:{layout.backup_proxy_secret}
 LoadCredential=backup-proxy.json:{layout.backup_proxy_config}
@@ -97,7 +103,7 @@ RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 ProcSubset=pid
 ProtectProc=invisible
 ReadWritePaths={layout.backup_proxy_runtime}
-ReadOnlyPaths=/run/epm-projections/backup-proxy
+ReadOnlyPaths={layout.backup_proxy_projection}
 InaccessiblePaths={layout.data}/workspace {layout.data}/control {layout.data}/scratch {layout.stops} -/run/docker.sock {path_parent(layout.tunnel_secret)} {layout.gateway_runtime} {layout.tunnel_runtime} {layout.proxy_runtime} -/run/credentials/epm-tunnel.service
 LimitNOFILE=1024
 TasksMax=64

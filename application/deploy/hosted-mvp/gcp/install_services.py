@@ -265,7 +265,7 @@ def publish_units(config, identities):
     tmpfiles.extend(
         [
             f"d {layout.backup_proxy_runtime} 0711 {bp_name} {bp_name} -",
-            f"d /run/epm-projections/backup-proxy 0750 root {bp_name} -",
+            f"d {layout.backup_proxy_projection} 0750 root {bp_name} -",
         ]
     )
     Path("/etc/tmpfiles.d/epm-host.conf").write_text("\n".join(tmpfiles) + "\n")
@@ -316,8 +316,9 @@ WantedBy=multi-user.target
         "epm-gateway.service",
         "epm-tunnel.service",
         "epm-egress.service",
-        "epm-host-guardian.service",
     ]
+    if Path("/etc/epm/runtime-profile.json").exists():
+        enabled_units.append("epm-host-guardian.service")
     if Path(layout.backup_proxy_secret).exists() and Path(layout.backup_proxy_config).exists():
         enabled_units.append("epm-backup-proxy.service")
     call("systemctl", "enable", *enabled_units)
@@ -331,6 +332,7 @@ def install_ops_agent_config(
     config_yaml: str,
     *,
     destination: Path = Path("/etc/google-cloud-ops-agent/config.yaml"),
+    restart: bool = True,
 ) -> Path:
     """Write root-owned GCP Ops Agent YAML configuration (0644) atomically."""
     if "logging:" not in config_yaml or "metrics:" not in config_yaml:
@@ -340,6 +342,14 @@ def install_ops_agent_config(
     tmp.write_text(config_yaml, encoding="utf-8")
     tmp.chmod(0o644)
     tmp.replace(destination)
+    if restart and destination == Path("/etc/google-cloud-ops-agent/config.yaml"):
+        subprocess.run(
+            ["systemctl", "try-restart", "google-cloud-ops-agent.service"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
     return destination
 
 

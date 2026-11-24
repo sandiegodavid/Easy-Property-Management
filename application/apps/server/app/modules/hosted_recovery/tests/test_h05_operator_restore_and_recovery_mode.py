@@ -493,9 +493,12 @@ def test_crash_safe_locator_switch_rollback_and_healthy_prior_tree(tmp_path: Pat
     assert detail_ok is not None
     assert detail_ok.phase == "switched"
     assert detail_ok.prior_tree_kind == "healthy_pre_state"
-    # Prior healthy DB still has 'p-after'; restored incarnation-2 has only 'p1'!
+    # Prior healthy DB still has 'p-after'; restored incarnation-2 has only 'p1' in database/!
+    assert (tmp_path / "workspace/incarnation-2/workspace.json").is_file()
     c_old = sqlite3.connect(tmp_path / "workspace/incarnation-1/property-management.sqlite")
-    c_new = sqlite3.connect(tmp_path / "workspace/incarnation-2/property-management.sqlite")
+    c_new = sqlite3.connect(
+        tmp_path / "workspace/incarnation-2/database/property-management.sqlite"
+    )
     try:
         assert {r[0] for r in c_old.execute("SELECT id FROM properties")} == {"p1", "p-after"}
         assert {r[0] for r in c_new.execute("SELECT id FROM properties")} == {"p1"}

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import asyncio
+import json
 from typing import Literal
 
 from fastapi import APIRouter, Request
@@ -73,7 +75,7 @@ def _read_cookie_and_origin(
         or request.url.query
         or any(
             len(request.headers.getlist(key)) > 1
-            for key in ("host", "origin", "cookie", "x-epm-csrf")
+            for key in ("host", "origin", "cookie", "x-epm-csrf", "content-type", "content-length")
         )
     ):
         raise PermissionError("origin_denied")
@@ -91,6 +93,36 @@ def _read_cookie_and_origin(
     if require_csrf and not csrf:
         raise ProviderDenied()
     return values[0], csrf
+
+
+MAX_RECOVERY_JSON_BYTES = 20_000
+
+
+async def _read_bounded_json(request: Request) -> dict[str, object]:
+    if request.headers.get("content-type", "").split(";", 1)[0].strip() != "application/json":
+        raise ValueError("invalid_content_type")
+    raw = bytearray()
+    async with asyncio.timeout(10):
+        async for chunk in request.stream():
+            raw.extend(chunk)
+            if len(raw) > MAX_RECOVERY_JSON_BYTES:
+                raise ValueError("payload_too_large")
+
+    def _unique(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        result: dict[str, object] = {}
+        for key, item in pairs:
+            if key in result:
+                raise ValueError("duplicate_json_key")
+            result[key] = item
+        return result
+
+    try:
+        parsed = json.loads(raw, object_pairs_hook=_unique)
+    except ValueError, RecursionError:
+        raise ValueError("invalid_json") from None
+    if not isinstance(parsed, dict):
+        raise ValueError("invalid_json_object")
+    return parsed
 
 
 def _auth_error_response(error: Exception) -> JSONResponse:
@@ -238,9 +270,9 @@ def operator_recovery_router(sessions, inputs: OperatorRecoveryInputs) -> APIRou
             return _auth_error_response(error)
 
         try:
-            raw = await request.json()
+            raw = await _read_bounded_json(request)
             body = PreviewRequest.model_validate(raw)
-        except ValidationError, ValueError:
+        except ValidationError, ValueError, TimeoutError:
             return JSONResponse(
                 {"error": {"code": "invalid_preview_request"}}, status_code=400, headers=HEADERS
             )
@@ -282,9 +314,9 @@ def operator_recovery_router(sessions, inputs: OperatorRecoveryInputs) -> APIRou
             return _auth_error_response(error)
 
         try:
-            raw = await request.json()
+            raw = await _read_bounded_json(request)
             body = ConfirmRestoreRequest.model_validate(raw)
-        except ValidationError, ValueError:
+        except ValidationError, ValueError, TimeoutError:
             return JSONResponse(
                 {"error": {"code": "invalid_confirm_request"}}, status_code=400, headers=HEADERS
             )
@@ -392,9 +424,9 @@ def operator_recovery_router(sessions, inputs: OperatorRecoveryInputs) -> APIRou
             return _auth_error_response(error)
 
         try:
-            raw = await request.json()
+            raw = await _read_bounded_json(request)
             body = AcceptRestoreRequest.model_validate(raw)
-        except ValidationError, ValueError:
+        except ValidationError, ValueError, TimeoutError:
             return JSONResponse(
                 {"error": {"code": "invalid_accept_request"}}, status_code=400, headers=HEADERS
             )

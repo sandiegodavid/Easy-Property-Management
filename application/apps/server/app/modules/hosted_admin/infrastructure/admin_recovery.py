@@ -999,21 +999,21 @@ class AdminControlRecoveryService:
                         aconn.execute(
                             text(
                                 "UPDATE main.login_handoffs SET state = 'expired' "
-                                "WHERE state NOT IN ('consumed', 'expired', 'revoked')"
+                                "WHERE state NOT IN ('redeemed', 'expired')"
                             )
                         )
                     if "login_attempts" in existing_tables:
                         aconn.execute(
                             text(
                                 "UPDATE main.login_attempts SET state = 'expired' "
-                                "WHERE state NOT IN ('completed', 'expired', 'failed')"
+                                "WHERE state NOT IN ('completed', 'failed', 'superseded', 'expired')"
                             )
                         )
                     if "email_continuations" in existing_tables:
                         aconn.execute(
                             text(
                                 "UPDATE main.email_continuations SET state = 'expired' "
-                                "WHERE state NOT IN ('consumed', 'expired', 'revoked')"
+                                "WHERE state NOT IN ('completed', 'rejected', 'expired')"
                             )
                         )
                     if "identity_commands" in existing_tables:

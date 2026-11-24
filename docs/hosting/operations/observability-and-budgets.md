@@ -18,9 +18,15 @@ Hosted services emit single-line JSON log records formatted by `app.platform.hos
 2. **Audit host logs for zero unredacted tokens/cookies:**
    ```bash
    sudo journalctl -u 'epm-*' --since "24 hours ago" --no-pager \
-     | grep -E '(__Host-[A-Za-z0-9_.-]+=(?!\[REDACTED\])|Bearer (?!\[REDACTED\])|eyJ[A-Za-z0-9_-]{8,}\.)' \
-     && echo "WARNING: unredacted token pattern found" \
-     || echo "OK: zero unredacted token/cookie patterns found"
+     | python3 -c '
+   import re, sys
+   pat = re.compile(r"(__Host-[A-Za-z0-9_.-]+=(?!\[REDACTED\])|Bearer (?!\[REDACTED\])|eyJ[A-Za-z0-9_-]{8,}\.)")
+   hits = [line.rstrip("\n") for line in sys.stdin if pat.search(line)]
+   if hits:
+       print(f"WARNING: {len(hits)} unredacted token/cookie line(s) found", file=sys.stderr)
+       sys.exit(1)
+   print("OK: zero unredacted token/cookie patterns found")
+   '
    ```
 3. **Local regression gate:**
    ```bash

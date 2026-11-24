@@ -10,7 +10,7 @@ All host daemons run under dedicated unprivileged OS identities with dropped cap
 
 | Unit | Role |
 | --- | --- |
-| `epm-gateway.service` | Caddy `v2.11.9` listening via private Unix admin socket; fail-closed exact host/method allowlists; `notify` readiness; reads root-owned `/srv/epm/data/host/inventory/inventory.sqlite` (`0600`). |
+| `epm-gateway.service` | Caddy `v2.11.9` running as unprivileged `User=epm-caddy` listening via private Unix admin socket; fail-closed exact host/method allowlists; `notify` readiness; reads only the generated Caddy projection (`/run/epm-projections/caddy/config.json`) produced by root-owned `epm-ingress-projection.service` / `service_runtime`. |
 | `epm-tunnel.service` | `cloudflared` `2026.10.7`; receives exact 3-field Tunnel JSON via `LoadCredential` at `/run/credentials/epm-tunnel.service/tunnel.json`; exact routing + deny catch-all. |
 | `epm-backup-proxy.service` | Dedicated user `epm-backup-proxy` (`uid=940`); receives R2 creds via `LoadCredential=r2.json:/etc/epm/secrets/r2.json`; listens on `/run/epm-backup-proxy/backup-proxy.sock`; resolves caller R2 prefix strictly via kernel `SO_PEERCRED` UID → `/srv/epm/data/host/backup-proxy/inventory.sqlite`. Zero dependency on Admin or ingress. |
 | `epm-host-guardian.service` | Live `HostAgent` supervision (`--registry /srv/epm/data/host/stops --config /etc/epm/host-services.json`); verifies containers against `inventory.sqlite`, Caddy `Gateway`, and `ext4 prjquota`; stops containers on drift/uncertainty. |

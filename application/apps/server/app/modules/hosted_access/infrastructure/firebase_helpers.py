@@ -20,6 +20,7 @@ MAX_QUERY_BYTES = 8192
 class FirebaseHelpers:
     def __init__(self, setup, proxy, *, public_config=None):
         self.host = setup.realm.project_id + ".firebaseapp.com"
+        self.admin_origin = setup.origins.admin
         self.proxy = urlsplit(connect_proxy(proxy)["https"])
         self.public_config = public_config
 
@@ -76,11 +77,18 @@ class FirebaseHelpers:
             try:
                 body, mime = await run_in_threadpool(self.fetch, path, query)
                 response_headers = {**headers, "Content-Type": mime}
-                if path in {"/__/auth/handler", "/__/auth/iframe"}:
+                if path == "/__/auth/handler":
                     # Firebase-owned auth helper HTML dynamically loads gapi/gstatic scripts
-                    # and cross-origin OAuth frames; retain HSTS/Permissions-Policy/nosniff
-                    # while letting Firebase's helper execute unmodified.
-                    response_headers.pop("Content-Security-Policy", None)
+                    # and cross-origin OAuth popups; retain framing/base/object protections.
+                    response_headers["Content-Security-Policy"] = (
+                        "frame-ancestors 'none'; base-uri 'none'; object-src 'none'"
+                    )
+                    response_headers["X-Frame-Options"] = "DENY"
+                elif path == "/__/auth/iframe":
+                    response_headers["Content-Security-Policy"] = (
+                        f"frame-ancestors 'self' {self.admin_origin}; "
+                        "base-uri 'none'; object-src 'none'"
+                    )
                 response = Response(body, headers=response_headers)
             except ProviderUnavailable:
                 response = Response(status_code=503, headers=headers)

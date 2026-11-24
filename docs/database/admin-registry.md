@@ -9,7 +9,7 @@ In this guide: [Pilot 0 Admin database](#pilot-0-admin-database) · [`control_me
 ## Pilot 0 Admin database
 
 The [H02.2 current baseline](schema-resources.md#main-admin)
-contains all 13 main-Admin tables and local FKs, with exact structural validation
+contains all 22 main-Admin tables and local FKs, with exact structural validation
 and separate protected deployment binding. Schema creation populates no authority.
 
 H02 implements the complete Pilot 0 main-Admin structural baseline across this guide,

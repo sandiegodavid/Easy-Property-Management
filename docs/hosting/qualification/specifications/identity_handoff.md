@@ -22,7 +22,7 @@ Currently exits 3. H03.1 supplies typed inputs/assertions and revision-2 cases, 
 executor. H03.12 must pin real provider/browser launch and cleanup commands; no identity
 calls are performed by the contract tests. See [Hosted Live Architecture](../../ARCHITECTURE.md#managed-identity--session-security-h03-updated-in-h061).
 
-The [H04/H05 handoff](../../design/mvp/delivery-plan.md#deployed-operator-handoff-and-session-qualification)
+The [H04/H05 delivery plan](../../design/mvp/delivery-plan.md)
 assigns the deployed cases that need a ready workspace or verified recovery
 point. Retain unavailable results for those observations until the owning
 slices qualify them. H03 still owns component coverage and deployed

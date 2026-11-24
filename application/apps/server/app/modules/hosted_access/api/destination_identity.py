@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 from html import escape
+from urllib.parse import urlencode
 from uuid import UUID
 
 from fastapi import APIRouter, Request
@@ -28,6 +29,18 @@ def _identifier(raw):
     except ValueError, TypeError, AttributeError:
         pass
     raise ProviderDenied()
+
+
+def _safe_return_to(raw: str) -> str:
+    if (
+        not raw
+        or len(raw) > 1024
+        or not raw.startswith("/")
+        or raw.startswith("//")
+        or any(ord(ch) < 32 or ord(ch) == 127 for ch in raw)
+    ):
+        raise ProviderDenied()
+    return raw
 
 
 def _device_label(agent):
@@ -143,6 +156,24 @@ def destination_router(
                     + result.origin_id,
                     status_code=303,
                 )
+            elif "recent_challenge" in query and query.keys() <= {"recent_challenge", "return_to"}:
+                challenge_id = _identifier(query["recent_challenge"])
+                return_to = _safe_return_to(query.get("return_to", "/settings"))
+                binding = owner.binding()
+                params = urlencode(
+                    {
+                        "recent_challenge": challenge_id,
+                        "source": binding.registered_origin_id,
+                        "return_to": return_to,
+                    }
+                )
+                response = RedirectResponse(
+                    f"{central_origin}/auth/start?{params}",
+                    status_code=303,
+                )
+                response.headers["Cache-Control"] = "no-store"
+                response.headers["Referrer-Policy"] = "no-referrer"
+                return response
             else:
                 raise ProviderDenied()
             response.set_cookie(
@@ -155,7 +186,7 @@ def destination_router(
                 max_age=max(0, (result.attempt.expires_at - owner.clock()) // 1000),
             )
             response.headers["Cache-Control"] = "no-store"
-            response.headers["Referrer-Policy"] = "no-referrer"
+            response.headers.setdefault("Referrer-Policy", "no-referrer")
             return response
         except (ProviderDenied, ProviderUnavailable, TimeoutError, ValueError) as error:
             return denied(error)

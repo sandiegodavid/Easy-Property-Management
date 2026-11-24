@@ -183,7 +183,7 @@ def _init_business_db(db_path: Path) -> None:
 def _add_retained_file(
     db_path: Path, workspace_incarnation: Path, file_id: str, rel_path: str, content: bytes
 ) -> None:
-    target = workspace_incarnation / rel_path
+    target = workspace_incarnation / "files" / rel_path
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(content)
     digest = hashlib.sha256(content).hexdigest()

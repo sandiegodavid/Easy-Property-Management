@@ -30,15 +30,30 @@ class Completion(BaseModel):
     email: str | None = None
     code: SecretStr | None = None
     remembered: bool = False
+    recentChallenge: str | None = None
+    source: str | None = None
+    invitationId: str | None = None
+    invitationToken: SecretStr | None = None
 
 
 def build_central_identity_app(
-    service, *, ui_directory: Path, web_config, network_source, pairing=None, handoffs=None
+    service,
+    *,
+    ui_directory: Path,
+    web_config,
+    network_source,
+    pairing=None,
+    handoffs=None,
+    session_authority=None,
+    resolve_origin=None,
 ):
     app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
     app.router.redirect_slashes = False
     origin = service.attempts.setup.origins.central
     cookies = IdentityCookiePolicy()
+    origin_resolver = resolve_origin or getattr(
+        getattr(service.attempts.source, "registry", None), "by_origin", None
+    )
 
     def identifier(value):
         try:
@@ -189,6 +204,25 @@ def build_central_identity_app(
                     return {"state": row["state"]}
 
             return await run_in_threadpool(inspect)
+        if "recent_challenge" in request.query_params:
+            if session_authority is None or origin_resolver is None:
+                raise ProviderUnavailable()
+            challenge_id = identifier(request.query_params.get("recent_challenge"))
+            source = identifier(request.query_params.get("source"))
+            binding = origin_resolver(source)
+            attempt, challenge = await run_in_threadpool(
+                session_authority.start_recent, binding, challenge_id
+            )
+            response = JSONResponse(
+                {
+                    "attemptId": attempt,
+                    "mode": "recent_auth",
+                    "targetOrigin": binding.target_origin,
+                    **web_config,
+                }
+            )
+            set_cookie(response, cookies.central_challenge, challenge, 900)
+            return response
         flow = identifier(request.query_params.get("flow"))
         method = request.query_params.get("method", "google")
         if method != "google":
@@ -253,7 +287,43 @@ def build_central_identity_app(
             )
             return destination_form(request, handoff)
         value = Completion.model_validate(await body(request))
-        if value.token is None or value.code is not None or value.email is not None:
+        if value.recentChallenge is not None:
+            if (
+                value.token is None
+                or value.code is not None
+                or value.email is not None
+                or value.source is None
+                or value.invitationId is not None
+                or value.invitationToken is not None
+            ):
+                raise ProviderDenied()
+            if session_authority is None or origin_resolver is None:
+                raise ProviderUnavailable()
+            browser = observed_cookie(request)
+            challenge_id = identifier(value.recentChallenge)
+            binding = origin_resolver(identifier(value.source))
+            grant = await run_in_threadpool(
+                session_authority.complete_recent,
+                binding,
+                identifier(value.attemptId),
+                browser,
+                value.token,
+            )
+            return JSONResponse(
+                {
+                    "state": "recent_verified",
+                    "grant": grant.get_secret_value(),
+                    "challengeId": challenge_id,
+                    "targetOrigin": binding.target_origin,
+                }
+            )
+        if (
+            value.token is None
+            or value.code is not None
+            or value.email is not None
+            or value.source is not None
+            or (value.invitationId is None) != (value.invitationToken is None)
+        ):
             raise ProviderDenied()
         browser = observed_cookie(request)
         result = await run_in_threadpool(
@@ -263,6 +333,23 @@ def build_central_identity_app(
             value.token,
             remembered=value.remembered,
         )
+        if value.invitationId is not None and isinstance(result, CentralCompletion):
+            if service.invitations is None:
+                raise ProviderUnavailable()
+            if "claim" not in result.result:
+                claim_result = await run_in_threadpool(
+                    service.invitations.claim,
+                    identifier(value.attemptId),
+                    result.result["managedSessionId"],
+                    identifier(value.invitationId),
+                    value.invitationToken,
+                    central_cookie=result.cookie,
+                )
+                result = CentralCompletion(
+                    {**result.result, "claim": claim_result},
+                    result.cookie,
+                    operator_id=result.operator_id,
+                )
         if handoffs is not None and isinstance(result, CentralCompletion):
             claim = result.result.get("claim")
             claim_ready = claim is None or "state" not in claim
@@ -340,7 +427,14 @@ def build_central_identity_app(
             )
             return destination_form(request, handoff)
         value = Completion.model_validate(await body(request))
-        if value.token is not None or value.email is None or value.code is None:
+        if (
+            value.token is not None
+            or value.email is None
+            or value.code is None
+            or value.recentChallenge is not None
+            or value.source is not None
+            or (value.invitationId is None) != (value.invitationToken is None)
+        ):
             raise ProviderDenied()
         result = await run_in_threadpool(
             service.complete_email,
@@ -350,6 +444,23 @@ def build_central_identity_app(
             value.code,
             remembered=value.remembered,
         )
+        if value.invitationId is not None and isinstance(result, CentralCompletion):
+            if service.invitations is None:
+                raise ProviderUnavailable()
+            if "claim" not in result.result:
+                claim_result = await run_in_threadpool(
+                    service.invitations.claim,
+                    identifier(value.attemptId),
+                    result.result["managedSessionId"],
+                    identifier(value.invitationId),
+                    value.invitationToken,
+                    central_cookie=result.cookie,
+                )
+                result = CentralCompletion(
+                    {**result.result, "claim": claim_result},
+                    result.cookie,
+                    operator_id=result.operator_id,
+                )
         return completion_response(result, value.remembered)
 
     @app.get("/assets/{name}")

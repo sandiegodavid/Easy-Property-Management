@@ -106,8 +106,8 @@ commits nor closes it; SQLAlchemy autobegin alone is insufficient for transactio
 `validate_schema` requires an actual caller-owned SQLite snapshot and checks the
 current resource-derived sqlite_schema inventory, owning revision, foreign keys and
 quick-check without mutation. Attached stores and temporary
-objects reject. The current resource sets define 17 Admin, six Admin recovery, six
-inventory, eight hosted-access and six Operator recovery tables. Structural validation alone grants no identity or resource authority; use
+objects reject. The current resource sets define 22 Admin, six Admin recovery, six
+inventory, nine hosted-access and six Operator recovery tables. Structural validation alone grants no identity or resource authority; use
 the owning service/host contracts and their separate qualification evidence.
 
 After schema creation, the explicit protected `DeploymentMetadata`/`HostMetadata`
@@ -150,7 +150,7 @@ baseline per implemented store, without compatibility revisions or downgrade pat
 
 [Resources](../../application/database/admin-migrations/) · [Dictionary](admin-registry.md) · [Live Architecture](../hosting/ARCHITECTURE.md#2-state--store-ownership-6-sqlite-stores)
 
-`admin_0001_initial` contains 17 tables after the identity-flow extension. The owning
+`admin_0001_initial` contains 22 tables across control metadata, identity flows, admission, and operational audit. The owning
 revision and [shared column helper](../../application/database/hosted_ddl.py) define
 all DDL. Schema creation seeds no identity, policy, operator, release assignment or
 session. Protected deployment binding is separate and cannot grant authentication.
@@ -172,7 +172,7 @@ schema readiness for the host agent's operational qualification.
 
 [Resources](../../application/database/hosted-access-migrations/) · [Dictionary](operator-access.md) · [Live Architecture](../hosting/ARCHITECTURE.md#2-state--store-ownership-6-sqlite-stores)
 
-`access_0001_initial` contains eight initially empty tables. Schema creation seeds no
+`access_0001_initial` contains nine initially empty tables. Schema creation seeds no
 operator, policy, usage measurement or session. The owning initialize-binding command
 supplies verified identity and fixed Free applied policy, inserting disabled,
 subject-null metadata with the admitted epoch. Structural readiness grants no login.

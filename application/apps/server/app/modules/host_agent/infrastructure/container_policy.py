@@ -90,7 +90,9 @@ def policy_hash(profile):
     return sha256(json.dumps(document, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
-def container_spec(command, allocation, targets, profile, *, network=None):
+def container_spec(
+    command, allocation, targets, profile, *, network=None, backup_proxy_runtime=None
+):
     if allocation.limits is None:
         raise HostAgentDenied()
     bindings = targets.bindings(allocation)
@@ -127,6 +129,16 @@ def container_spec(command, allocation, targets, profile, *, network=None):
             "BindOptions": {"Propagation": "rprivate"},
         }
     )
+    if backup_proxy_runtime is not None:
+        mounts.append(
+            {
+                "Type": "bind",
+                "Source": str(backup_proxy_runtime),
+                "Target": "/run/epm-backup-proxy",
+                "ReadOnly": False,
+                "BindOptions": {"Propagation": "rprivate"},
+            }
+        )
     spec = {
         "Image": "sha256:" + allocation.image_digest,
         "User": f"{allocation.host_uid}:{allocation.host_gid}",
