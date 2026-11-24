@@ -114,6 +114,9 @@ def build_central_identity_app(
                 "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action "
                 + request.state.handoff_origin
             )
+            response.headers["Referrer-Policy"] = "strict-origin"
+        elif getattr(request.state, "form_referrer_policy", None):
+            response.headers["Referrer-Policy"] = request.state.form_referrer_policy
         return response
 
     async def bounded_bytes(request):
@@ -167,6 +170,7 @@ def build_central_identity_app(
             else ""
         )
         content = content.replace("<head>", "<head>" + support_meta + script, 1)
+        request.state.form_referrer_policy = "same-origin"
         response = HTMLResponse(content)
         if email:
             set_cookie(response, cookies.central_challenge, token_urlsafe(32), 900)

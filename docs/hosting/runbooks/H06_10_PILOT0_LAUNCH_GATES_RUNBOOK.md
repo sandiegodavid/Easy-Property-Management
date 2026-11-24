@@ -197,3 +197,31 @@ Executed live on GCP project `project-47b72bb7-ba90-42c9-910` and `epm-h02-host`
      --format='value(name,status)'
    ```
 3. Run local validation (`ruff check`, `ruff format --check`, focused `pytest`) on modified Python files and update [HOSTED_MVP_H06_10_EXIT_REVIEW.md](../qualification/reports/HOSTED_MVP_H06_10_EXIT_REVIEW.md) and [HOSTED_MVP_ACCEPTANCE.md](../qualification/HOSTED_MVP_ACCEPTANCE.md) to **GO**.
+
+---
+
+## 8. Production Pilot 0 Host Bring-Up (`epm-h02-host`)
+
+To move `epm-h02-host` from qualification mode to live Pilot 0 readiness (with `epm-backup-proxy.service`, Admin recovery DB, Free v1 storage policy, qualified Operator release, and live host capacity):
+
+1. **Upgrade `/opt/epm/host-agent` to the H06.10 wheel and install `boto3`:**
+   - Package `host_agent` with `hosted_package.py --component host_agent`, install with `pip --python /opt/epm/host-agent/bin/python install --no-index --no-deps --force-reinstall`, clear stale `/opt/epm/host-agent/lib/{database,hosted-candidate.json}` before re-running `stage_schema_resources.py --component host_agent`, and install `boto3` into `/opt/epm/host-agent` (required by `R2ObjectStore` in `epm-backup-proxy.service`).
+
+2. **Reinitialize empty greenfield `inventory.sqlite` for the H06.10 `host-inventory` schema:**
+   - Back up `/srv/epm/data/host/inventory/inventory.sqlite` to `.h0211.bak`, run `initialize_store(HostedStore.HOST_INVENTORY, ...)` + `bind_host(conn, HostMetadata.model_validate_json(...))` preserving `/srv/epm/data/host/metadata.json` (`host_id=5a245678-b983-49d3-ab57-818b6c6bdc67`), and update `/etc/systemd/system/epm-h03-identity.service` to use `/opt/epm/host-agent/bin/python`.
+
+3. **Provision and enable `epm-backup-proxy.service`:**
+   - Create system user `epm-backup-proxy` (`uid=940`), fetch `/etc/epm/secrets/r2.json` (`0600`) from Secret Manager (`epm-h05-r2-credentials`) via `install_services.r2_credential("project-47b72bb7-ba90-42c9-910")`, write `/etc/epm/backup-proxy.json` (`0640 root:epm-backup-proxy`, `admin_uid=65532`, `socket=/run/epm-backup-proxy/backup-proxy.sock`, `operator-workspace-kek` + `admin-control-kek`), add `/run/epm-backup-proxy` (`0711`) to `/etc/tmpfiles.d/epm-host.conf`, install `/etc/systemd/system/epm-backup-proxy.service`, and run `systemctl enable --now epm-backup-proxy.service`.
+
+4. **Initialize `admin-recovery.sqlite` and seed Pilot 0 metadata in `admin.sqlite`:**
+   - Create `/srv/epm/data/host/{admin-recovery,admin-control,admin-scratch}` (`0700 65532:65532`) and run `initialize_store(HostedStore.ADMIN_RECOVERY, /ar/admin-recovery.sqlite)` inside `epm-pilot0-admin:h0610`.
+   - Seed `admin.sqlite` inside `epm-pilot0-admin:h0610`:
+     - `bootstrap_free_v1_policy` (`05038762-822b-5aa1-8906-99c94decabbc`, 50 MB logical, nightly backup, 14 retained points, keep warm).
+     - `qualified_releases`: `00000000-0000-4000-8000-000000000610` (`epm-pilot0-operator:h0610`, `sha256:7b0e6791a60ddf3faac7d7633e992fcbcb0fd557021aaf001b2f144a7427864e`).
+     - `capacity_profiles` (`pilot0-free-v1`, rev `1`) and `capacity_snapshots` (rev `1`, `complete=True`, 6 qualified slots on `e2-standard-2`).
+
+5. **Wire Admin recovery, backup-proxy mounts & `v3` Admin-lite/H05 routes in `/opt/epm/h0312/run_identity.py`:**
+   > **Operational Gotcha 1:** `verify_runtime_mounts` in `shared_identity_registration.py` only allowlists bind mounts under `/control`, `/run/epm-identity-relay`, and `/run/epm-central-identity`, and `/control` is mounted read-only. Create stub directories `admin-recovery`, `admin-control`, `admin-scratch`, and `backup-proxy` inside `/run/epm-h0312-identity/control` (`0700 65532:65532`), mount `/run/epm-backup-proxy` at `/control/backup-proxy`, and set `"backup_proxy_socket": "/control/backup-proxy/backup-proxy.sock"` in `admin.json`.
+   > **Operational Gotcha 2:** `SharedIdentityManifest` defaults to `route_policy="separate_exact_host_method_allowlists_v1"` (auth routes only), causing Caddy to return `403` on `/api/admin/bootstrap` and `/api/admin/operators` (`Retry metadata` / `Capacity observation unavailable` in the UI). Pass `route_policy="separate_exact_host_method_allowlists_v3"` and `admin_routes=ADMIN_H05_ROUTES` to project all Admin-lite and H05 recovery API routes.
+   - Restart `epm-h03-identity.service` and confirm all 6 services (`epm-backup-proxy`, `epm-h03-identity`, `epm-gateway`, `epm-tunnel`, `epm-host-guardian`, `google-cloud-ops-agent`) are `active`.
+

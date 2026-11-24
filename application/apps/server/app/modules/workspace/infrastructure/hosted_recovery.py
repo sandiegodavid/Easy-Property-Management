@@ -109,6 +109,13 @@ def kms_ref_to_db_ref(kms_key_ref: str) -> str:
     return "kms:" + validated.replace("/", ":")
 
 
+def _business_db_path(incarnation_dir: Path) -> Path:
+    nested = incarnation_dir / "database" / "property-management.sqlite"
+    if nested.is_file() or (incarnation_dir / "database").is_dir():
+        return nested
+    return incarnation_dir / "property-management.sqlite"
+
+
 def db_ref_to_kms_ref(db_ref: str) -> str:
     """Convert a hosted_ddl REF token ('kms:...') back to a Cloud KMS resource path."""
     if not db_ref.startswith("kms:"):
@@ -454,7 +461,7 @@ class HostedWorkspaceRecoveryService:
             incarnation_dir.relative_to(self.workspace_root.resolve())
         except ValueError as error:
             raise WorkspaceStateUnreadable("active_business_ref escapes workspace root.") from error
-        db_path = incarnation_dir / "property-management.sqlite"
+        db_path = _business_db_path(incarnation_dir)
         kms_key_ref = db_ref_to_kms_ref(str(meta["encryption_key_ref"]))
         return incarnation_dir, db_path, int(meta["source_generation"]), kms_key_ref
 
@@ -1560,7 +1567,7 @@ class HostedWorkspaceRecoveryService:
         incarnation_dir = (self.workspace_root / active_ref).resolve()
         try:
             incarnation_dir.relative_to(self.workspace_root.resolve())
-            db_path = incarnation_dir / "property-management.sqlite"
+            db_path = _business_db_path(incarnation_dir)
             if not db_path.is_file() or db_path.is_symlink():
                 raise WorkspaceStateUnreadable("Business database missing.")
             with db_path.open("rb") as handle:
@@ -1628,7 +1635,7 @@ class HostedWorkspaceRecoveryService:
         incarnation_dir = (self.workspace_root / active_ref).resolve()
         try:
             incarnation_dir.relative_to(self.workspace_root.resolve())
-            db_path = incarnation_dir / "property-management.sqlite"
+            db_path = _business_db_path(incarnation_dir)
             probe_live_workspace_state(db_path, incarnation_dir)
         except ValueError, WorkspaceStateUnreadable:
             return StartupMode(
@@ -2011,7 +2018,7 @@ class HostedWorkspaceRecoveryService:
                 ).scalar_one()
             )
         prior_dir = (self.workspace_root / prior_ref_probe).resolve()
-        prior_db = prior_dir / "property-management.sqlite"
+        prior_db = _business_db_path(prior_dir)
         prior_tree_kind: Literal["healthy_pre_state", "forensic_damaged"] = "healthy_pre_state"
         try:
             probe_live_workspace_state(prior_db, prior_dir)
@@ -2212,7 +2219,7 @@ class HostedWorkspaceRecoveryService:
                 )
 
             # Phase: validated -> SQLite PRAGMA integrity_check + file completeness/digest check.
-            restored_db = target_dir / "property-management.sqlite"
+            restored_db = _business_db_path(target_dir)
             val_conn = sqlite3.connect(restored_db.as_uri() + "?mode=ro", uri=True)
             try:
                 integrity = val_conn.execute("PRAGMA integrity_check").fetchone()

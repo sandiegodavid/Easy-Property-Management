@@ -28,7 +28,7 @@ def transfer_form(origin, path, fields, *, heading, button):
         f'<button type="submit">{escape(button)}</button></form></main></html>',
         headers={
             "Cache-Control": "no-store",
-            "Referrer-Policy": "no-referrer",
+            "Referrer-Policy": "strict-origin",
             "Content-Security-Policy": f"default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action {origin}",
             "X-Content-Type-Options": "nosniff",
         },

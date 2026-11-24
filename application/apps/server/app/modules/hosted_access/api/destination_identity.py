@@ -182,7 +182,7 @@ def destination_router(
             status_code=409,
             headers={
                 "Cache-Control": "no-store",
-                "Referrer-Policy": "no-referrer",
+                "Referrer-Policy": "same-origin",
                 "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
                 "X-Content-Type-Options": "nosniff",
             },

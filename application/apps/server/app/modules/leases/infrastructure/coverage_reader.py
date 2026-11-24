@@ -12,25 +12,9 @@ class SQLiteLeaseCoverageReader:
         register_json_function(connection, "coverage_lease_context", 1, _context)
         lease, term = LeaseModel.__table__, LeaseTermModel.__table__
         on = locations.c.local_date
-        latest = (
-            select(term.c.id)
-            .where(term.c.lease_id == lease.c.id)
-            .order_by(
-                case((term.c.effective_on <= on, 0), else_=1),
-                case((term.c.effective_on <= on, term.c.effective_on)).desc(),
-                term.c.effective_on,
-                term.c.id,
-            )
-            .correlate(lease, locations)
-            .limit(1)
-            .scalar_subquery()
-        )
-        ranked = (
+        ranked_terms = (
             select(
-                lease.c.space_id,
-                lease.c.id.label("lease_id"),
-                lease.c.status,
-                lease.c.actual_move_out_on,
+                term.c.lease_id,
                 term.c.id.label("term_id"),
                 term.c.base_rent_minor,
                 term.c.currency_code,
@@ -39,6 +23,42 @@ class SQLiteLeaseCoverageReader:
                 term.c.agreed_security_deposit_minor,
                 term.c.effective_on,
                 term.c.ends_on,
+                func.row_number()
+                .over(
+                    partition_by=term.c.lease_id,
+                    order_by=(
+                        case((term.c.effective_on <= on, 0), else_=1),
+                        case((term.c.effective_on <= on, term.c.effective_on)).desc(),
+                        term.c.effective_on,
+                        term.c.id,
+                    ),
+                )
+                .label("term_position"),
+            )
+            .select_from(
+                term.join(lease, lease.c.id == term.c.lease_id).join(
+                    locations,
+                    (locations.c.subject_kind == "space") & (locations.c.id == lease.c.space_id),
+                )
+            )
+            .where(lease.c.status.in_(("executed", "ended", "terminated")))
+            .cte("coverage_ranked_lease_terms")
+        )
+        latest_terms = select(ranked_terms).where(ranked_terms.c.term_position == 1).subquery()
+        ranked = (
+            select(
+                lease.c.space_id,
+                lease.c.id.label("lease_id"),
+                lease.c.status,
+                lease.c.actual_move_out_on,
+                latest_terms.c.term_id,
+                latest_terms.c.base_rent_minor,
+                latest_terms.c.currency_code,
+                latest_terms.c.payment_frequency,
+                latest_terms.c.payment_due_day,
+                latest_terms.c.agreed_security_deposit_minor,
+                latest_terms.c.effective_on,
+                latest_terms.c.ends_on,
                 func.row_number()
                 .over(
                     partition_by=lease.c.space_id,
@@ -54,7 +74,7 @@ class SQLiteLeaseCoverageReader:
                 lease.join(
                     locations,
                     (locations.c.subject_kind == "space") & (locations.c.id == lease.c.space_id),
-                ).outerjoin(term, term.c.id == latest)
+                ).outerjoin(latest_terms, latest_terms.c.lease_id == lease.c.id)
             )
             .where(lease.c.status.in_(("executed", "ended", "terminated")))
             .cte("coverage_ranked_leases")
@@ -89,25 +109,9 @@ class SQLiteLeaseCoverageReader:
             return {}
         lease, term = LeaseModel.__table__, LeaseTermModel.__table__
         on = case(dates, value=lease.c.space_id)
-        latest_term = (
-            select(term.c.id)
-            .where(term.c.lease_id == lease.c.id)
-            .order_by(
-                case((term.c.effective_on <= on, 0), else_=1),
-                case((term.c.effective_on <= on, term.c.effective_on)).desc(),
-                term.c.effective_on,
-                term.c.id,
-            )
-            .correlate(lease)
-            .limit(1)
-            .scalar_subquery()
-        )
-        ranked = (
+        ranked_terms = (
             select(
-                lease.c.space_id,
-                lease.c.id.label("lease_id"),
-                lease.c.status,
-                lease.c.actual_move_out_on,
+                term.c.lease_id,
                 term.c.id.label("term_id"),
                 term.c.base_rent_minor,
                 term.c.currency_code,
@@ -116,6 +120,39 @@ class SQLiteLeaseCoverageReader:
                 term.c.agreed_security_deposit_minor,
                 term.c.effective_on,
                 term.c.ends_on,
+                func.row_number()
+                .over(
+                    partition_by=term.c.lease_id,
+                    order_by=(
+                        case((term.c.effective_on <= on, 0), else_=1),
+                        case((term.c.effective_on <= on, term.c.effective_on)).desc(),
+                        term.c.effective_on,
+                        term.c.id,
+                    ),
+                )
+                .label("term_position"),
+            )
+            .select_from(term.join(lease, lease.c.id == term.c.lease_id))
+            .where(
+                lease.c.space_id.in_(dates), lease.c.status.in_(("executed", "ended", "terminated"))
+            )
+            .subquery()
+        )
+        latest_terms = select(ranked_terms).where(ranked_terms.c.term_position == 1).subquery()
+        ranked = (
+            select(
+                lease.c.space_id,
+                lease.c.id.label("lease_id"),
+                lease.c.status,
+                lease.c.actual_move_out_on,
+                latest_terms.c.term_id,
+                latest_terms.c.base_rent_minor,
+                latest_terms.c.currency_code,
+                latest_terms.c.payment_frequency,
+                latest_terms.c.payment_due_day,
+                latest_terms.c.agreed_security_deposit_minor,
+                latest_terms.c.effective_on,
+                latest_terms.c.ends_on,
                 func.row_number()
                 .over(
                     partition_by=lease.c.space_id,
@@ -127,7 +164,7 @@ class SQLiteLeaseCoverageReader:
                 )
                 .label("position"),
             )
-            .select_from(lease.outerjoin(term, term.c.id == latest_term))
+            .select_from(lease.outerjoin(latest_terms, latest_terms.c.lease_id == lease.c.id))
             .where(
                 lease.c.space_id.in_(dates), lease.c.status.in_(("executed", "ended", "terminated"))
             )
