@@ -1,0 +1,296 @@
+Code Review: hosted_mvp branch (main...27e9025d)
+Date: 2026-11-24
+Scope: Full branch review of hosted_mvp (600 files changed vs main), including unreviewed post-H06 commits (5c36653f, ec668b95, 27e9025d), cross-slice integration boundaries, local single-operator regression checks, static validation, and repo/doc hygiene.
+
+Summary: 24 actionable findings (4 P0, 10 P1, 8 P2, 2 P3).
+Static checks run:
+- ruff check (application/pyproject.toml): FAILED (4 E501 violations in deploy/hosted-mvp/identity/qualify_identity_proof.py)
+- ruff format --check: PASSED (1009 files)
+- npm run lint: PASSED
+- npm run format:check: FAILED (1 file: application/deploy/hosted-mvp/README.md)
+- npm run typecheck: PASSED (212 source files)
+- Local single-operator mode (serve, LOCAL-002 backup/restore, hosted UI gating): verified no regressions aside from Finding 18 (WorkspaceGate refetch unmount).
+
+================================================================================
+1. Operator Workspace Recovery & Runtime Lifecycle
+================================================================================
+
+[P0] 1. Retained file paths resolved against workspace root instead of files/ subdirectory
+Files:
+- application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:296-318 (_read_retained_files)
+- application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:374-383 (stage_consistent_snapshot)
+- application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:2199-2210 (confirm_restore)
+Reference:
+- application/apps/server/app/modules/files/infrastructure/content_store.py:138-143
+- application/apps/server/app/bootstrap/api.py:238
+Defect:
+FilesystemContentStore is rooted at service.paths.files (<workspace_root>/files) and stores file_content_locations.local_relative_path as managed/<content_sha256>, so actual files live at <workspace_root>/files/managed/<content_sha256>. However, _read_retained_files() and stage_consistent_snapshot() resolve local_relative_path directly under workspace_dir (<workspace_root>/managed/<content_sha256>), and confirm_restore() actively moves restored files out of target_dir/files up into target_dir.
+Impact:
+As soon as an operator uploads a single file in Pilot 0, probe_live_workspace_state() raises WorkspaceStateUnreadable ("Retained file is missing on disk."), failing every backup with business_state_unreadable and forcing detect_startup_mode() into recovery mode on every container restart.
+Fix:
+Resolve local_relative_path under workspace_dir / "files" in _read_retained_files() and stage_consistent_snapshot(), and keep restored files under target_dir / "files" in confirm_restore().
+
+[P0] 2. Restored operator incarnation lacks database/ layout and workspace.json manifest, breaking post-restore normal-mode startup
+Files:
+- application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:112-116, 389, 2180-2265
+- application/apps/server/app/modules/hosted_access/infrastructure/operator_entry.py:374-400
+- application/apps/server/app/modules/workspace/application/service.py:132-158
+- application/apps/server/app/modules/host_agent/infrastructure/repair_runtime.py:401-403
+Defect:
+Commit ec668b95 added _business_db_path(incarnation_dir) so backup/probe can read database/property-management.sqlite in a real WorkspaceService-initialized workspace. However, stage_consistent_snapshot() still backs up only a flat DatabaseInput("property-management.sqlite", staged_db) without workspace.json or the database/ directory structure, and confirm_restore() restores into incarnation-<N>/property-management.sqlite (flat) with no database/ subdirectory and no workspace.json. On subsequent normal-mode startup, operator_entry.py:374-400 points WorkspacePaths and create_app() at incarnation-<N>, where WorkspaceService.open() strictly requires both incarnation-<N>/workspace.json and incarnation-<N>/database/property-management.sqlite, failing closed. In addition, repair_runtime.py:402 still hardcodes incarnation_dir / "property-management.sqlite" instead of _business_db_path(incarnation_dir), causing business_db_healthy to always evaluate False on real workspaces.
+Fix:
+In confirm_restore(), materialize the restored DB at target_dir / "database" / "property-management.sqlite", create database/, files/, exports/, and backups/ (0o700), and write/validate target_dir / "workspace.json" (from backup manifest or restored workspace_metadata). Update repair_runtime.py:402 to use _business_db_path(incarnation_dir).
+
+[P1] 3. Post-restore access_epoch tracking, restore fencing, and central_key scope verification are broken in live operator runtime
+Files:
+- application/apps/server/app/modules/hosted_access/infrastructure/operator_entry.py:222-241, 304-322, 339-344, 405-410
+- application/apps/server/app/modules/workspace/infrastructure/hosted_recovery.py:1818-1820, 1857-1876
+- application/database/hosted-access-migrations/versions/access_0001_initial.py:143-159
+Defect:
+1. current_binding() (operator_entry.py:230-238) queries SELECT 1 FROM source_receipts WHERE kind = 'verify_restore_binding' AND state = 'applied' LIMIT 1. In access.sqlite, the table is access_receipts (source_receipts does not exist), the recorded kind is 'restore_binding', and access_receipts has no state column. The bare except Exception: pass swallows the OperationalError, so current_binding() never advances access_epoch.
+2. Both central_key callbacks (lines 339-344 and 405-410) compare scope against the static startup binding instead of current_binding(), rejecting post-restore central-signed HandoffEvidence, SessionObservationGrant, and RecentAuthGrant tokens.
+3. operator_entry.py:304-322 constructs HostedWorkspaceRecoveryService without passing source_lifecycle, making _run_source_fence() a no-op and preventing _run_verify_restore_binding() from writing a restore_binding receipt or advancing session_generation/not_before.
+Fix:
+Wire a real SourceLifecycle instance into HostedWorkspaceRecoveryService in operator_entry.py, query main.access_receipts WHERE kind = 'restore_binding' AND access_epoch >= :live_epoch without swallowing SQL/schema errors, and compare scope == current_binding() in both central_key callbacks.
+
+[P1] 4. repair_runtime._update_inventory_binding() updates nonexistent updated_at column on resource_bindings
+Files:
+- application/apps/server/app/modules/host_agent/infrastructure/repair_runtime.py:351-367
+- application/database/host-inventory-migrations/versions/host_inventory_0001_initial.py:70-98
+Defect:
+_update_inventory_binding() executes UPDATE resource_bindings SET container_ref = :cref, state = 'stopped', updated_at = :now, revision = revision + 1 ..., but resource_bindings has no updated_at column (its timestamp column is last_verified_at). Whenever repair_runtime.execute() runs with a real inventory handle, it raises sqlite3.OperationalError after the replacement container has already been started, aborting the repair and rolling back the inventory update.
+Fix:
+Replace updated_at = :now with last_verified_at = :now (and verify whether state should be 'running' rather than 'stopped' once replace_container() starts the replacement container).
+
+================================================================================
+2. Admin Control-Plane Recovery
+================================================================================
+
+[P0] 5. Admin control-plane restore aborts on any DB with historical login handoffs, superseded attempts, or completed/rejected email continuations
+Files:
+- application/apps/server/app/modules/hosted_admin/infrastructure/admin_recovery.py:998-1018
+- application/database/admin-migrations/versions/admin_0001_initial.py:416, 732, 782, 890-898
+Defect:
+Post-restore reconciliation in admin_recovery.py:998-1018 excludes nonexistent state names ('consumed', 'revoked') and omits real terminal states:
+- login_handoffs: WHERE state NOT IN ('consumed', 'expired', 'revoked') -> misses terminal 'redeemed'
+- login_attempts: WHERE state NOT IN ('completed', 'expired', 'failed') -> misses terminal 'superseded'
+- email_continuations: WHERE state NOT IN ('consumed', 'expired', 'revoked') -> misses terminal 'completed' and 'rejected'
+Because admin_0001_initial.py:890-898 installs BEFORE UPDATE terminal immutability triggers that RAISE(ABORT, 'immutable identity evidence') on those terminal states, restoring any admin.sqlite that has ever completed a login handoff, superseded login attempt, or completed/rejected email continuation unconditionally aborts the restore transaction.
+Fix:
+Match the exact terminal state sets from admin_0001_initial.py:890-895:
+- login_handoffs: WHERE state NOT IN ('redeemed', 'expired')
+- login_attempts: WHERE state NOT IN ('completed', 'failed', 'superseded', 'expired')
+- email_continuations: WHERE state NOT IN ('completed', 'rejected', 'expired')
+
+================================================================================
+3. Hosted Identity, Handoff & Access Control
+================================================================================
+
+[P1] 6. GET /auth/start?continuation=... clobbers transfer_form's Referrer-Policy: strict-origin back to no-referrer
+Files:
+- application/apps/server/app/modules/hosted_access/api/destination_identity.py:120-129, 158
+- application/apps/server/app/modules/hosted_access/api/handoff_forms.py:31
+Defect:
+Commit ec668b95 changed transfer_form() in handoff_forms.py:31 from no-referrer to strict-origin so browsers send a non-null Origin header on cross-origin POST form submissions. However, destination_identity.py:158 unconditionally executes response.headers["Referrer-Policy"] = "no-referrer" after transfer_form() returns, overwriting strict-origin.
+Impact:
+In the email-link continuation flow (source_origin/auth/start?continuation=... -> POST central_origin/auth/email/continue), browsers honoring no-referrer send Origin: null or omit Origin, causing central_identity.py:307 and central_pairing.py:49 to reject pairing with HTTP 401.
+Fix:
+Set Referrer-Policy: no-referrer only on the RedirectResponse branch (lines 138-145), or use response.headers.setdefault("Referrer-Policy", "no-referrer").
+
+[P1] 7. Operator restore step-up verification (recent_challenge / recent_auth_grant) is unwired end-to-end
+Files:
+- application/apps/web/src/app/hosted-recovery.tsx:15-22, 297-355, 700-704
+- application/apps/server/app/modules/hosted_access/api/destination_identity.py:103-147
+- application/apps/server/app/modules/hosted_access/api/central_identity.py:179-354
+- application/apps/server/app/modules/hosted_access/api/operator_recovery.py:250-270, 313-322
+- application/apps/server/app/modules/hosted_access/infrastructure/central_session_authority.py:186-344
+Defect:
+hosted-recovery.tsx constructs /auth/start?recent_challenge=<id>&return_to=<path> for both "Start fresh verification" and "Open verification page directly". Operator GET /auth/start (destination_identity.py:103-147) only allows {"continuation"} or a subset of {"returnTo", "renew"} and rejects recent_challenge and return_to with 401 (ProviderDenied). Furthermore, CentralSessionAuthority.start_recent() and complete_recent() are not wired to any HTTP route in central_identity.py, and no code emits #recent_auth_grant=... or postMessage({ type: "epm-recent-auth-grant", ... }).
+Impact:
+Operators cannot obtain a recent_auth_grant from the browser UI to confirm a self-service restore in normal or recovery mode.
+Fix:
+Wire the recent_challenge step-up flow across Operator /auth/start, Central sign-in (start_recent/complete_recent), and the grant callback/delivery path, align buildStepUpUrl() to that contract, and remove the non-standard "noopener=false" window.open feature at hosted-recovery.tsx:347.
+
+[P1] 8. Invitation claim capability is parsed from URL fragment and immediately discarded in Central sign-in
+Files:
+- application/apps/web/src/central/main.tsx:29-38
+- application/apps/web/src/admin/AdminWorkspace.tsx:560-563
+- application/apps/server/app/modules/hosted_access/api/destination_identity.py:95-145
+- application/apps/server/app/modules/hosted_access/api/central_identity.py:179-279
+Defect:
+Admin constructs one-time invitation links as https://<slug>.<publicBaseDomain>/auth/start#invitation=<id>&token=<token>. URL fragments are not sent to the operator server on redirect, and on Central, central/main.tsx:29-38 parses invitation and token from location.hash, strips the fragment with history.replaceState(), and discards the result (void invitationCapability;) without sending it to any Central endpoint.
+Impact:
+Invited operators clicking the Admin-issued one-time claim URL cannot submit their invitation capability to claim their workspace.
+Fix:
+Forward invitationCapability through the Central sign-in completion flow and consume it in central_identity.py / central_invitations.py (or provide an operator-side claim page that submits the fragment capability before initiating the Central redirect).
+
+[P2] 9. Stripping entire Content-Security-Policy on /__/auth/handler and /__/auth/iframe removes clickjacking protection
+Files:
+- application/apps/server/app/modules/hosted_access/infrastructure/firebase_helpers.py:78-84
+- application/apps/server/app/platform/hosted_security_headers.py:7-16
+Defect:
+Commit 5c36653f deletes Content-Security-Policy completely for /__/auth/handler and /__/auth/iframe. Because API_SECURITY_HEADERS does not set X-Frame-Options, popping CSP drops frame-ancestors, base-uri 'none', and object-src 'none', allowing third-party sites to frame Firebase OAuth helper pages on central_origin.
+Fix:
+Replace CSP with a targeted framing/base policy instead of deleting it: frame-ancestors 'none'; base-uri 'none'; object-src 'none' (plus X-Frame-Options: DENY) on /__/auth/handler, and frame-ancestors 'self' <admin_origin>; base-uri 'none'; object-src 'none' on /__/auth/iframe.
+
+[P2] 10. Unbounded request.json() reads and missing Content-Type/duplicate-header checks on operator recovery POST routes
+Files:
+- application/apps/server/app/modules/hosted_access/api/operator_recovery.py:74-78, 241, 285, 395
+Defect:
+Unlike central_identity.py:122-135, admin_identity.py:96-104, and operator_security.py:61-71, 140, operator_recovery.py calls await request.json() directly with no byte cap, no Content-Type: application/json enforcement, and no duplicate content-type/content-length check in _read_cookie_and_origin().
+Fix:
+Use a bounded JSON body reader (e.g., 20 KB cap, strict application/json, duplicate-key rejection) and add content-type and content-length to the duplicate-header check.
+
+================================================================================
+4. Host Agent, Backup Proxy, Sandbox & GCP Deployment
+================================================================================
+
+[P0] 11. epm-backup-proxy cannot read root-only 0700 host inventory.sqlite on provisioned hosts
+Files:
+- application/deploy/hosted-mvp/gcp/install_services.py:30, 154, 171-172, 263-270
+- application/apps/server/app/modules/host_agent/infrastructure/host_services.py:59-101
+- application/apps/server/app/modules/host_agent/infrastructure/backup_proxy.py:116-190
+Defect:
+install_services.py creates /srv/epm/data/host and /srv/epm/data/host/inventory as root:root 0700 and creates /run/epm-projections/backup-proxy as root:epm-backup-proxy 0750. epm-backup-proxy.service runs as unprivileged User=epm-backup-proxy with CapabilityBoundingSet= and ReadOnlyPaths=/run/epm-projections/backup-proxy. However, nothing in service_runtime.py or install_services.py projects inventory.sqlite (or a read-only principal map) into /run/epm-projections/backup-proxy, while InventoryPeerResolver.resolve() opens inventory_path directly as epm-backup-proxy.
+Impact:
+On a host provisioned by install_services.py, epm-backup-proxy hits EACCES traversing /srv/epm/data/host/inventory and fails every operator backup/restore request with BackupProxyUnavailable.
+Fix:
+Have service_runtime.py (running as root on refresh/inventory mutations) atomically project a read-only principal map or inventory snapshot into /run/epm-projections/backup-proxy/ with mode 0640 root:epm-backup-proxy, and point epm-backup-proxy at that projection.
+
+[P1] 12. Operator container sandbox policy never bind-mounts /run/epm-backup-proxy and NativeEffects forbids unpermitted mounts
+Files:
+- application/apps/server/app/modules/host_agent/infrastructure/container_policy.py:104-130
+- application/apps/server/app/modules/host_agent/infrastructure/runtime_effects.py:108-131
+- application/apps/server/app/modules/host_agent/infrastructure/host_services.py:71-72, 99
+Defect:
+container_spec() only bind-mounts /workspace, /control, /control/data, /scratch, /tmp, and /var/tmp; it never bind-mounts /run/epm-backup-proxy. Because NativeEffects._sandbox() asserts actual_mounts == permitted, any manually added mount causes epm-host-guardian to immediately contain/stop the container.
+Impact:
+Operator workspaces supervised by HostAgent cannot connect to epm-backup-proxy, breaking in-container backups and restores end-to-end.
+Fix:
+Add an explicit bind mount for /run/epm-backup-proxy in container_spec() when backup proxy is configured so both launch and guardian verification permit it.
+
+[P1] 13. install_services.py starts epm-host-guardian.service with missing /etc/epm/runtime-profile.json
+Files:
+- application/deploy/hosted-mvp/gcp/install_services.py:287-290, 315-326
+- application/apps/server/app/modules/host_agent/infrastructure/supervisor.py:93-94, 124, 203-215
+Defect:
+install_services.py writes epm-host-guardian.service with --profile /etc/epm/runtime-profile.json and unconditionally enables and starts it, but neither install_services.py nor any other script under deploy/hosted-mvp/ creates /etc/epm/runtime-profile.json. supervisor.py unconditionally loads profile_path when --config is passed and exits with code 3 when missing.
+Impact:
+On freshly provisioned hosts, epm-host-guardian.service immediately enters a Restart=on-failure crash loop.
+Fix:
+Provision root-owned 0600 /etc/epm/runtime-profile.json in install_services.py before starting epm-host-guardian.service, or gate enabling/starting the unit on the file existing (matching epm-backup-proxy.service at line 321).
+
+[P1] 14. epm_host_inode_headroom log-based metric in cloud_plan.py has no log emitter in the codebase
+Files:
+- application/deploy/hosted-mvp/gcp/cloud_plan.py:392-401, 465-474
+Defect:
+Commit ec668b95 replaced agent.googleapis.com/disk/inode_percent_used in inode_headroom with a log-based metric epm_host_inode_headroom matching jsonPayload.event="host_inode_headroom_alert" OR textPayload:"host_inode_headroom_alert". No code, timer, or script anywhere in the repository emits host_inode_headroom_alert.
+Impact:
+The "EPM Host Inode Utilization > 80%" alert policy will silently never trigger.
+Fix:
+Add a periodic host-side inode check (in epm-host-guardian or a systemd timer provisioned by install_services.py) that emits host_inode_headroom_alert when root or /srv/epm/data inode usage exceeds 80%, or switch back to a collected Ops Agent metric.
+
+[P2] 15. install_ops_agent_config() updates Ops Agent config without restarting google-cloud-ops-agent.service
+Files:
+- application/deploy/hosted-mvp/gcp/install_services.py:216-220, 330-343
+Defect:
+install() writes /etc/google-cloud-ops-agent/config.yaml when /etc/google-cloud-ops-agent exists, but never restarts google-cloud-ops-agent.service. Updated Docker JSON and journald pipelines do not take effect on running hosts until a manual restart or reboot.
+Fix:
+Run systemctl try-restart google-cloud-ops-agent.service after writing the updated config.
+
+[P2] 16. lab/compose.yaml passes --health-only, incompatible with H06.6 production Dockerfiles
+Files:
+- application/deploy/hosted-mvp/lab/compose.yaml:6, 23
+- application/deploy/hosted-mvp/Dockerfile.admin:20-21
+- application/deploy/hosted-mvp/Dockerfile.operator:20-21
+Defect:
+lab/compose.yaml still passes command: ["--health-only"] to EPM_ADMIN_IMAGE and EPM_OPERATOR_IMAGE, whose entrypoints (shared_identity_entry / operator_entry) do not accept --health-only and fail immediately with an argparse error.
+Fix:
+Either pass valid dev configuration/TLS arguments for the production entrypoints or override entrypoint in lab/compose.yaml to invoke app.hosted_candidates.{admin,operator}.
+
+[P3] 17. Umask-sensitive mkdir(mode=0o711) for /srv/epm/data/{workspace,control,scratch} in guest_disk.py
+Files:
+- application/deploy/hosted-mvp/gcp/guest_disk.py:127-129
+Defect:
+Line 127 explicitly calls MOUNT.chmod(0o711), but line 129 creates role subdirectories with (MOUNT / role).mkdir(mode=0o711) without a subsequent chmod. Under umask 077 (used by startup.sh:4), mkdir produces 0700 directories, blocking non-root Operator container UIDs from traversing their subtrees.
+Fix:
+Call (MOUNT / role).chmod(0o711) explicitly after mkdir.
+
+================================================================================
+5. Frontend Web Application
+================================================================================
+
+[P1] 18. WorkspaceGate unmounts and remounts <Admitted> on bootstrap refetch error, discarding open forms and unsaved input
+Files:
+- application/apps/web/src/app/workspace-gate.tsx:176-234 (specifically lines 186-198 vs 227-234)
+Defect:
+When a ready workspace hits a background bootstrap refetch error (e.g., HTTP 503 during a maintenance window or transient disconnect), Gate changes its React tree from <Admitted key={...} bootstrap={data}>{children}</Admitted> (lines 228-233) to a Fragment containing a banner plus <div hidden aria-hidden="true"><Admitted bootstrap={bootstrap.data}>{children}</Admitted></div> (lines 187-197). Changing the tree position and dropping the key forces React to unmount the active <Admitted> subtree and remount a new one (and unmount/remount again on recovery).
+Impact:
+Violates the draft-preservation invariant in both hosted and local single-operator modes, wiping in-memory form state and WorkspaceScope while firing fresh queries from the hidden remounted subtree against an unavailable server.
+Fix:
+Render <Admitted key={...} bootstrap={bootstrap.data}> at one stable tree position whenever bootstrap.data?.state === "ready", toggling an optional refetch-error banner above it and hidden/inert on its wrapper without changing element hierarchy or key.
+
+================================================================================
+6. Static Validation, Repo Hygiene & Documentation
+================================================================================
+
+[P1] 19. Secret-leak audit command in observability-and-budgets.md silently false-negatives on every run
+Files:
+- docs/hosting/operations/observability-and-budgets.md:20-23
+Defect:
+The log audit command uses PCRE negative lookahead (?!...) with POSIX ERE (grep -E). grep -E rejects (?!...) with exit status 2, and the trailing || echo "OK: zero unredacted token/cookie patterns found" catches exit status 2 as clean—printing OK even when unredacted cookies, bearer tokens, or JWTs exist in logs.
+Fix:
+Use grep -P (or a python3 regex script) and explicitly check exit codes (0 = leak found, 1 = clean, >=2 = error) so regex/command failures cannot report OK.
+
+[P2] 20. Static lint and format checks fail on hosted_mvp
+Files:
+- application/deploy/hosted-mvp/identity/qualify_identity_proof.py:190, 332, 333, 385 (4 ruff E501 line-length > 100 errors)
+- application/deploy/hosted-mvp/README.md (Prettier format check failure via npm run format:check)
+Fix:
+Wrap the 4 long lines in qualify_identity_proof.py and run Prettier on application/deploy/hosted-mvp/README.md, then re-verify ruff check and npm run format:check pass.
+
+[P2] 21. Generated Playwright failure artifacts committed under application/apps/web/test-results/
+Files:
+- .gitignore:33-34
+- application/apps/web/test-results/.last-run.json
+- application/apps/web/test-results/component-tests-*/error-context.md (10 files, 1,531 insertions)
+Defect:
+.gitignore ignores application/test-results/ and application/playwright-report/, but component tests write to application/apps/web/test-results/, causing 11 generated failure artifacts to be tracked on hosted_mvp.
+Fix:
+Remove application/apps/web/test-results/ from git and update .gitignore:33-34 to ignore **/test-results/ and **/playwright-report/ (or add application/apps/web/test-results/ and application/apps/web/playwright-report/).
+
+[P2] 22. Database schema dictionaries out of sync with executable DDL
+Files:
+- docs/database/overview.md:35-39
+- docs/database/schema-resources.md:109, 153, 175
+- docs/database/admin-registry.md:12
+- docs/database/host-inventory.md:207-208
+- docs/database/admin-identity.md:102
+- docs/database/operator-access.md:248-256
+Defect:
+1. Table counts: admin_0001_initial.py defines 22 tables, but overview.md:35 and schema-resources.md:109,153 state 17 and admin-registry.md:12 states 13; access_0001_initial.py defines 9 tables, but overview.md:38 and schema-resources.md:109,175 state 8.
+2. Stale status: overview.md:35-39 still describes H03/H04/H05 behavior and host-inventory auth-route extensions as unimplemented future work despite Pilot 0 being live.
+3. Missing CHECK values/table: host-inventory.md:207-208 omits apply_auth_routes from host_receipts.kind; admin-identity.md:102 omits redeeming from login_handoffs.state; operator-access.md:248-256 lacks a column table for source_recent_challenges.
+Fix:
+Sync table counts, Pilot 0 implementation status, CHECK vocabularies, and the source_recent_challenges column table with the executable DDL.
+
+[P2] 23. Hosting docs misstate epm-gateway.service (Caddy) as reading root-only 0600 inventory.sqlite
+Files:
+- docs/hosting/operations/host-services-and-networking.md:13
+- docs/hosting/ARCHITECTURE.md:46
+Reference:
+- application/apps/server/app/modules/host_agent/infrastructure/host_services.py:134-182
+Defect:
+host-services-and-networking.md:13 states epm-gateway.service reads root-owned /srv/epm/data/host/inventory/inventory.sqlite (0600), and ARCHITECTURE.md:46 lists epm-gateway as a host-inventory owner. In host_services.py, epm-gateway.service runs as unprivileged User=epm-caddy and reads only the generated Caddy projection (config.json); root-owned epm-ingress-projection / service_runtime reads inventory.sqlite.
+Fix:
+Update both docs to reflect that epm-gateway.service reads only the generated Caddy projection and attribute host-inventory to Host Agent (epm-host-guardian / service_runtime / epm-ingress-projection).
+
+[P3] 24. Minor documentation inconsistencies and broken anchors
+Files:
+- docs/hosting/README.md:11 ("8-store ownership" contradicts ARCHITECTURE.md:38 "6 SQLite Stores")
+- README.md:65-66 (states hosted build/launch tooling is "planned under H02", contradicting Pilot 0 LIVE / GO at line 9)
+- AGENTS.md:53 (broken link to archived docs/active/UI-001_DESIGN.md)
+- docs/hosting/design/mvp/subscriptions-storage-and-runtime.md:46 (broken anchor implementation-contracts.md#h02-project-quota-reuse-contract)
+- docs/hosting/qualification/specifications/identity_handoff.md:25 (broken anchor ../../design/mvp/delivery-plan.md#deployed-operator-handoff-and-session-qualification)
+Fix:
+Correct the store count, update README.md:65-66 and AGENTS.md:53, and repair or remove the two broken section anchors.
