@@ -37,10 +37,29 @@ def build_router(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(runtime.error)
             )
 
+    def ready_manifest():
+        if (
+            runtime is not None
+            and runtime.ready
+            and runtime.manifest is not None
+            and service.paths.manifest.is_file()
+            and service.paths.database.is_file()
+        ):
+            try:
+                service.workspace_store_factory(service.paths.database).ping()
+            except Exception as error:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)
+                ) from error
+            return runtime.manifest
+        return None
+
     @router.get("/health")
     def health() -> dict[str, str]:
         if error := startup_error():
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error))
+        if ready_manifest() is not None:
+            return {"status": "ok"}
         try:
             service.open()
         except WorkspaceNotInitializedError as error:
@@ -62,6 +81,8 @@ def build_router(
                 else status.HTTP_503_SERVICE_UNAVAILABLE
             )
             raise HTTPException(status_code=status_code, detail=str(error))
+        if (cached := ready_manifest()) is not None:
+            return {"path": str(service.paths.root), "manifest": cached.to_dict()}
         try:
             manifest = service.open()
         except WorkspaceNotInitializedError as error:

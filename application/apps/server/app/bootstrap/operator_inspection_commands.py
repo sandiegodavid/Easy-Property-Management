@@ -4,6 +4,7 @@ from app.modules.files.application.errors import normalize_filename, normalize_m
 from app.modules.inspections.application.commands import fingerprint, InspectionRecoveryReader
 from app.modules.inspections.application.service import AreaInput, ObservationInput
 from app.modules.inspections.infrastructure.recovery_reader import SQLiteInspectionRecoveryReader
+from app.modules.leases.infrastructure.context_reader import SQLiteLeaseContextReader
 from app.modules.operator.application.inspection_forms import (
     INSPECTION_SCHEMAS,
     inspection_source_kind,
@@ -179,9 +180,10 @@ def compose_inspection_forms():
         "inspection.report.correct": "report.create",
     }
     result = {}
+    lease_reader = SQLiteLeaseContextReader()
     for form in INSPECTION_SCHEMAS:
         kind = inspection_source_kind(form)
-        reader: InspectionRecoveryReader = SQLiteInspectionRecoveryReader(kind)
+        reader: InspectionRecoveryReader = SQLiteInspectionRecoveryReader(kind, lease_reader)
         action = actions.get(form, form.removeprefix("inspection."))
         result[form] = RecoveryBinding(
             kind,

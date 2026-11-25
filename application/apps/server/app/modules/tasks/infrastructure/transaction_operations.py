@@ -38,6 +38,24 @@ class SQLiteTaskTransactionOperations:
             .limit(1)
         ).scalar_one_or_none()
 
+    def latest_reminder_statuses(
+        self, connection: Any, task_ids: set[str] | list[str]
+    ) -> dict[str, str | None]:
+        ids = {task_id for task_id in task_ids if task_id is not None}
+        if not ids:
+            return {}
+        rows = connection.execute(
+            TaskReminderModel.__table__.select()
+            .with_only_columns(TaskReminderModel.task_id, TaskReminderModel.status)
+            .where(TaskReminderModel.task_id.in_(ids))
+            .order_by(TaskReminderModel.created_at_utc.desc(), TaskReminderModel.id.desc())
+        ).all()
+        result: dict[str, str | None] = {}
+        for task_id, reminder_status in rows:
+            if task_id not in result:
+                result[task_id] = reminder_status
+        return result
+
     def cancel_task_if_open(
         self,
         connection: Any,

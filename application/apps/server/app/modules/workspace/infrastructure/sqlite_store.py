@@ -19,6 +19,15 @@ class SQLiteWorkspaceStore:
         self.database_path = database_path
         self.audit_recorder = audit_recorder
 
+    def ping(self) -> None:
+        """Lightweight liveness check without full schema or table scans."""
+        try:
+            self._reject_symlink()
+            with closing(sqlite3.connect(self.database_path)) as connection:
+                connection.execute("SELECT 1").fetchone()
+        except sqlite3.Error as error:
+            raise WorkspaceDatabaseError(f"Workspace database is invalid: {error}") from error
+
     def persist_identity(self, manifest: WorkspaceManifest) -> None:
         """Persist identity into the Alembic-created baseline schema."""
         try:

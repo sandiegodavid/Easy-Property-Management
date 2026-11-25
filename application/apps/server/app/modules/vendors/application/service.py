@@ -3,7 +3,7 @@
 import json
 import unicodedata
 from dataclasses import asdict, dataclass, field, replace
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta, timezone
 from urllib.parse import SplitResult, urlsplit, urlunsplit
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
@@ -1721,7 +1721,8 @@ def _reputation_date(value):
     if value is None:
         return None
     normalized = _date(value)
-    if normalized > date.today().isoformat():
+    max_local_date = datetime.now(timezone(timedelta(hours=14))).date().isoformat()
+    if normalized > max_local_date:
         raise ProviderError("Last-checked date cannot be in the future.")
     return normalized
 

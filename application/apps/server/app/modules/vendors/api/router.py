@@ -1,6 +1,6 @@
 """Typed provider HTTP contract."""
 
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -184,7 +184,7 @@ class ReputationLinkPatchInput(Contract):
         if (
             "lastCheckedOn" in fields
             and self.lastCheckedOn is not None
-            and self.lastCheckedOn > date.today()
+            and self.lastCheckedOn > datetime.now(timezone(timedelta(hours=14))).date()
         ):
             raise ValueError("lastCheckedOn cannot be in the future.")
         return self

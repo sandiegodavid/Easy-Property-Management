@@ -59,48 +59,66 @@ class FileStorageVerificationService:
             candidates = [item for item in candidates if item.id == file_id]
             if not candidates:
                 raise FileError("File record was not found.", "file_not_found")
-        counts = {"available": 0, "missing": 0, "quarantined": 0}
-        for item in candidates:
-            current = item.storage_state
-            try:
-                store = self.stores.get(item.storage_provider)
-                if store is None:
-                    raise FileError(
-                        "The configured content store is unavailable.", "file_provider_unavailable"
+        state = _decode_cursor(continuation) if file_id is None else None
+        if continuation is None:
+            counts = {"available": 0, "missing": 0, "quarantined": 0}
+            for item in candidates:
+                current = item.storage_state
+                try:
+                    store = self.stores.get(item.storage_provider)
+                    if store is None:
+                        raise FileError(
+                            "The configured content store is unavailable.",
+                            "file_provider_unavailable",
+                        )
+                    path = store.path_for(item)
+                    if item.storage_provider == "s3":
+                        path.unlink(missing_ok=True)
+                    item_state = "available"
+                except FileError as error:
+                    if error.code == "file_provider_unavailable":
+                        # An outage is not evidence loss and must not change state.
+                        raise
+                    item_state = (
+                        "missing" if error.code == "file_content_unavailable" else "quarantined"
                     )
-                path = store.path_for(item)
-                if item.storage_provider == "s3":
-                    path.unlink(missing_ok=True)
-                state = "available"
-            except FileError as error:
-                if error.code == "file_provider_unavailable":
-                    # An outage is not evidence loss and must not change state.
-                    raise
-                state = "missing" if error.code == "file_content_unavailable" else "quarantined"
-            if state == "available":
-                verified_at = datetime.now(UTC).isoformat()
+                if item_state == "available":
+                    verified_at = datetime.now(UTC).isoformat()
+                else:
+                    verified_at = item.verified_at
+                if item_state != current or item_state == "available":
+                    before = {"storageState": current, "verifiedAt": item.verified_at}
+                    after = {"storageState": item_state, "verifiedAt": verified_at}
+                    self.unit_of_work.replace_storage_verification(
+                        item,
+                        item_state,
+                        verified_at,
+                        FileAuditChange(
+                            "file",
+                            item.id,
+                            "storage_verified",
+                            after,
+                            "file_storage_verification",
+                            str(uuid4()),
+                            before,
+                            actor_kind="system",
+                        ),
+                        self.consequences,
+                    )
+                counts[item_state] += 1
+        else:
+            raw_counts = state.get("counts") if isinstance(state, dict) else None
+            if isinstance(raw_counts, dict) and all(
+                isinstance(raw_counts.get(key), int)
+                for key in ("available", "missing", "quarantined")
+            ):
+                counts = {
+                    "available": raw_counts["available"],
+                    "missing": raw_counts["missing"],
+                    "quarantined": raw_counts["quarantined"],
+                }
             else:
-                verified_at = item.verified_at
-            if state != current or state == "available":
-                before = {"storageState": current, "verifiedAt": item.verified_at}
-                after = {"storageState": state, "verifiedAt": verified_at}
-                self.unit_of_work.replace_storage_verification(
-                    item,
-                    state,
-                    verified_at,
-                    FileAuditChange(
-                        "file",
-                        item.id,
-                        "storage_verified",
-                        after,
-                        "file_storage_verification",
-                        str(uuid4()),
-                        before,
-                        actor_kind="system",
-                    ),
-                    self.consequences,
-                )
-            counts[state] += 1
+                counts = {"available": 0, "missing": 0, "quarantined": 0}
         # A single-file repair verifies only that file.  A full verification is
         # also the explicit storage-inventory pass, including orphan discovery.
         reconciliation: dict[str, dict[str, int]] = {}
@@ -112,10 +130,10 @@ class FileStorageVerificationService:
             by_provider: dict[str, list[object]] = {provider: [] for provider in self.stores}
             for item in candidates:
                 by_provider.setdefault(item.storage_provider, []).append(item)
-            state = _decode_cursor(continuation)
+            assert state is not None
             for provider, store in self.stores.items():
                 items = by_provider.get(provider, [])
-                if provider == "local" and hasattr(store, "reconcile"):
+                if provider == "local" and continuation is None and hasattr(store, "reconcile"):
                     result = store.reconcile(
                         {item.local_relative_path for item in items if item.local_relative_path}
                     )
@@ -145,6 +163,7 @@ class FileStorageVerificationService:
                                 "seen": [list(value) for value in sorted(seen)],
                                 "orphaned": orphaned,
                                 "unverifiable": unverifiable,
+                                "counts": counts,
                             }
                         )
                     missing = retained - seen if not page.incomplete else set()

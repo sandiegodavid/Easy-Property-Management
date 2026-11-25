@@ -9,40 +9,43 @@ from app.modules.inspections.infrastructure.sqlalchemy_models import (
     ConditionObservationModel,
     ConditionChecklistTemplateModel,
 )
-from app.modules.leases.infrastructure.sqlalchemy_models import LeaseModel
 from app.platform.command_recovery import CommandOutcome, CommandResult
 
 
 class SQLiteInspectionRecoveryReader:
-    def __init__(self, kind):
+    def __init__(self, kind, lease_context_reader=None):
         self.kind = kind
+        self.lease_context_reader = lease_context_reader
 
     def state(self, connection, source_id):
         if self.kind == "inspection_lease":
-            query = select(LeaseModel.id.label("scope_id"), LeaseModel.status).where(
-                LeaseModel.id == source_id
-            )
-        elif self.kind == "condition_template":
-            model = ConditionChecklistTemplateModel
-            query = select(model.id.label("scope_id"), model.archived_at).where(
-                model.id == source_id
-            )
+            if self.lease_context_reader is None:
+                raise RuntimeError("Lease context reader is not configured.")
+            row = self.lease_context_reader.lease_status(connection, source_id)
         else:
-            model = ConditionReportModel
-            query = select(model.lease_id.label("scope_id"), model.status, model.report_kind).where(
-                model.id == source_id
-            )
-            if self.kind == "condition_observation":
-                query = (
-                    select(model.lease_id.label("scope_id"), model.status)
-                    .join(ConditionAreaModel, ConditionAreaModel.condition_report_id == model.id)
-                    .join(
-                        ConditionObservationModel,
-                        ConditionObservationModel.condition_area_id == ConditionAreaModel.id,
-                    )
-                    .where(ConditionObservationModel.id == source_id)
+            if self.kind == "condition_template":
+                model = ConditionChecklistTemplateModel
+                query = select(model.id.label("scope_id"), model.archived_at).where(
+                    model.id == source_id
                 )
-        row = connection.execute(query).mappings().first()
+            else:
+                model = ConditionReportModel
+                query = select(
+                    model.lease_id.label("scope_id"), model.status, model.report_kind
+                ).where(model.id == source_id)
+                if self.kind == "condition_observation":
+                    query = (
+                        select(model.lease_id.label("scope_id"), model.status)
+                        .join(
+                            ConditionAreaModel, ConditionAreaModel.condition_report_id == model.id
+                        )
+                        .join(
+                            ConditionObservationModel,
+                            ConditionObservationModel.condition_area_id == ConditionAreaModel.id,
+                        )
+                        .where(ConditionObservationModel.id == source_id)
+                    )
+            row = connection.execute(query).mappings().first()
         if row is None:
             return None
         receipt = InspectionCommandOperationModel

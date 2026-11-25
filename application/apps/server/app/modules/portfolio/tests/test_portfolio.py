@@ -37,6 +37,7 @@ from app.modules.portfolio.infrastructure.schema_validation import (
     validate_portfolio_schema,
 )
 from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZoneResolver
+from app.modules.parties.infrastructure.unit_of_work import SQLitePartyOperations
 from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioUnitOfWork
 from app.modules.workspace.application.service import WorkspaceService
 from app.platform.config import LocalConfig
@@ -53,7 +54,11 @@ class PortfolioTests(unittest.TestCase):
         self.workspace.initialize()
         self.audit = SQLiteAuditRepository(self.workspace.paths.database)
         self.service = PortfolioService(
-            SQLitePortfolioUnitOfWork(self.workspace.paths.database, AuditRecorder(self.audit)),
+            SQLitePortfolioUnitOfWork(
+                self.workspace.paths.database,
+                AuditRecorder(self.audit),
+                party_operations=SQLitePartyOperations(self.workspace.paths.database),
+            ),
             time_zone_resolver=BundledAddressTimeZoneResolver(),
         )
 

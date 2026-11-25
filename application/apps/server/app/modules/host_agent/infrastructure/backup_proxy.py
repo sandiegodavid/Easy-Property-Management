@@ -17,6 +17,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 import hashlib
 import json
+import logging
 import os
 from pathlib import Path
 import signal
@@ -518,8 +519,12 @@ class BackupProxyServer:
                 self._uid_inflight[uid] = current + 1
                 acquired_uid = True
             handle_proxy_connection(conn, self._handler)
-        except Exception:
-            pass
+        except Exception as exc:
+            logging.getLogger(__name__).warning(
+                "backup_proxy connection handler failed: error=%s peer_uid=%s",
+                type(exc).__name__,
+                uid,
+            )
         finally:
             if acquired_uid and uid is not None:
                 with self._uid_lock:

@@ -217,6 +217,45 @@ function leaseDate(value: string) {
   );
 }
 
+function todayInTimeZone(timeZone: string | null | undefined): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    ...(timeZone ? { timeZone } : {}),
+  }).format(new Date());
+}
+
+function useLeaseSpaceContext(spaceId: string | undefined) {
+  const { scope } = useWorkspace();
+  const space = useQuery({
+    queryKey: scope.key("lease-space-context", spaceId),
+    enabled: !!spaceId,
+    retry: false,
+    queryFn: async ({ signal }) =>
+      readResult(
+        await api.GET("/api/spaces/{space_id}/status", {
+          signal,
+          params: { path: { space_id: spaceId! } },
+        }),
+      ),
+  });
+  const propertyId = space.data?.propertyId;
+  const property = useQuery({
+    queryKey: scope.key("portfolio-record", propertyId),
+    enabled: !!propertyId,
+    retry: false,
+    queryFn: async ({ signal }) =>
+      readResult(
+        await api.GET("/api/properties/{property_id}", {
+          signal,
+          params: { path: { property_id: propertyId! } },
+        }),
+      ),
+  });
+  return { space, property };
+}
+
 function LeaseRecord({ id }: { id: string }) {
   const { scope } = useWorkspace();
   const lease = useQuery({
@@ -226,6 +265,7 @@ function LeaseRecord({ id }: { id: string }) {
         await api.GET("/api/leases/{lease_id}", { signal, params: { path: { lease_id: id } } }),
       ),
   });
+  const { property } = useLeaseSpaceContext(lease.data?.spaceId);
   if (lease.isPending || lease.error)
     return (
       <>
@@ -267,7 +307,7 @@ function LeaseRecord({ id }: { id: string }) {
                 ? [
                     "lease.end",
                     ...(item.occupancyState === "scheduled" ||
-                    item.occupancyStartsOn >= new Date().toISOString().slice(0, 10)
+                    item.occupancyStartsOn >= todayInTimeZone(property.data?.timeZone)
                       ? ["lease.void"]
                       : []),
                     "lease.renewal.add",
@@ -503,31 +543,7 @@ function LeaseParticipants({ lease }: { lease: Lease }) {
 }
 
 function LeaseSpaceContext({ spaceId }: { spaceId: string }) {
-  const { scope } = useWorkspace();
-  const space = useQuery({
-    queryKey: scope.key("lease-space-context", spaceId),
-    retry: false,
-    queryFn: async ({ signal }) =>
-      readResult(
-        await api.GET("/api/spaces/{space_id}/status", {
-          signal,
-          params: { path: { space_id: spaceId } },
-        }),
-      ),
-  });
-  const propertyId = space.data?.propertyId;
-  const property = useQuery({
-    queryKey: scope.key("portfolio-record", propertyId),
-    enabled: !!propertyId,
-    retry: false,
-    queryFn: async ({ signal }) =>
-      readResult(
-        await api.GET("/api/properties/{property_id}", {
-          signal,
-          params: { path: { property_id: propertyId! } },
-        }),
-      ),
-  });
+  const { space, property } = useLeaseSpaceContext(spaceId);
   return (
     <section aria-label="Lease property" className="lease-detail-context">
       {space.isPending && <p role="status">Loading property…</p>}

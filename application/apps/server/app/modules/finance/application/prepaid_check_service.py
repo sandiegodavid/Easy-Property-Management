@@ -233,9 +233,10 @@ class PrepaidCheckService:
                 )
                 if not rows:
                     break
+                preloaded = self._preload_views(tx, rows)
                 for record in rows:
                     scan_cursor = (record.check_dated_on, record.id)
-                    view = self._view(tx, record)
+                    view = self._view(tx, record, preloaded=preloaded)
                     if property_id is not None and view["propertyId"] != property_id:
                         continue
                     if space_id is not None and view["spaceId"] != space_id:
@@ -746,23 +747,59 @@ class PrepaidCheckService:
             }
         )
 
-    def _view(self, tx, item: PrepaidCheck, instant=None) -> dict[str, object]:
-        expectation = tx.expectation(item.expectation_id)
-        zone = tx.lease_time_zone(item.lease_id)
-        context = (
-            None
-            if expectation is None
-            else tx.historical_term_snapshot(expectation.lease_id, expectation.lease_term_id)
+    @staticmethod
+    def _preload_views(tx, rows: list[PrepaidCheck]) -> dict[str, object]:
+        expectations = tx.expectations_by_ids({item.expectation_id for item in rows})
+        pairs = {(exp.lease_id, exp.lease_term_id) for exp in expectations.values()}
+        snapshots = tx.historical_term_snapshots(pairs) if pairs else {}
+        receipts = tx.receipts_by_ids(
+            {item.receipt_id for item in rows if item.receipt_id is not None}
         )
+        reminders = tx.prepaid_check_reminder_statuses(
+            {item.reminder_task_id for item in rows if item.reminder_task_id is not None}
+        )
+        return {
+            "expectations": expectations,
+            "snapshots": snapshots,
+            "receipts": receipts,
+            "reminders": reminders,
+        }
+
+    def _view(
+        self, tx, item: PrepaidCheck, instant=None, *, preloaded: dict[str, object] | None = None
+    ) -> dict[str, object]:
+        if preloaded is not None:
+            expectation = preloaded["expectations"].get(item.expectation_id)
+            context = (
+                None
+                if expectation is None
+                else preloaded["snapshots"].get((expectation.lease_id, expectation.lease_term_id))
+            )
+            zone = None if context is None else context.time_zone
+            receipt = preloaded["receipts"].get(item.receipt_id) if item.receipt_id else None
+            reminder_status = (
+                None
+                if item.reminder_task_id is None
+                else preloaded["reminders"].get(item.reminder_task_id)
+            )
+        else:
+            expectation = tx.expectation(item.expectation_id)
+            zone = tx.lease_time_zone(item.lease_id)
+            context = (
+                None
+                if expectation is None
+                else tx.historical_term_snapshot(expectation.lease_id, expectation.lease_term_id)
+            )
+            receipt = tx.receipt(item.receipt_id) if item.receipt_id else None
+            reminder_status = tx.prepaid_check_reminder_status(item.reminder_task_id)
         if expectation is None or zone is None or context is None:
             raise FinanceConflictError("Prepaid-check context is unavailable.")
-        receipt = tx.receipt(item.receipt_id) if item.receipt_id else None
         return {
             **item.to_dict(),
             "propertyId": context.property_id,
             "spaceId": context.space_id,
             "depositEligibility": self._eligibility(item, zone, instant),
-            "reminderStatus": tx.prepaid_check_reminder_status(item.reminder_task_id),
+            "reminderStatus": reminder_status,
             "expectation": {
                 "id": expectation.id,
                 "periodStartsOn": expectation.period_starts_on,

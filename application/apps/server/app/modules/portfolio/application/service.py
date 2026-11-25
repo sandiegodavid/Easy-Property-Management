@@ -1172,7 +1172,7 @@ class PortfolioService:
                 raise KeyError
             if current.archived_at is not None:
                 return current
-            if transaction.open_ownerships_for_party(party_id, date.today().isoformat()):
+            if transaction.open_ownerships_for_party(party_id):
                 raise PortfolioError(
                     "A party with a current or scheduled property ownership cannot be archived."
                 )

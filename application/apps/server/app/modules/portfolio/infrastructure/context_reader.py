@@ -13,6 +13,13 @@ from app.modules.portfolio.infrastructure.sqlalchemy_models import (
 
 
 class SQLitePortfolioContextReader:
+    def space_ids_for_property(self, connection: Any, property_id: str) -> list[str]:
+        return list(
+            connection.execute(
+                select(SpaceModel.id).where(SpaceModel.property_id == property_id)
+            ).scalars()
+        )
+
     def property_names(self, connection: Any, property_ids: Collection[str]) -> dict[str, str]:
         ids = set(property_ids)
         if not ids:

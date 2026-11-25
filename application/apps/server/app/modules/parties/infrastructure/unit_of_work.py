@@ -89,6 +89,26 @@ class SQLitePartyOperations(PartyTransactionOperations):
         )
         return Party(**dict(row)) if row else None
 
+    def list_parties(self, connection, *, include_archived: bool = False) -> list[Party]:
+        query = PartyModel.__table__.select().order_by(PartyModel.display_name)
+        if not include_archived:
+            query = query.where(PartyModel.archived_at.is_(None))
+        return [Party(**dict(row)) for row in connection.execute(query).mappings()]
+
+    def parties_by_ids(self, connection, party_ids) -> dict[str, Party]:
+        ids = set(party_ids)
+        if not ids:
+            return {}
+        rows = connection.execute(
+            PartyModel.__table__.select().where(PartyModel.id.in_(ids))
+        ).mappings()
+        return {row["id"]: Party(**dict(row)) for row in rows}
+
+    def replace_party(self, connection, party: Party) -> None:
+        connection.execute(
+            PartyModel.__table__.update().where(PartyModel.id == party.id).values(**party.__dict__)
+        )
+
     def exists(self, connection, party_id):
         return (
             connection.execute(

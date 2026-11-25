@@ -155,6 +155,121 @@ class SQLiteFileLinkReader:
         """Normal evidence projection: archived links belong only to history."""
         return self._links_for_entities(connection, entity_type, entity_ids, active_only=True)
 
+    def active_entity_files_summary(
+        self, connection, entity_type: str, entity_id: str
+    ) -> list[dict[str, object]]:
+        rows = connection.execute(
+            select(
+                FileLinkModel.id.label("link_id"),
+                FileLinkModel.purpose,
+                FileRecordModel.id.label("file_id"),
+                FileRecordModel.original_name,
+                FileRecordModel.media_type,
+                FileRecordModel.size_bytes,
+                FileRecordModel.content_sha256,
+                FileContentLocationModel.storage_state,
+                FileContentLocationModel.verified_at,
+            )
+            .join(FileRecordModel, FileRecordModel.id == FileLinkModel.file_id)
+            .join(FileContentLocationModel, FileContentLocationModel.file_id == FileRecordModel.id)
+            .where(
+                FileLinkModel.entity_type == entity_type,
+                FileLinkModel.entity_id == entity_id,
+                FileLinkModel.archived_at.is_(None),
+            )
+            .order_by(FileLinkModel.created_at)
+        ).mappings()
+        return [
+            {
+                "id": row["file_id"],
+                "originalName": row["original_name"],
+                "mediaType": row["media_type"],
+                "sizeBytes": row["size_bytes"],
+                "contentSha256": row["content_sha256"],
+                "linkId": row["link_id"],
+                "purpose": row["purpose"],
+                "storageState": row["storage_state"],
+                "available": row["storage_state"] == "available",
+                "verifiedAt": row["verified_at"],
+            }
+            for row in rows
+        ]
+
+    def active_observation_files(
+        self, connection, observation_ids: Sequence[str]
+    ) -> dict[str, list[dict[str, object]]]:
+        result: dict[str, list[dict[str, object]]] = {obs_id: [] for obs_id in observation_ids}
+        if not observation_ids:
+            return result
+        rows = connection.execute(
+            select(
+                FileLinkModel.id.label("link_id"),
+                FileLinkModel.entity_type,
+                FileLinkModel.entity_id,
+                FileLinkModel.purpose,
+                FileLinkModel.created_at.label("link_created_at"),
+                FileRecordModel.id.label("file_id"),
+                FileRecordModel.original_name,
+                FileRecordModel.media_type,
+                FileRecordModel.size_bytes,
+                FileRecordModel.content_sha256,
+                FileRecordModel.created_at.label("file_created_at"),
+                FileContentLocationModel.storage_provider,
+                FileContentLocationModel.storage_state,
+                FileContentLocationModel.verified_at,
+            )
+            .join(FileRecordModel, FileRecordModel.id == FileLinkModel.file_id)
+            .join(FileContentLocationModel, FileContentLocationModel.file_id == FileRecordModel.id)
+            .where(
+                FileLinkModel.entity_type == "condition_observation",
+                FileLinkModel.entity_id.in_(observation_ids),
+                FileLinkModel.archived_at.is_(None),
+            )
+        ).mappings()
+        for row in rows:
+            result[row["entity_id"]].append(
+                {
+                    "id": row["file_id"],
+                    "originalName": row["original_name"],
+                    "mediaType": row["media_type"],
+                    "sizeBytes": row["size_bytes"],
+                    "contentSha256": row["content_sha256"],
+                    "storageProvider": row["storage_provider"],
+                    "storageState": row["storage_state"],
+                    "available": row["storage_state"] == "available",
+                    "verifiedAt": row["verified_at"],
+                    "createdAt": row["file_created_at"],
+                    "links": [
+                        {
+                            "id": row["link_id"],
+                            "entityType": row["entity_type"],
+                            "entityId": row["entity_id"],
+                            "purpose": row["purpose"],
+                            "createdAt": row["link_created_at"],
+                        }
+                    ],
+                }
+            )
+        return result
+
+    def has_active_link_for_any(
+        self, connection, entity_type: str, entity_ids: Sequence[str]
+    ) -> bool:
+        if not entity_ids:
+            return False
+        return (
+            connection.execute(
+                select(FileLinkModel.id)
+                .where(
+                    FileLinkModel.entity_type == entity_type,
+                    FileLinkModel.entity_id.in_(entity_ids),
+                    FileLinkModel.archived_at.is_(None),
+                )
+                .limit(1)
+            ).first()
+            is not None
+        )
+
     def _links_for_entities(
         self, connection, entity_type: str, entity_ids: Sequence[str], *, active_only: bool
     ) -> dict[str, list[FileLinkWithFile]]:

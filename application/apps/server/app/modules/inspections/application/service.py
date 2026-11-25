@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 import hashlib
 
 from app.modules.inspections.application.attention import inspection_attention
@@ -229,7 +230,8 @@ class InspectionService:
             raise InspectionNotFoundError("Lease was not found.")
         reports = self.unit_of_work.report_views(lease_id)
         current = {(item["reportKind"], item["status"]) for item in reports}
-        today = date.today().isoformat()
+        tz = ZoneInfo(lease["time_zone"]) if lease.get("time_zone") else UTC
+        today = datetime.now(tz).date().isoformat()
         return {
             "reports": reports,
             "revision": self.unit_of_work.command_revision("lease", lease_id),

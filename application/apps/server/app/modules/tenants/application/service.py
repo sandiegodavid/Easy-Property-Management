@@ -2,7 +2,7 @@
 
 import json
 from dataclasses import asdict, dataclass, replace
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from app.modules.parties.application.service import (
@@ -351,7 +351,7 @@ class TenantService:
             if archive == (profile.archived_at is not None):
                 state = "archived" if archive else "active"
                 raise TenantConflictError(f"Tenant profile is already {state}.")
-            if archive and tx.has_open_lease_participation(party_id, date.today().isoformat()):
+            if archive and tx.has_open_lease_participation(party_id):
                 raise TenantConflictError(
                     "A tenant with current or scheduled lease participation cannot be archived."
                 )

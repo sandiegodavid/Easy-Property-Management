@@ -10,6 +10,7 @@ from app.modules.workspace.application.service import (
     WorkspaceNotInitializedError,
     WorkspaceService,
 )
+from app.modules.workspace.domain.models import WorkspaceManifest
 from app.platform.locking import WorkspaceOperationInProgressError, WorkspaceOperationLock
 
 
@@ -30,6 +31,7 @@ class WorkspaceRuntime:
         self.error: WorkspaceError | None = None
         self.read_epoch = str(uuid4())
         self.workspace_id: str | None = None
+        self.manifest: WorkspaceManifest | None = None
 
     @property
     def ready(self) -> bool:
@@ -71,9 +73,11 @@ class WorkspaceRuntime:
             manifest = self.service.open(integrity_check=True)
         except WorkspaceError as error:
             self.error = error
+            self.manifest = None
         else:
             self.error = None
             self.workspace_id = manifest.workspace_id
+            self.manifest = manifest
             self.read_epoch = str(uuid4())
 
     def stop(self) -> None:

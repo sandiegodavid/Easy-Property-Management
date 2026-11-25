@@ -20,6 +20,7 @@ from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.files.application.service import FileError, FileService
 from app.modules.files.infrastructure.content_store import FilesystemContentStore
+from app.modules.files.infrastructure.file_link_reader import SQLiteFileLinkReader
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
 from app.modules.inspections.infrastructure.context_reader import SQLiteInspectionContextReader
 from app.modules.leases.application.file_links import LeaseFileLinkValidator
@@ -132,6 +133,7 @@ class LeaseTerminationTests(unittest.TestCase):
                 SQLiteTenantProfileAvailability(),
                 SQLitePortfolioLeaseOperations(self.workspace.paths.database),
                 SQLiteInspectionContextReader(),
+                file_link_reader=SQLiteFileLinkReader(),
             )
         )
         today = date.today()

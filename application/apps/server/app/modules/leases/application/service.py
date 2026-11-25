@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass, replace
 from json import loads
 from datetime import UTC, date, datetime
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from app.modules.inspections.application.attention import inspection_attention
 from app.modules.leases.application.directory_cursor import (
@@ -384,11 +385,13 @@ class LeaseService:
         record = self.unit_of_work.lease_view(lease_id)
         if record is None:
             raise LeaseNotFoundError("Lease was not found.")
+        zones = self.unit_of_work.space_time_zones({record[0].space_id})
         return _view(
             *record,
             inspection_attention=self.inspection_attention_reader(lease_id)
             if self.inspection_attention_reader
             else None,
+            today=_zone_today(zones.get(record[0].space_id)),
         )
 
     def directory_page(self, *, identity, status=None, property_id=None, cursor=None, limit=25):
@@ -475,22 +478,25 @@ class LeaseService:
             if renewal_due_on_or_before is None
             else _date(renewal_due_on_or_before, "Renewal due date")
         )
+        records = self.unit_of_work.lease_views(
+            status=status,
+            property_id=property_id,
+            space_id=space_id,
+            tenant_party_id=tenant_party_id,
+            contract_start_from=contract_start_from,
+            contract_start_to=contract_start_to,
+            renewal_due_on_or_before=renewal_due_on_or_before,
+        )
+        zones = self.unit_of_work.space_time_zones({record[0].space_id for record in records})
         return [
             _view(
                 *record,
                 inspection_attention=self.inspection_attention_reader(record[0].id)
                 if self.inspection_attention_reader
                 else None,
+                today=_zone_today(zones.get(record[0].space_id)),
             )
-            for record in self.unit_of_work.lease_views(
-                status=status,
-                property_id=property_id,
-                space_id=space_id,
-                tenant_party_id=tenant_party_id,
-                contract_start_from=contract_start_from,
-                contract_start_to=contract_start_to,
-                renewal_due_on_or_before=renewal_due_on_or_before,
-            )
+            for record in records
         ]
 
     def patch(
@@ -795,7 +801,7 @@ class LeaseService:
         def write(tx: LeaseTransaction) -> tuple[str, dict[str, object]]:
             lease = _required_lease(tx, lease_id)
             _require_draft(lease)
-            if lease.occupancy_starts_on < date.today().isoformat():
+            if lease.occupancy_starts_on < _property_today(tx, lease.space_id):
                 raise LeaseError("Lease execution cannot create historical occupancy.")
             participants = tx.participants(lease_id)
             if any(not tx.tenant_profile_active(item.tenant_party_id) for item in participants):
@@ -1030,12 +1036,12 @@ class LeaseService:
                 raise KeyError
             if case.status in {"accepted", "withdrawn", "declined", "completed"}:
                 raise LeaseConflictError("This termination case no longer accepts proposals.")
+            lease = _required_lease(tx, case.lease_id)
+            today = _property_today(tx, lease.space_id)
             proposals = tx.termination_proposals(case_id)
             for current in proposals:
                 if current.status == "open":
-                    countered = replace(
-                        current, status="countered", decided_on=date.today().isoformat()
-                    )
+                    countered = replace(current, status="countered", decided_on=today)
                     tx.replace_termination_proposal(countered)
                     tx.record_change(
                         entity_type="lease_termination_proposal",
@@ -1209,6 +1215,7 @@ class LeaseService:
             )
             tx.replace_termination_case(updated)
             if status in {"withdrawn", "declined"}:
+                today = _property_today(tx, _required_lease(tx, current.lease_id).space_id)
                 proposal_status = "withdrawn" if status == "withdrawn" else "rejected"
                 for proposal in tx.termination_proposals(case_id):
                     if proposal.status != "open":
@@ -1216,7 +1223,7 @@ class LeaseService:
                     decided = replace(
                         proposal,
                         status=proposal_status,
-                        decided_on=date.today().isoformat(),
+                        decided_on=today,
                     )
                     tx.replace_termination_proposal(decided)
                     tx.record_change(
@@ -1301,7 +1308,7 @@ class LeaseService:
         _timeline_concurrency(expected_revision, idempotency_key)
         if confirmed is not True:
             raise LeaseError("Voiding a lease requires explicit confirmation.")
-        correlation, now, today = str(uuid4()), _now(), date.today().isoformat()
+        correlation, now = str(uuid4()), _now()
 
         def write(tx: LeaseTransaction) -> tuple[str, dict[str, object] | None]:
             lease = _required_lease(tx, lease_id)
@@ -1320,6 +1327,7 @@ class LeaseService:
                 return lease.id, None
             if lease.status != "executed":
                 raise LeaseError("Only a draft or executed lease can be voided.")
+            today = _property_today(tx, lease.space_id)
             if lease.occupancy_starts_on < today:
                 raise LeaseConflictError("A lease cannot be voided after occupancy begins.")
             if lease.occupancy_starts_on == today and self._has_settled_same_day_activity(
@@ -1623,9 +1631,9 @@ class LeaseService:
         correlation, now = str(uuid4()), _now()
 
         def write(tx: LeaseTransaction) -> tuple[str, dict[str, object]]:
-            if move_out > date.today().isoformat():
-                raise LeaseError("Actual move-out cannot be in the future.")
             lease = _required_lease(tx, lease_id)
+            if move_out > _property_today(tx, lease.space_id):
+                raise LeaseError("Actual move-out cannot be in the future.")
             if lease.status != "executed":
                 raise LeaseError("Only an executed lease can be ended or terminated.")
             if status == "ended":
@@ -1887,35 +1895,9 @@ class LeaseService:
 
     @staticmethod
     def _has_settled_same_day_activity(tx: LeaseTransaction, lease_id: str) -> bool:
-        connection = getattr(tx, "connection", None)
-        if connection is None:
-            return False
-        driver = getattr(getattr(connection, "connection", None), "driver_connection", None)
-        if driver is None:
-            return False
-        checks = (
-            (
-                "SELECT 1 FROM rent_receipts WHERE lease_id = ? AND voided_at IS NULL LIMIT 1",
-                (lease_id,),
-            ),
-            (
-                "SELECT 1 FROM security_deposit_accounts a "
-                "JOIN security_deposit_transactions t ON t.deposit_account_id = a.id "
-                "WHERE a.lease_id = ? AND t.voided_at IS NULL LIMIT 1",
-                (lease_id,),
-            ),
-            (
-                "SELECT 1 FROM condition_reports WHERE lease_id = ? AND status = 'finalized' LIMIT 1",
-                (lease_id,),
-            ),
+        return tx.has_active_financial_activity(lease_id) or bool(
+            tx.finalized_inspection_report_kinds(lease_id)
         )
-        for sql, params in checks:
-            try:
-                if driver.execute(sql, params).fetchone() is not None:
-                    return True
-            except Exception:
-                continue
-        return False
 
     @staticmethod
     def _apply_lease_timeline(
@@ -1969,21 +1951,24 @@ class LeaseService:
         operation: dict[str, object],
     ) -> dict[str, object]:
         snapshot = tx.lease_snapshot(lease_id)
-        attention = self._transaction_inspection_attention(tx, snapshot[0])
+        today = _property_today(tx, snapshot[0].space_id)
+        attention = self._transaction_inspection_attention(tx, snapshot[0], today=today)
         response = self._with_source_operation(
-            _view(*snapshot, inspection_attention=attention), operation
+            _view(*snapshot, inspection_attention=attention, today=today), operation
         )
         tx.store_source_timeline_consumer_result(str(operation["operationId"]), response)
         return {**operation, "consumerResult": response}
 
     @staticmethod
-    def _transaction_inspection_attention(tx: LeaseTransaction, lease: Lease) -> dict[str, str]:
+    def _transaction_inspection_attention(
+        tx: LeaseTransaction, lease: Lease, *, today: str | None = None
+    ) -> dict[str, str]:
         return inspection_attention(
             lease_status=lease.status,
             occupancy_starts_on=lease.occupancy_starts_on,
             actual_move_out_on=lease.actual_move_out_on,
             finalized_report_kinds=tx.finalized_inspection_report_kinds(lease.id),
-            effective_on=date.today().isoformat(),
+            effective_on=today or _property_today(tx, lease.space_id),
         )
 
     def get_command_operation(
@@ -2049,11 +2034,15 @@ class LeaseService:
                 before = _required_lease(tx, identity.target_id)
             if before is not None and before.lease_revision != identity.expected_revision:
                 snapshot = tx.lease_snapshot(before.id)
+                today = _property_today(tx, before.space_id)
                 raise LeaseConflictError(
                     "Lease revision is stale.",
                     current_status=_view(
                         *snapshot,
-                        inspection_attention=self._transaction_inspection_attention(tx, before),
+                        inspection_attention=self._transaction_inspection_attention(
+                            tx, before, today=today
+                        ),
+                        today=today,
                     ),
                 )
             changed = mutation(tx)
@@ -2106,6 +2095,7 @@ class LeaseService:
                 }
             else:
                 snapshot = tx.lease_snapshot(revised.id)
+                today = _property_today(tx, revised.space_id)
                 extra = (
                     {"revision": identity.payload["expectedSpaceRevision"]}
                     if response_kind == "timeline"
@@ -2114,7 +2104,10 @@ class LeaseService:
                 response = {
                     **_view(
                         *snapshot,
-                        inspection_attention=self._transaction_inspection_attention(tx, revised),
+                        inspection_attention=self._transaction_inspection_attention(
+                            tx, revised, today=today
+                        ),
+                        today=today,
                     ),
                     "operationId": operation_id,
                     **extra,
@@ -2221,6 +2214,16 @@ def _active_on(starts_on: str, ends_on: str | None, when: str) -> bool:
     return starts_on <= when and (ends_on is None or ends_on > when)
 
 
+def _zone_today(time_zone: str | None) -> str:
+    return datetime.now(ZoneInfo(time_zone) if time_zone else UTC).date().isoformat()
+
+
+def _property_today(tx: LeaseTransaction, space_id: str) -> str:
+    space = tx.space(space_id)
+    prop = tx.property(space.property_id) if space is not None else None
+    return _zone_today(prop.time_zone if prop is not None else None)
+
+
 def _view(
     lease: Lease,
     terms: list[LeaseTerm],
@@ -2228,12 +2231,13 @@ def _view(
     renewals: list[LeaseRenewalOption],
     files: list[dict[str, object]],
     inspection_attention=None,
+    today: str | None = None,
 ) -> dict[str, object]:
-    today = date.today().isoformat()
+    effective_today = today or _zone_today(None)
     if lease.status in {"ended", "terminated", "void"}:
         occupancy_state = "ended"
     elif lease.status == "executed":
-        occupancy_state = "scheduled" if lease.occupancy_starts_on > today else "current"
+        occupancy_state = "scheduled" if lease.occupancy_starts_on > effective_today else "current"
     else:
         occupancy_state = "none"
     return {

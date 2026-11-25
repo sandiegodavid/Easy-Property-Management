@@ -87,7 +87,9 @@ class FilesystemContentStore:
                 while chunk := input_file.read(1024 * 1024):
                     size += len(chunk)
                     if size > MAX_FILE_BYTES:
-                        raise FileError("File exceeds the 50 MiB local upload limit.")
+                        raise FileError(
+                            "File exceeds the 50 MiB local upload limit.", "file_too_large"
+                        )
                     digest.update(chunk)
                     output.write(chunk)
             content_hash = digest.hexdigest()

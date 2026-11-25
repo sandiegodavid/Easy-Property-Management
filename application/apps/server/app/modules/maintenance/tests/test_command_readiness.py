@@ -969,9 +969,7 @@ def test_journal_page_query_budget_is_constant(context):
             str(uuid4()),
             expected_revision=index + 1,
         )
-    import app.modules.maintenance.infrastructure.unit_of_work as adapter
-
-    engine = create_sqlite_engine(context.workspace.paths.database)
+    engine = context.service.unit_of_work.engine
     statements = []
 
     def capture(_connection, _cursor, statement, *_args):
@@ -980,18 +978,16 @@ def test_journal_page_query_budget_is_constant(context):
 
     event.listen(engine, "before_cursor_execute", capture)
     try:
-        with patch.object(adapter, "create_engine", return_value=engine):
-            context.journal.issue_journal(issue["id"], page_size=1)
-            one = len(statements)
-            statements.clear()
-            page = context.journal.issue_journal(issue["id"], page_size=20)
-            assert len(statements) == one
-            assert len(statements) <= 6
-            assert len(page["items"]) == 20
-            assert page["nextCursor"]
+        context.journal.issue_journal(issue["id"], page_size=1)
+        one = len(statements)
+        statements.clear()
+        page = context.journal.issue_journal(issue["id"], page_size=20)
+        assert len(statements) == one
+        assert len(statements) <= 6
+        assert len(page["items"]) == 20
+        assert page["nextCursor"]
     finally:
         event.remove(engine, "before_cursor_execute", capture)
-        engine.dispose()
 
 
 def test_api_required_metadata_receipt_and_conflict_schema(context):

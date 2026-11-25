@@ -42,6 +42,7 @@ from app.modules.inspections.application.service import (
 )
 from app.modules.inspections.infrastructure.context_reader import SQLiteInspectionContextReader
 from app.modules.inspections.infrastructure.unit_of_work import SQLiteInspectionUnitOfWork
+from app.modules.leases.infrastructure.context_reader import SQLiteLeaseContextReader
 from app.modules.leases.tests.commands import lease_command
 from app.modules.leases.application.service import (
     LeaseCreateCommand,
@@ -55,7 +56,6 @@ from app.modules.leases.infrastructure.unit_of_work import (
     SQLiteLeaseParticipationGuard,
     SQLiteLeaseUnitOfWork,
 )
-from app.modules.leases.infrastructure.context_reader import SQLiteLeaseContextReader
 from app.modules.parties.application.service import SharedPartyFactory
 from app.modules.parties.infrastructure.unit_of_work import (
     SQLitePartyOperations,
@@ -190,7 +190,13 @@ class InspectionWorkflowTests(unittest.TestCase):
             link_validators=(ConditionObservationFileLinkValidator(),),
         )
         self.inspections = InspectionService(
-            SQLiteInspectionUnitOfWork(self.workspace.paths.database, self.recorder), self.files
+            SQLiteInspectionUnitOfWork(
+                self.workspace.paths.database,
+                self.recorder,
+                lease_context_reader=SQLiteLeaseContextReader(),
+                file_link_reader=SQLiteFileLinkReader(),
+            ),
+            self.files,
         )
         self.backups = BackupService(
             self.workspace,
@@ -224,12 +230,12 @@ class InspectionWorkflowTests(unittest.TestCase):
             confirmed=True,
         )
 
-        class MoveOutDate(date):
+        class MoveOutDateTime(datetime):
             @classmethod
-            def today(cls):
-                return move_out
+            def now(cls, tz=None):
+                return datetime(move_out.year, move_out.month, move_out.day, 12, 0, 0, tzinfo=tz)
 
-        with patch("app.modules.leases.application.service.date", MoveOutDate):
+        with patch("app.modules.leases.application.service.datetime", MoveOutDateTime):
             lease_command(
                 self.leases,
                 "complete_termination_case",
@@ -627,7 +633,10 @@ class InspectionWorkflowTests(unittest.TestCase):
         restored_database = restored_workspace.paths.database
         restored_inspections = InspectionService(
             SQLiteInspectionUnitOfWork(
-                restored_database, AuditRecorder(SQLiteAuditRepository(restored_database))
+                restored_database,
+                AuditRecorder(SQLiteAuditRepository(restored_database)),
+                lease_context_reader=SQLiteLeaseContextReader(),
+                file_link_reader=SQLiteFileLinkReader(),
             )
         )
         restored_files = FileService(

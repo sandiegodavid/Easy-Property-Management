@@ -1,0 +1,166 @@
+Code Review Response: Full Codebase Audit (hosted_mvp @ 3db88c2c)
+Date: 2026-11-24
+Source Review: docs/pending_code_review_comments/FULL_CODEBASE_3db88c2c_REVIEW_COMMENTS.txt
+Remediation Plan: docs/active/FULL_CODEBASE_REMEDIATION_PLAN.md
+Scope: All 18 confirmed actionable findings (0 P0, 3 P1, 10 P2, 5 P3) remediated across 3 batches / 8 slices.
+
+================================================================================
+Batch 1: P1 Correctness, Data Integrity & Timezone Consistency
+================================================================================
+
+[P1] Finding 6 (Slice 1.1) — Same-day lease void settled-activity deposit guard
+- Added owning Finance reader `SQLiteLeaseFinanceActivityReader.has_active_financial_activity()` in
+  `application/apps/server/app/modules/finance/infrastructure/lease_activity_reader.py:1-42`
+  querying `rent_receipts` (`voided_at IS NULL`) and `security_deposit_receipts` joined on
+  `account_id = security_deposit_accounts.id` (`voided_at IS NULL`).
+- Added `LeaseFinanceActivityReader` protocol and `LeaseTransaction.has_active_financial_activity()`
+  in `application/apps/server/app/modules/leases/application/ports.py:52-55, 105`.
+- Wired `SQLiteLeaseFinanceActivityReader()` into `SQLiteLeaseUnitOfWork` in
+  `application/apps/server/app/bootstrap/api.py:87-89, 310-318` and
+  `application/apps/server/app/modules/leases/infrastructure/unit_of_work.py:66-92, 275-290, 355-360`.
+- Replaced raw SQL + `except Exception: continue` in `LeaseService._has_settled_same_day_activity()`
+  (`application/apps/server/app/modules/leases/application/service.py:1895-1900`) with
+  `tx.has_active_financial_activity(lease_id) or bool(tx.finalized_inspection_report_kinds(lease_id))`.
+- Added regression tests in
+  `application/apps/server/app/modules/leases/tests/test_void_same_day_activity.py`.
+
+[P1] Finding 12 (Slice 1.2) — SQLiteMaintenanceUnitOfWork engine configuration
+- Switched `SQLiteMaintenanceUnitOfWork` in
+  `application/apps/server/app/modules/maintenance/infrastructure/unit_of_work.py:13-18, 1211-1254`
+  from per-call raw `create_engine(f"sqlite:///{self.database}")` to a shared
+  `self.engine = create_sqlite_engine(database)`, restoring `PRAGMA foreign_keys = ON`,
+  `BEGIN IMMEDIATE`, `raise_closed_attempt` (`ClosedCommandError` / `PreparedEditRequired`),
+  and canonical path URL handling.
+- Updated query-budget listeners in
+  `application/apps/server/app/modules/maintenance/tests/test_workflow.py:1905-1922` and
+  `application/apps/server/app/modules/maintenance/tests/test_command_readiness.py:972-989`
+  to attach directly to `unit_of_work.engine`.
+- Added FK, special-character path (`#`/`?`), and closed-attempt fence regression tests in
+  `application/apps/server/app/modules/maintenance/tests/test_uow_integrity.py`.
+
+[P1] Finding 7, [P2] Finding 13, [P2] Finding 15 (Slice 1.3) — Property-timezone business dates
+- Leases (`application/apps/server/app/modules/leases/application/service.py:384-396, 481-505,
+  804-806, 1039-1046, 1217-1228, 1311-1334, 1633-1637, 1953-1970, 2035-2046, 2097-2112, 2217-2244`):
+  Replaced all 7 host `date.today()` calls with `_property_today(tx, space_id)` / `_zone_today(...)`
+  using stored Property `ZoneInfo`, and passed `space_time_zones` via `PortfolioLeaseOperations`.
+- Portfolio (`application/apps/server/app/modules/portfolio/application/ports.py:109-111`,
+  `application/apps/server/app/modules/portfolio/application/service.py:1175`,
+  `application/apps/server/app/modules/portfolio/infrastructure/unit_of_work.py:55-91, 297-307, 772-808`):
+  Evaluated party ownership archive guards and active-role checks per property `ZoneInfo`.
+- Tenants & Lease participation guard (`application/apps/server/app/modules/tenants/application/ports.py:12-15, 30`,
+  `application/apps/server/app/modules/tenants/application/service.py:354`,
+  `application/apps/server/app/modules/tenants/infrastructure/unit_of_work.py:138`,
+  `application/apps/server/app/modules/leases/infrastructure/unit_of_work.py:453-495`,
+  `application/apps/server/app/bootstrap/api.py:400`):
+  Evaluated open lease participation per property `ZoneInfo`.
+- Inspections (`application/apps/server/app/modules/inspections/application/service.py:231-235`,
+  `application/apps/server/app/modules/inspections/infrastructure/unit_of_work.py:126-142`,
+  `application/apps/server/app/bootstrap/api.py:318-324`):
+  Included property `time_zone` in `lease_summary()` and evaluated `inspection_attention()` in that zone.
+- Vendors (`application/apps/server/app/modules/vendors/api/router.py:3, 184-189`,
+  `application/apps/server/app/modules/vendors/application/service.py:6, 1720-1727`,
+  `application/apps/server/app/modules/vendors/tests/test_vendors.py:9, 789-797`):
+  Replaced host `date.today()` with UTC+14 calendar-date upper bound (`datetime.now(timezone(timedelta(hours=14))).date()`).
+- Frontend (`application/apps/web/src/workflows/leasing.tsx:220-265, 309-313, 545-547`):
+  Extracted shared `useLeaseSpaceContext()` hook and computed same-day `lease.void` visibility via
+  `Intl.DateTimeFormat("en-CA", { timeZone: property.data?.timeZone })`.
+- Added UTC-midnight boundary regression tests (Finding 18) in
+  `application/apps/server/app/modules/leases/tests/test_property_timezone_dates.py`.
+
+================================================================================
+Batch 2: P2 Reliability, Resource Hygiene & Query Budgets
+================================================================================
+
+[P2] Finding 1 (Slice 2.1) — Avoid per-request full schema/data scans on /health & /api/workspace
+- Cached validated `WorkspaceManifest` on `WorkspaceRuntime.manifest` during `refresh()` in
+  `application/apps/server/app/modules/workspace/application/runtime.py:7-14, 31-35, 72-82`.
+- Added lightweight `SQLiteWorkspaceStore.ping()` (`SELECT 1` with `closing(sqlite3.connect(...))`) in
+  `application/apps/server/app/modules/workspace/infrastructure/sqlite_store.py:17-31`.
+- Updated `GET /health` and `GET /api/workspace` in
+  `application/apps/server/app/modules/workspace/api/router.py:40-88` to serve from ready runtime
+  state + `ping()` without invoking `validate_latest_schema()` or `chmod`.
+- Added regression test in `application/apps/server/app/modules/workspace/tests/test_api.py:174-194`.
+
+[P2] Findings 2, 3, 4 (Slice 2.2) — File verification continuation, replay rollback, backup handles
+- Finding 2 (`application/apps/server/app/modules/files/application/verification.py:62-160`):
+  Restricted per-file content verification and local reconciliation to the initial call
+  (`continuation is None`), persisted `counts` in the continuation cursor, and advanced only
+  paginated S3 reconciliation on continuation pages.
+- Finding 3 (`application/apps/server/app/modules/files/application/service.py:249-264`):
+  Isolated replay-path `content.rollback()` in its own `try/except`, cleared `content = None`
+  before rollback so the outer handler never double-rolls back, and recorded
+  `PublicationCleanupIncomplete` attention on rollback failure while still returning the replayed result.
+- Finding 4 (`application/apps/server/app/modules/workspace/application/backup_service.py:9, 425-475`):
+  Wrapped all three `sqlite3.connect(...)` calls in `_audit()` and `_audit_restored_workspace()`
+  with `contextlib.closing(...)`.
+- Added regression tests in
+  `application/apps/server/app/modules/files/tests/test_verification_and_replay.py`.
+
+[P2] Findings 8, 9, 11 (Slice 2.3) — Inspection & prepaid-check N+1 batching, narrow OperationalError
+- Finding 8 (`application/apps/server/app/modules/inspections/infrastructure/unit_of_work.py:109-195, 471-568`):
+  Batched `report_views()` via `_report_views_for_rows()` (IN queries for areas, observations,
+  observation file attachments, and acknowledgments) and batched `template_views()` (2 queries total).
+- Finding 9 (`application/apps/server/app/modules/inspections/infrastructure/unit_of_work.py:54-71`):
+  Narrowed `OperationalError -> InspectionConflictError` mapping to SQLite lock errors
+  (`"locked" in str(error).casefold()`); re-raises all other `OperationalError`s.
+- Finding 11 (`application/apps/server/app/modules/finance/application/prepaid_check_service.py:234-242, 750-800`,
+  `application/apps/server/app/modules/finance/infrastructure/unit_of_work.py:191-213, 791-828`,
+  `application/apps/server/app/modules/tasks/infrastructure/transaction_operations.py:32-58`):
+  Added chunk-level batch preload (`expectations_by_ids`, `historical_term_snapshots`,
+  `receipts_by_ids`, `prepaid_check_reminder_statuses` / `latest_reminder_statuses`) in
+  `PrepaidCheckService.list()`.
+- Added regression tests in
+  `application/apps/server/app/modules/inspections/tests/test_batch_and_errors.py`.
+
+================================================================================
+Batch 3: P3 Hygiene, Boundary Cleanup & Polish
+================================================================================
+
+[P3] Findings 5, 14, 16, 17 (Slice 3.1)
+- Finding 5 (`application/apps/server/app/modules/files/infrastructure/content_store.py:89-93`):
+  Passed `"file_too_large"` error code to `FileError(...)` on oversized local uploads.
+- Finding 14 (`application/apps/server/app/modules/host_agent/infrastructure/backup_proxy.py:20, 521-528`):
+  Logged privacy-safe warning (`error=<exc class> peer_uid=<uid>`) in `BackupProxyServer`
+  connection-handler catch block.
+- Finding 16 (`application/apps/web/src/app/hosted-settings.tsx:3, 171-183`):
+  Invoked `await checkHostedResponse(response)` before checking `response.ok` in `fetchHostedSettings()`.
+- Finding 17 (`application/scripts/hosted_package.py:9, 141-143, 244-249`):
+  Replaced literal PKCS#8/RSA check in `audit_wheel()` with `re.search(rb"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----", data)`
+  and resolved `args.output.parent.resolve() / args.output.name` in `main()`.
+
+[P3] Finding 10 (Slice 3.2) — Remove 5 cross-module ORM/UoW imports in Wave 2 infrastructure
+- Added owning-module reader methods:
+  - `SQLitePortfolioContextReader.space_ids_for_property()` (`portfolio/infrastructure/context_reader.py:16-22`)
+  - `SQLiteLeaseContextReader.{lease_row,lease_status,lease_participants,has_accepted_termination_case}()`
+    (`leases/infrastructure/context_reader.py:17-62`)
+  - `SQLiteFileLinkReader.{active_entity_files_summary,active_observation_files,has_active_link_for_any}()`
+    (`files/infrastructure/file_link_reader.py:157-267`)
+  - `SQLitePartyOperations.{list_parties,parties_by_ids,replace_party}()`
+    (`parties/infrastructure/unit_of_work.py:92-112`)
+- Removed cross-module ORM/UoW imports from:
+  - `application/apps/server/app/modules/inspections/infrastructure/unit_of_work.py`
+  - `application/apps/server/app/modules/inspections/infrastructure/recovery_reader.py`
+  - `application/apps/server/app/modules/leases/infrastructure/context_reader.py`
+  - `application/apps/server/app/modules/leases/infrastructure/unit_of_work.py`
+  - `application/apps/server/app/modules/portfolio/infrastructure/unit_of_work.py`
+- Wired all owning readers in `application/apps/server/app/bootstrap/api.py:307-326` and
+  `application/apps/server/app/bootstrap/operator_inspection_commands.py:6-7, 183-188`.
+- Cross-module infrastructure import scan across all 5 files confirmed 0 violations.
+
+================================================================================
+Validation Results
+================================================================================
+- Python lint (`ruff check --config application/pyproject.toml` on all 46 changed/new Python files): PASSED (0 errors)
+- Python format (`ruff format --check --config application/pyproject.toml` on all 46 files): PASSED (46 files already formatted)
+- Frontend lint (`npm run lint` from `application/`): PASSED (eslint . --max-warnings 0)
+- Frontend format (`npm run format:check` from `application/`): PASSED (prettier . --check)
+- Frontend typecheck (`npm run typecheck` from `application/`): PASSED (212 source files)
+- Cross-module infrastructure import scan (Wave 2 infrastructure files): PASSED (0 violations)
+- Focused pytest suites:
+  - `leases/tests/test_void_same_day_activity.py` + `leases/tests/test_property_timezone_dates.py`: 6 passed
+  - `maintenance/tests/test_uow_integrity.py` + `test_command_readiness.py` + `test_workflow.py` (focused): 8 passed
+  - `workspace/tests/test_api.py` + `test_backup_service.py`: all passed
+  - `files/tests/test_verification_and_replay.py`: 2 passed
+  - `inspections/tests/test_workflow.py` + `test_batch_and_errors.py` + `portfolio/tests/test_portfolio.py` + new lease tests: 66 passed
+  - `vendors/tests/test_vendors.py` (reputation), `portfolio/tests/test_portfolio.py` (archive), `tenants/tests/test_tenants.py` (archive): all passed
+  - `scripts/tests/test_hosted_packaging.py` + `operator/tests/test_inspection_recovery.py`: passed

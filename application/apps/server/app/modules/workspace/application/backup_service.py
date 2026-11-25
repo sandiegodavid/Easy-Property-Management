@@ -6,6 +6,7 @@ import json
 import shutil
 import sqlite3
 import tempfile
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable
@@ -422,7 +423,10 @@ class BackupService:
         occurred_at: datetime | None = None,
     ) -> None:
         try:
-            with sqlite3.connect(self.workspace_service.paths.database) as connection:
+            with (
+                closing(sqlite3.connect(self.workspace_service.paths.database)) as connection,
+                connection,
+            ):
                 self.audit_recorder.record_change(
                     connection,
                     entity_type=entity_type,
@@ -438,7 +442,10 @@ class BackupService:
                 )
         except sqlite3.IntegrityError as error:
             if event_id is not None:
-                with sqlite3.connect(self.workspace_service.paths.database) as connection:
+                with (
+                    closing(sqlite3.connect(self.workspace_service.paths.database)) as connection,
+                    connection,
+                ):
                     row = connection.execute(
                         "SELECT entity_type, entity_id, action, before_snapshot, after_snapshot, "
                         "actor_kind, reason, correlation_id FROM audit_events WHERE id = ?",
@@ -464,7 +471,7 @@ class BackupService:
         database = destination / "database" / "property-management.sqlite"
         try:
             recorder = self.restored_audit_recorder(database)
-            with sqlite3.connect(database) as connection:
+            with closing(sqlite3.connect(database)) as connection, connection:
                 recorder.record_change(
                     connection,
                     entity_type="workspace_restore",

@@ -1902,9 +1902,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
         self.service.unit_of_work.files = spy
         self.service.unit_of_work.providers = FailingProviders()
         self.service.unit_of_work.finance = FailingFinance()
-        import app.modules.maintenance.infrastructure.unit_of_work as adapter
-
-        engine = create_sqlite_engine(self.workspace.paths.database)
+        engine = self.service.unit_of_work.engine
         statements = []
 
         def capture(*args):
@@ -1913,16 +1911,14 @@ class MaintenanceWorkflowTests(unittest.TestCase):
 
         event.listen(engine, "before_cursor_execute", capture)
         try:
-            with patch.object(adapter, "create_engine", return_value=engine):
-                first = len(statements)
-                self.service.list_issues(page_size=1)
-                one = len(statements) - first
-                first = len(statements)
-                self.service.list_issues(page_size=3)
-                three = len(statements) - first
+            first = len(statements)
+            self.service.list_issues(page_size=1)
+            one = len(statements) - first
+            first = len(statements)
+            self.service.list_issues(page_size=3)
+            three = len(statements) - first
         finally:
             event.remove(engine, "before_cursor_execute", capture)
-            engine.dispose()
         self.assertEqual(one, three)
         self.assertFalse(
             any(

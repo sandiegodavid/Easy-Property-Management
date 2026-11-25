@@ -135,7 +135,7 @@ class _Transaction(_ProfileTransaction):
     def methods(self, party_id):
         return self.party_operations.methods(self.connection, party_id)
 
-    def has_open_lease_participation(self, party_id, today):
+    def has_open_lease_participation(self, party_id, today=None):
         return self.lease_guard.has_open_participation(self.connection, party_id, today)
 
     def duplicate_party_ids(self, methods, limit):

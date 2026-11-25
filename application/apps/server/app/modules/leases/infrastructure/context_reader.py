@@ -12,10 +12,53 @@ from app.modules.leases.infrastructure.sqlalchemy_models import (
     LeaseTerminationProposalModel,
     LeaseTermModel,
 )
-from app.modules.portfolio.infrastructure.sqlalchemy_models import SpaceModel
 
 
 class SQLiteLeaseContextReader:
+    def __init__(self, portfolio_context_reader: Any = None) -> None:
+        self._portfolio_context_reader = portfolio_context_reader
+
+    def lease_row(self, connection: Any, lease_id: str) -> Mapping[str, object] | None:
+        return (
+            connection.execute(LeaseModel.__table__.select().where(LeaseModel.id == lease_id))
+            .mappings()
+            .first()
+        )
+
+    def lease_status(self, connection: Any, lease_id: str) -> Mapping[str, object] | None:
+        return (
+            connection.execute(
+                select(LeaseModel.id.label("scope_id"), LeaseModel.status).where(
+                    LeaseModel.id == lease_id
+                )
+            )
+            .mappings()
+            .first()
+        )
+
+    def lease_participants(self, connection: Any, lease_id: str) -> list[dict[str, object]]:
+        return [
+            dict(row)
+            for row in connection.execute(
+                LeaseParticipantModel.__table__.select().where(
+                    LeaseParticipantModel.lease_id == lease_id
+                )
+            ).mappings()
+        ]
+
+    def has_accepted_termination_case(self, connection: Any, lease_id: str) -> bool:
+        return (
+            connection.execute(
+                select(LeaseTerminationCaseModel.id)
+                .where(
+                    LeaseTerminationCaseModel.lease_id == lease_id,
+                    LeaseTerminationCaseModel.status == "accepted",
+                )
+                .limit(1)
+            ).first()
+            is not None
+        )
+
     def lease_space_ids(self, connection: Any, lease_ids: Collection[str]) -> dict[str, str]:
         ids = set(lease_ids)
         if not ids:
@@ -138,16 +181,25 @@ class SQLiteLeaseContextReader:
     def participant_active_for_property(
         self, connection: Any, party_id: str, property_id: str, space_id: str | None, on: str
     ) -> bool:
+        if space_id is not None:
+            target_spaces = [space_id]
+        else:
+            if self._portfolio_context_reader is None:
+                raise RuntimeError("Portfolio context reader is not configured.")
+            target_spaces = self._portfolio_context_reader.space_ids_for_property(
+                connection, property_id
+            )
+            if not target_spaces:
+                return False
         query = (
             select(LeaseParticipantModel.id)
             .join(
                 LeaseModel,
                 LeaseModel.id == LeaseParticipantModel.lease_id,
             )
-            .join(SpaceModel, SpaceModel.id == LeaseModel.space_id)
             .where(
                 LeaseParticipantModel.tenant_party_id == party_id,
-                SpaceModel.property_id == property_id,
+                LeaseModel.space_id.in_(target_spaces),
                 LeaseModel.status.in_(("executed", "ended", "terminated")),
                 LeaseModel.occupancy_starts_on <= on,
                 or_(LeaseModel.actual_move_out_on.is_(None), LeaseModel.actual_move_out_on > on),
@@ -155,8 +207,6 @@ class SQLiteLeaseContextReader:
                 or_(LeaseParticipantModel.ends_on.is_(None), LeaseParticipantModel.ends_on > on),
             )
         )
-        if space_id is not None:
-            query = query.where(LeaseModel.space_id == space_id)
         return connection.execute(query.limit(1)).first() is not None
 
     @staticmethod

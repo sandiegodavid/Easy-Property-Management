@@ -84,6 +84,9 @@ from app.modules.finance.domain.command_audit_policy import FINANCE_COMMAND_ACTI
 from app.modules.finance.api.money_router import build_router as build_money_router
 from app.modules.finance.application.money_service import MoneySummaryService
 from app.modules.finance.application.money_models import MoneyWorkspaceUnavailable
+from app.modules.finance.infrastructure.lease_activity_reader import (
+    SQLiteLeaseFinanceActivityReader,
+)
 from app.modules.finance.infrastructure.money_unit_of_work import SQLiteMoneySummaryUnitOfWork
 from app.modules.audit.infrastructure.read_marker import SQLiteAuditReadMarker
 from app.modules.leases.infrastructure.location_relation import SQLiteLeaseLocationRelation
@@ -301,7 +304,7 @@ def create_app(  # noqa: C901, PLR0915
         providers=ai_generation.providers,
         credentials=ai_generation.credentials,
     )
-    lease_context_reader = SQLiteLeaseContextReader()
+    lease_context_reader = SQLiteLeaseContextReader(portfolio_context_reader)
     party_reads = SQLitePartyReadOperations(party_operations)
     portfolio_lease_operations = SQLitePortfolioLeaseOperations(service.paths.database)
     lease_unit_of_work = SQLiteLeaseUnitOfWork(
@@ -310,8 +313,16 @@ def create_app(  # noqa: C901, PLR0915
         SQLiteTenantProfileAvailability(),
         portfolio_lease_operations,
         inspection_context_reader,
+        SQLiteLeaseFinanceActivityReader(),
+        file_link_reader=file_link_reader,
     )
-    inspection_unit_of_work = SQLiteInspectionUnitOfWork(service.paths.database, recorder)
+    inspection_unit_of_work = SQLiteInspectionUnitOfWork(
+        service.paths.database,
+        recorder,
+        space_time_zones=portfolio_lease_operations.space_time_zones,
+        lease_context_reader=lease_context_reader,
+        file_link_reader=file_link_reader,
+    )
     maintenance_unit_of_work = SQLiteMaintenanceUnitOfWork(
         service.paths.database,
         recorder,
@@ -389,7 +400,7 @@ def create_app(  # noqa: C901, PLR0915
         SQLiteTenantUnitOfWork(
             service.paths.database,
             recorder,
-            SQLiteLeaseParticipationGuard(),
+            SQLiteLeaseParticipationGuard(portfolio_lease_operations.space_time_zones),
             party_operations,
             party_reads,
         ),

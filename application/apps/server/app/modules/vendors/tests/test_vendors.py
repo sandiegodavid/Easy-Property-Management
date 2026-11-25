@@ -6,7 +6,7 @@ import json
 import sqlite3
 import tempfile
 import unittest
-from datetime import date, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
@@ -790,7 +790,9 @@ class ProviderTests(unittest.TestCase):
             ReputationLinkCommand(
                 "google",
                 "https://example.com",
-                last_checked_on=(date.today() + timedelta(days=1)).isoformat(),
+                last_checked_on=(
+                    datetime.now(timezone(timedelta(hours=14))).date() + timedelta(days=1)
+                ).isoformat(),
             )
 
     def test_reputation_link_lifecycle_uniqueness_noop_and_atomic_audit(self) -> None:

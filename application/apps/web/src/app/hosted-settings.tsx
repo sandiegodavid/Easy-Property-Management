@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { HostedRecovery } from "./hosted-recovery";
-import { managedHostedMode } from "./hosted-session-state";
+import { checkHostedResponse, managedHostedMode } from "./hosted-session-state";
 
 type SectionFreshness = {
   state?: string;
@@ -175,6 +175,7 @@ async function fetchHostedSettings(signal?: AbortSignal): Promise<HostedSettings
     headers: { Accept: "application/json" },
     signal,
   });
+  await checkHostedResponse(response);
   if (!response.ok) {
     throw new Error("Workspace plan and storage details are currently unavailable.");
   }

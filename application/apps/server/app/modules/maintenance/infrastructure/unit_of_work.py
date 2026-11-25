@@ -10,12 +10,12 @@ from contextlib import contextmanager
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import and_, case, create_engine, desc, exists, func, select
+from sqlalchemy import and_, case, desc, exists, func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.maintenance.domain.models import MaintenanceConflictError
-from app.platform.sqlite_engine import immediate_transaction
+from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
 from .sqlalchemy_models import (
     MaintenanceAppointmentModel,
@@ -1209,6 +1209,7 @@ class SQLiteMaintenanceUnitOfWork:
         providers=None,
     ):
         self.database, self.recorder = database, recorder
+        self.engine = create_sqlite_engine(database)
         self.portfolio, self.finance, self.tasks, self.task_operations, self.files = (
             portfolio,
             finance,
@@ -1224,45 +1225,37 @@ class SQLiteMaintenanceUnitOfWork:
         )
 
     def write(self, operation):
-        engine = create_engine(f"sqlite:///{self.database}")
-        try:
-            with immediate_transaction(engine) as connection:
-                return operation(
-                    SQLiteMaintenanceTransaction(
-                        connection,
-                        self.recorder,
-                        self.portfolio,
-                        self.finance,
-                        self.tasks,
-                        self.task_operations,
-                        self.files,
-                        self.parties,
-                        self.leases,
-                        self.communications,
-                        self.providers,
-                    )
+        with immediate_transaction(self.engine) as connection:
+            return operation(
+                SQLiteMaintenanceTransaction(
+                    connection,
+                    self.recorder,
+                    self.portfolio,
+                    self.finance,
+                    self.tasks,
+                    self.task_operations,
+                    self.files,
+                    self.parties,
+                    self.leases,
+                    self.communications,
+                    self.providers,
                 )
-        finally:
-            engine.dispose()
+            )
 
     def read(self, operation):
-        engine = create_engine(f"sqlite:///{self.database}")
-        try:
-            with engine.connect() as connection:
-                return operation(
-                    SQLiteMaintenanceTransaction(
-                        connection,
-                        self.recorder,
-                        self.portfolio,
-                        self.finance,
-                        self.tasks,
-                        self.task_operations,
-                        self.files,
-                        self.parties,
-                        self.leases,
-                        self.communications,
-                        self.providers,
-                    )
+        with self.engine.connect() as connection:
+            return operation(
+                SQLiteMaintenanceTransaction(
+                    connection,
+                    self.recorder,
+                    self.portfolio,
+                    self.finance,
+                    self.tasks,
+                    self.task_operations,
+                    self.files,
+                    self.parties,
+                    self.leases,
+                    self.communications,
+                    self.providers,
                 )
-        finally:
-            engine.dispose()
+            )

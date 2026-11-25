@@ -198,6 +198,19 @@ class _Tx:
         )
         return RentExpectation(**dict(row)) if row else None
 
+    def expectations_by_ids(self, record_ids):
+        ids = set(record_ids)
+        if not ids:
+            return {}
+        rows = (
+            self.connection.execute(
+                RentExpectationModel.__table__.select().where(RentExpectationModel.id.in_(ids))
+            )
+            .mappings()
+            .all()
+        )
+        return {row["id"]: RentExpectation(**dict(row)) for row in rows}
+
     def expectations_for_term(self, term_id):
         return self.expectations(lease_term_id=term_id)
 
@@ -783,6 +796,33 @@ class _Tx:
             if task_id is None
             else self.task_operations.latest_reminder_status(self.connection, task_id)
         )
+
+    def prepaid_check_reminder_statuses(self, task_ids):
+        if self.task_operations is None:
+            raise RuntimeError("TASK-001 operations are not configured.")
+        ids = {task_id for task_id in task_ids if task_id is not None}
+        if not ids:
+            return {}
+        batch = getattr(self.task_operations, "latest_reminder_statuses", None)
+        if batch is not None:
+            return batch(self.connection, ids)
+        return {
+            task_id: self.task_operations.latest_reminder_status(self.connection, task_id)
+            for task_id in ids
+        }
+
+    def receipts_by_ids(self, record_ids):
+        ids = {record_id for record_id in record_ids if record_id is not None}
+        if not ids:
+            return {}
+        rows = (
+            self.connection.execute(
+                RentReceiptModel.__table__.select().where(RentReceiptModel.id.in_(ids))
+            )
+            .mappings()
+            .all()
+        )
+        return {row["id"]: RentReceipt(**dict(row)) for row in rows}
 
     def record_change(self, **change):
         self.recorder.record_change(self.connection.connection.driver_connection, **change)

@@ -170,3 +170,25 @@ class WorkspaceApiTests(unittest.TestCase):
                 await scheduler
 
         asyncio.run(exercise())
+
+    def test_health_and_workspace_status_skip_full_schema_validation_when_runtime_ready(
+        self,
+    ) -> None:
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config_path = root / "config.json"
+            config_path.write_text(
+                json.dumps({"localWorkspacePath": str(root / "workspace")}), encoding="utf-8"
+            )
+            with TestClient(create_app(config_path)) as client:
+                self.assertEqual(client.post("/api/workspace/initialize").status_code, 201)
+                with patch(
+                    "app.modules.workspace.application.service.validate_latest_schema",
+                    side_effect=AssertionError("validate_latest_schema should not run per request"),
+                ):
+                    self.assertEqual(client.get("/health").status_code, 200)
+                    status_response = client.get("/api/workspace")
+                    self.assertEqual(status_response.status_code, 200)
+                    self.assertIn("manifest", status_response.json())

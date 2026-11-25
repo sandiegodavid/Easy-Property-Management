@@ -4,18 +4,18 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Callable
+from datetime import UTC, datetime
 from json import dumps, loads
 from typing import Any, TypeVar
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, case, exists, func, or_, select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.modules.audit.application.recorder import AuditRecorder
-from app.modules.parties.infrastructure.sqlalchemy_models import PartyModel
 from app.modules.parties.application.ports import PartyTransactionOperations
 from app.modules.parties.domain.models import PartyContactMethod
-from app.modules.parties.infrastructure.unit_of_work import SQLitePartyOperations
 from app.modules.portfolio.application.ports import (
     PartyRoleActivityGuard,
     PortfolioConflictError,
@@ -50,22 +50,27 @@ from app.platform.sqlite_engine import create_sqlite_engine, immediate_transacti
 Result = TypeVar("Result")
 
 
+def _zone_today(time_zone: str | None) -> str:
+    return datetime.now(ZoneInfo(time_zone) if time_zone else UTC).date().isoformat()
+
+
 class SQLitePortfolioPartyRoleActivityGuard:
     """Keeps current and scheduled client-owner identities available."""
 
     def conflict(self, connection, party_id: str) -> str | None:
-        from datetime import date
-
-        row = connection.execute(
-            PropertyOwnershipModel.__table__.select().where(
-                PropertyOwnershipModel.party_id == party_id,
-                (
-                    PropertyOwnershipModel.ends_on.is_(None)
-                    | (PropertyOwnershipModel.ends_on > date.today().isoformat())
-                ),
-            )
-        ).first()
-        return "A current or scheduled property ownership prevents party archival." if row else None
+        rows = connection.execute(
+            select(PropertyOwnershipModel.ends_on, PropertyModel.time_zone)
+            .join(PropertyModel, PropertyModel.id == PropertyOwnershipModel.property_id)
+            .where(PropertyOwnershipModel.party_id == party_id)
+        ).all()
+        has_open = any(
+            ends_on is None or ends_on > _zone_today(time_zone) for ends_on, time_zone in rows
+        )
+        return (
+            "A current or scheduled property ownership prevents party archival."
+            if has_open
+            else None
+        )
 
 
 class SQLitePortfolioRoleSummaryReader:
@@ -73,19 +78,16 @@ class SQLitePortfolioRoleSummaryReader:
         self.engine = create_sqlite_engine(database)
 
     def active_roles(self, party_id):
-        from datetime import date
-
         with self.engine.connect() as connection:
-            row = connection.execute(
-                PropertyOwnershipModel.__table__.select().where(
-                    PropertyOwnershipModel.party_id == party_id,
-                    (
-                        PropertyOwnershipModel.ends_on.is_(None)
-                        | (PropertyOwnershipModel.ends_on > date.today().isoformat())
-                    ),
-                )
-            ).first()
-        return {"client_owner"} if row else set()
+            rows = connection.execute(
+                select(PropertyOwnershipModel.ends_on, PropertyModel.time_zone)
+                .join(PropertyModel, PropertyModel.id == PropertyOwnershipModel.property_id)
+                .where(PropertyOwnershipModel.party_id == party_id)
+            ).all()
+        has_open = any(
+            ends_on is None or ends_on > _zone_today(time_zone) for ends_on, time_zone in rows
+        )
+        return {"client_owner"} if has_open else set()
 
 
 class SQLitePortfolioUnitOfWork:
@@ -101,7 +103,7 @@ class SQLitePortfolioUnitOfWork:
         self.recorder = recorder
         self.party_role_guards = party_role_guards
         self.property_archive_guards = property_archive_guards
-        self.party_operations = party_operations or SQLitePartyOperations(database)
+        self.party_operations = party_operations
 
     def write(self, operation: Callable[[PortfolioTransaction], Result]) -> Result:
         try:
@@ -167,23 +169,19 @@ class SQLitePortfolioUnitOfWork:
             return [_space(row) for row in session.execute(query).scalars()]
 
     def parties(self, *, active_only: bool = False) -> list[Party]:
-        with Session(self.engine) as session:
-            query = select(PartyModel).order_by(PartyModel.display_name)
-            if active_only:
-                query = query.where(PartyModel.archived_at.is_(None))
-            return [_party(row) for row in session.execute(query).scalars()]
+        if self.party_operations is None:
+            raise RuntimeError("PartyTransactionOperations is required to list parties.")
+        with self.engine.connect() as connection:
+            return self.party_operations.list_parties(connection, include_archived=not active_only)
 
     def parties_for_ownerships(self, ownerships: list[PropertyOwnership]) -> dict[str, Party]:
         party_ids = {item.party_id for item in ownerships if item.party_id is not None}
         if not party_ids:
             return {}
-        with Session(self.engine) as session:
-            return {
-                item.id: _party(item)
-                for item in session.execute(
-                    select(PartyModel).where(PartyModel.id.in_(party_ids))
-                ).scalars()
-            }
+        if self.party_operations is None:
+            raise RuntimeError("PartyTransactionOperations is required to load parties.")
+        with self.engine.connect() as connection:
+            return self.party_operations.parties_by_ids(connection, party_ids)
 
     def property_views(
         self, *, status: str | None = None
@@ -216,12 +214,7 @@ class SQLitePortfolioUnitOfWork:
             parties = (
                 {}
                 if not party_ids
-                else {
-                    item.id: _party(item)
-                    for item in session.execute(
-                        select(PartyModel).where(PartyModel.id.in_(party_ids))
-                    ).scalars()
-                }
+                else self.party_operations.parties_by_ids(session.connection(), party_ids)
             )
             by_property: dict[str, list[PropertyOwnership]] = defaultdict(list)
             for ownership in ownerships:
@@ -294,6 +287,16 @@ class SQLitePortfolioLeaseOperations:
             row["id"]: RentalLabel(row["property_id"], row["property_name"], row["rental_name"])
             for row in rows
         }
+
+    def space_time_zones(self, connection, space_ids):
+        if not space_ids:
+            return {}
+        rows = connection.execute(
+            select(SpaceModel.id, PropertyModel.time_zone)
+            .join(PropertyModel, SpaceModel.property_id == PropertyModel.id)
+            .where(SpaceModel.id.in_(space_ids))
+        ).all()
+        return {space_id: time_zone for space_id, time_zone in rows if time_zone}
 
     def property(self, connection, property_id):
         row = (
@@ -420,12 +423,9 @@ class _SQLitePortfolioTransaction:
         return Property(**dict(row)) if row else None
 
     def get_party(self, party_id: str) -> Party | None:
-        row = (
-            self.connection.execute(PartyModel.__table__.select().where(PartyModel.id == party_id))
-            .mappings()
-            .first()
-        )
-        return Party(**dict(row)) if row else None
+        if self.party_operations is None:
+            raise RuntimeError("PartyTransactionOperations is required to load parties.")
+        return self.party_operations.party(self.connection, party_id)
 
     def get_space(self, space_id: str) -> Space | None:
         row = (
@@ -528,12 +528,7 @@ class _SQLitePortfolioTransaction:
         parties = (
             {}
             if not party_ids
-            else {
-                item["id"]: Party(**dict(item))
-                for item in self.connection.execute(
-                    select(PartyModel).where(PartyModel.id.in_(party_ids))
-                ).mappings()
-            }
+            else self.party_operations.parties_by_ids(self.connection, party_ids)
         )
         ownership_by_property: dict[str, list[PropertyOwnership]] = defaultdict(list)
         for item in ownerships:
@@ -755,21 +750,43 @@ class _SQLitePortfolioTransaction:
         )
         return [PropertyOwnership(**dict(row)) for row in rows]
 
-    def open_ownerships_for_party(self, party_id: str, today: str) -> list[PropertyOwnership]:
+    def open_ownerships_for_party(
+        self, party_id: str, today: str | None = None
+    ) -> list[PropertyOwnership]:
+        if today is not None:
+            rows = (
+                self.connection.execute(
+                    PropertyOwnershipModel.__table__.select().where(
+                        PropertyOwnershipModel.party_id == party_id,
+                        (
+                            PropertyOwnershipModel.ends_on.is_(None)
+                            | (PropertyOwnershipModel.ends_on > today)
+                        ),
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            return [PropertyOwnership(**dict(row)) for row in rows]
         rows = (
             self.connection.execute(
-                PropertyOwnershipModel.__table__.select().where(
-                    PropertyOwnershipModel.party_id == party_id,
-                    (
-                        PropertyOwnershipModel.ends_on.is_(None)
-                        | (PropertyOwnershipModel.ends_on > today)
-                    ),
+                select(
+                    PropertyOwnershipModel.__table__,
+                    PropertyModel.time_zone.label("_property_time_zone"),
                 )
+                .join(PropertyModel, PropertyModel.id == PropertyOwnershipModel.property_id)
+                .where(PropertyOwnershipModel.party_id == party_id)
             )
             .mappings()
             .all()
         )
-        return [PropertyOwnership(**dict(row)) for row in rows]
+        result = []
+        for row in rows:
+            data = dict(row)
+            tz = data.pop("_property_time_zone")
+            if data["ends_on"] is None or data["ends_on"] > _zone_today(tz):
+                result.append(PropertyOwnership(**data))
+        return result
 
     def party_role_conflicts(self, party_id: str) -> list[str]:
         return [
@@ -786,7 +803,9 @@ class _SQLitePortfolioTransaction:
         ]
 
     def insert_party(self, party: Party) -> None:
-        self.connection.execute(PartyModel.__table__.insert().values(**party.__dict__))
+        if self.party_operations is None:
+            raise RuntimeError("PartyTransactionOperations is required to create parties.")
+        self.party_operations.insert_party(self.connection, party)
 
     def insert_party_contacts(self, contacts: list[PartyContactMethod]) -> None:
         if contacts and self.party_operations is None:
@@ -795,9 +814,9 @@ class _SQLitePortfolioTransaction:
             self.party_operations.insert_method(self.connection, contact)
 
     def replace_party(self, party: Party) -> None:
-        self.connection.execute(
-            PartyModel.__table__.update().where(PartyModel.id == party.id).values(**party.__dict__)
-        )
+        if self.party_operations is None:
+            raise RuntimeError("PartyTransactionOperations is required to update parties.")
+        self.party_operations.replace_party(self.connection, party)
 
     def insert_property(self, property: Property) -> None:
         self.connection.execute(PropertyModel.__table__.insert().values(**property.__dict__))
@@ -889,10 +908,6 @@ class _SQLitePortfolioTransaction:
             reason=reason,
             correlation_id=correlation_id,
         )
-
-
-def _party(row: PartyModel) -> Party:
-    return Party(**{name: getattr(row, name) for name in Party.__dataclass_fields__})
 
 
 def _property(row: PropertyModel) -> Property:

@@ -6,6 +6,7 @@ from hashlib import sha256
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 from tempfile import TemporaryDirectory
@@ -138,10 +139,7 @@ def audit_wheel(wheel, component):
             if name.startswith("app/"):
                 validate_path("package", name.removeprefix("app/"), component)
                 data = archive.read(name)
-                if (
-                    b"-----BEGIN PRIVATE KEY-----" in data
-                    or b"-----BEGIN RSA PRIVATE KEY-----" in data
-                ):
+                if re.search(rb"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----", data):
                     raise ArtifactInvalid()
             elif ".dist-info/" not in name or name.split("/")[-1] not in {
                 "METADATA",
@@ -245,7 +243,7 @@ def main():
             args.architecture,
             args.lock.resolve(),
             args.wheelhouse.resolve(),
-            args.output.absolute(),
+            args.output.parent.resolve() / args.output.name,
             args.identity,
         )
     )

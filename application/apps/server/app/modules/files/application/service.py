@@ -249,7 +249,15 @@ class FileService:
             result = self.unit_of_work.command(persist)
             committed = not replayed
             if replayed:
-                content.rollback()
+                staged = content
+                content = None
+                try:
+                    staged.rollback()
+                except BaseException as cleanup_error:
+                    incomplete = PublicationCleanupIncomplete(
+                        staged.publication_id, staged.storage_provider, cleanup_error, cleanup_error
+                    )
+                    self._try_record_cleanup_attention(incomplete, correlation)
             else:
                 content.commit()
             return result
