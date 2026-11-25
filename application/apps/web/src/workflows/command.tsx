@@ -665,6 +665,7 @@ function CommandEditor({
           query.queryKey[2] !== "saved-command" &&
           query.queryKey[2] !== "workflow-recovery" &&
           query.queryKey[2] !== "recovery",
+        refetchType: "all",
       });
       await scope.client.invalidateQueries({
         predicate: (query) =>

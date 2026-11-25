@@ -119,7 +119,9 @@ function destination(
       label: "Back to property",
     };
   if (form.startsWith("party."))
-    return { to: `/parties?identity=${parent}`, label: "Back to contact details" };
+    return back.startsWith("/tenants")
+      ? { to: back, label: "Back to tenant" }
+      : { to: `/parties?identity=${parent}`, label: "Back to contact details" };
   if (form.startsWith("tenant."))
     return { to: `/tenants?identity=${parent}`, label: "Back to tenant" };
   if (form.startsWith("provider.category."))
@@ -164,6 +166,11 @@ function destination(
     };
   if (form.startsWith("owner_concern."))
     return { to: `/maintenance?record=concern&id=${source ?? id}`, label: "Back to owner concern" };
+  if (form.startsWith("finance.rent_expectation."))
+    return {
+      to: `/money?tab=rent${source || scalar(item.leaseId) ? `&leaseId=${source ?? scalar(item.leaseId)}` : ""}`,
+      label: "Back to rent",
+    };
   const kind = form.startsWith("owner_rent_report.")
     ? "report"
     : form.startsWith("finance.expense_category.")

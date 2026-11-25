@@ -38,6 +38,7 @@ from app.modules.portfolio.application.service import (
 )
 from app.modules.portfolio.infrastructure.directory_reader import SQLitePortfolioDirectoryReader
 from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZoneResolver
+from app.modules.parties.infrastructure.unit_of_work import SQLitePartyOperations
 from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioUnitOfWork
 from app.modules.tenants.infrastructure.sqlalchemy_models import TenantProfileModel
 from app.modules.workspace.application.service import WorkspaceService
@@ -74,7 +75,11 @@ def directory(tmp_path):
     recorder = AuditRecorder(SQLiteAuditRepository(workspace.paths.database))
     captured = datetime(2026, 10, 7, 19, tzinfo=UTC)
     portfolio = PortfolioService(
-        SQLitePortfolioUnitOfWork(workspace.paths.database, recorder),
+        SQLitePortfolioUnitOfWork(
+            workspace.paths.database,
+            recorder,
+            party_operations=SQLitePartyOperations(workspace.paths.database),
+        ),
         time_zone_resolver=BundledAddressTimeZoneResolver(),
         now=lambda: captured,
     )

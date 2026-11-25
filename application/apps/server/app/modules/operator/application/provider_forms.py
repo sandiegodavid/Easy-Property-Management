@@ -27,8 +27,7 @@ class ProviderOfficialIdDraftForm(Contract):
     lastFour: str | None = Field(None, max_length=10)
     issuingRegion: str | None = Field(None, max_length=10)
     expiresOn: str | None = Field(None, max_length=20)
-    fullNumber: str | None = Field(None, max_length=120)
-    clearFullNumber: StrictBool | None = None
+    documentNumber: str | None = Field(None, max_length=120)
 
 
 class ProviderForm(Contract):

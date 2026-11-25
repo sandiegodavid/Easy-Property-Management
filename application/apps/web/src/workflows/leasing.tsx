@@ -753,6 +753,7 @@ function LeaseCommand() {
     Object.assign(initial, {
       spaceId: params.get("spaceId") ?? undefined,
       leaseKind: "residential",
+      occupancyStartsOn: todayInTimeZone(undefined),
       initialTerm: {
         currencyCode: "USD",
         paymentFrequency: "monthly",

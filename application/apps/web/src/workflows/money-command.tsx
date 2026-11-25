@@ -107,7 +107,16 @@ async function commandSource(
       lease.participants.map((item) => item.tenantPartyId),
       signal,
     );
-    source.choices.payerPartyId = lease.participants.map((item) => ({
+    const prepaidCheckForm =
+      definition.formKey === "finance.prepaid_check.create" ||
+      definition.formKey === "finance.prepaid_check.replace";
+    const todayLocal = new Intl.DateTimeFormat("en-CA").format(new Date());
+    const eligibleParticipants = prepaidCheckForm
+      ? lease.participants.filter(
+          (item) => item.startsOn <= todayLocal && (!item.endsOn || item.endsOn > todayLocal),
+        )
+      : lease.participants;
+    source.choices.payerPartyId = eligibleParticipants.map((item) => ({
       id: item.tenantPartyId,
       label: `${names.get(item.tenantPartyId) ?? "Tenant name unavailable"} · ${formatDate(item.startsOn)} – ${item.endsOn ? formatDate(item.endsOn) : "ongoing"}`,
     }));

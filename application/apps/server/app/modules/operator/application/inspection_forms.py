@@ -14,10 +14,10 @@ class InspectionForm(Contract):
 
 
 class ObservationForm(Contract):
-    itemName: str = Field(min_length=1, max_length=160)
-    conditionState: Literal[
-        "good", "fair", "poor", "damaged", "missing", "not_tested", "not_applicable"
-    ]
+    itemName: str | None = Field(None, max_length=160)
+    conditionState: (
+        Literal["good", "fair", "poor", "damaged", "missing", "not_tested", "not_applicable"] | None
+    ) = None
     cleanlinessState: Literal["clean", "needs_cleaning", "not_assessed"] | None = None
     observedOn: date | None = None
     isCompleted: StrictBool = False
@@ -25,7 +25,7 @@ class ObservationForm(Contract):
 
 
 class AreaForm(Contract):
-    displayName: str = Field(min_length=1, max_length=160)
+    displayName: str | None = Field(None, max_length=160)
     observations: list[ObservationForm] = Field(default_factory=list, max_length=100)
     notes: str | None = Field(None, max_length=4000)
 

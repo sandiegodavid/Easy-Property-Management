@@ -5,6 +5,9 @@ import { leasingStatusLabels } from "../shared/leasing-status";
 import { formatDate } from "../shared/presentation";
 
 const fieldLabels: Record<string, string> = {
+  startsAtUtc: "Starts",
+  endsAtUtc: "Ends",
+  scheduledTimezone: "Time zone",
   dueAtUtc: "Due",
   dueTimezone: "Deadline time zone",
   taskDeadlineState: "Deadline",
@@ -90,6 +93,11 @@ export function ReadableFacts({ value, fields }: { value: unknown; fields: strin
               "postMoveOut",
               "tenantPresence",
               "effectiveKind",
+              "propertyType",
+              "purpose",
+              "category",
+              "reason",
+              "occupancyStatus",
             ].includes(key);
           return (
             <div key={key}>

@@ -27,10 +27,10 @@ docker compose -f deploy/hosted-mvp/local-test/compose.yaml ps
 
 ### Local URLs
 
-| Container | URL | What It Runs |
-| --- | --- | --- |
-| **Admin** (`epm-local-admin`) | http://localhost:18801 | Real Admin-lite UI & APIs backed by `admin.sqlite` (Free v1 policy, capacity snapshot, seeded `demo` operator) |
-| **Operator** (`epm-local-operator`) | http://localhost:18802 | Real Operator UI & APIs backed by `hosted-access.sqlite` + synthetic `demo/seed.py` business workspace |
+| Container                           | URL                    | What It Runs                                                                                                   |
+| ----------------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------- |
+| **Admin** (`epm-local-admin`)       | http://localhost:18801 | Real Admin-lite UI & APIs backed by `admin.sqlite` (Free v1 policy, capacity snapshot, seeded `demo` operator) |
+| **Operator** (`epm-local-operator`) | http://localhost:18802 | Real Operator UI & APIs backed by `hosted-access.sqlite` + synthetic `demo/seed.py` business workspace         |
 
 ### Local Auth Helper Routes
 

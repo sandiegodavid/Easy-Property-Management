@@ -30,6 +30,7 @@ On each turn, continue through checkpoints until complete. Save checkpoint and s
 - Address only the named feature and findings.
 - Pause if clarification is needed.
 - Implement each slice as one cohesive change where practical.
+- Document progress and status in the owning plan/design doc after completing each implementation slice.
 - Document a checkpoint after completing each implementation slice.
 - When changes are made for a slice, update its status and link to its checkpoint in the owning design doc, and check any owning specifications, delivery plans, or dictionaries linked in that design doc's header to update any status, contracts, or implementation notes affected by the slice.
 - When adding or modifying database schemas or migration files under `application/database/`, update the owning store dictionary and index docs in `docs/database/` (`overview.md`, `schema-resources.md`, and the owning store markdown file) in the same change so documented tables, columns, constraints, indexes, triggers, and implementation status match the executable DDL.

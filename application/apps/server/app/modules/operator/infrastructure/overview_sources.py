@@ -60,7 +60,7 @@ class OverviewSources:
             self.finance_references.references(properties),
         ):
             queries.append(select(relation.c.entity_type, relation.c.entity_id))
-        refs = union_all(*queries).subquery("context_references")
+        refs = union_all(*queries).cte("context_references")
         return ContextScope(properties, refs, subject.id if subject.kind == "owner" else None)
 
     def page(self, connection, section, subject, window):
@@ -76,13 +76,13 @@ class OverviewSources:
         scope = self.scope(connection, subject, window.as_of)
         if section in {"communications", "tasks"}:
             tasks = self.tasks.references(scope)
-            references = union_all(select(scope.references), select(tasks)).subquery(
+            references = union_all(select(scope.references), select(tasks)).cte(
                 "context_with_task_references"
             )
             scope = ContextScope(scope.properties, references, scope.party_id)
         if section == "tasks":
             communications = self.communications.references(scope)
-            references = union_all(select(scope.references), select(communications)).subquery(
+            references = union_all(select(scope.references), select(communications)).cte(
                 "task_context_references"
             )
             scope = ContextScope(scope.properties, references, scope.party_id)

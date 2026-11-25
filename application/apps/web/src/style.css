@@ -177,11 +177,11 @@
 }
 .property-status-tabs {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  row-gap: 0.25rem;
+  column-gap: 0.5rem;
   max-width: 100%;
   min-width: 0;
-  overflow-x: auto;
-  white-space: nowrap;
   border-bottom: 1px solid var(--border);
   margin-block: 1rem;
 }
@@ -205,11 +205,11 @@
 }
 .page-tabs {
   display: flex;
-  flex-wrap: nowrap;
-  gap: 1rem;
+  flex-wrap: wrap;
+  row-gap: 0.25rem;
+  column-gap: 0.75rem;
   max-width: 100%;
   min-width: 0;
-  overflow-x: auto;
   border-bottom: 1px solid var(--border);
   margin-block: 1rem;
 }
@@ -665,6 +665,7 @@
   inset-block-start: 100%;
   inset-inline-end: 0;
   z-index: 10;
+  pointer-events: none;
   width: min(20rem, calc(100vw - 2rem));
   margin: 0;
   padding: 0.75rem;
@@ -704,10 +705,14 @@
     overflow-y: auto;
     scrollbar-gutter: stable;
   }
+  .home-grid .ui-region > div[aria-busy] > a {
+    display: inline-block;
+  }
 }
 @media (min-width: 801px) {
   .home-grid {
-    grid-template-rows: 42rem 26rem;
+    grid-template-rows: auto auto;
+    align-items: start;
   }
   .home-work,
   .home-side {
@@ -731,8 +736,13 @@
   .home-grid .home-section {
     flex: 1;
     height: auto;
-    min-height: 0;
+    min-height: 22rem;
+    max-height: 36rem;
     margin-bottom: 0;
+  }
+  .home-work .home-section {
+    min-height: 42rem;
+    max-height: 52rem;
   }
 }
 @media (max-width: 1199px) {
@@ -769,6 +779,7 @@
   margin: 0;
 }
 .home-skeleton {
+  margin-top: 0.5rem;
   padding: 0 1rem 1rem;
 }
 .home-skeleton > div {
@@ -1003,18 +1014,19 @@ aside {
   height: calc(100dvh - var(--workspace-header-height));
   box-sizing: border-box;
   overflow-y: auto;
-  padding: 1.25rem 0.75rem;
+  padding: 0.75rem;
   background: var(--surface);
   border-right: 1px solid var(--border);
 }
 .sidebar-footer {
   flex-shrink: 0;
-  margin-top: auto;
-  padding-top: 2.5rem;
+  padding-top: 0.75rem;
+  padding-bottom: 0.25rem;
 }
 .wide-nav {
-  flex: 1;
+  flex: 0 1 auto;
   min-height: 0;
+  overflow: hidden;
 }
 .sidebar-navigation {
   position: relative;
@@ -3827,10 +3839,16 @@ form[aria-label="Home filters"] {
   gap: 0.875rem;
   margin-block: 1rem;
 }
-form[aria-label="Home filters"] label {
+form[aria-label="Home filters"] .home-filter-fields > label {
   display: grid;
   flex: 1 1 10rem;
   gap: 0.3125rem;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-small);
+}
+form[aria-label="Home filters"] .home-property-filter > label {
+  flex: 0 0 auto;
   margin: 0;
   color: var(--muted);
   font-size: var(--type-small);

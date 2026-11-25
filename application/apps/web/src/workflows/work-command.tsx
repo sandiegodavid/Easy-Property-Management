@@ -341,8 +341,15 @@ export function WorkCommand() {
     initial = { entryKind: "general_note", sourceKind: "operator_observation" };
     if (params.has("correctsEntryId")) {
       const previous = context.children.find((item) => item.id === params.get("correctsEntryId"));
-      if (!originalOnly && !previous?.isEffective)
-        return <p role="alert">Select an effective entry from this journal page for correction.</p>;
+      if (!completed && !originalOnly && !previous?.isEffective)
+        return (
+          <>
+            <ParentBackLink
+              to={target ? `/maintenance?record=issue&id=${target}` : "/maintenance"}
+            />
+            <p role="alert">Select an effective entry from this journal page for correction.</p>
+          </>
+        );
       if (previous) {
         for (const key of [
           "assignmentId",

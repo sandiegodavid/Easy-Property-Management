@@ -54,7 +54,9 @@ def _membership(scope):
     return and_(
         t.c.deleted_at_utc.is_(None),
         exists(
-            select(1).where(
+            select(1)
+            .select_from(scope.references)
+            .where(
                 and_(
                     refs.entity_type == t.c.related_entity_type,
                     refs.entity_id == t.c.related_entity_id,

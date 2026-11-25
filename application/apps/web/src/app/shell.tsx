@@ -377,6 +377,17 @@ function ContextWorkspace({ kind }: { kind: "property" | "owner" }) {
 function Layout() {
   useParentScroll();
   const { bootstrap, scope } = useWorkspace();
+  const shellNavigate = useNavigate();
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k" && !event.altKey) {
+        event.preventDefault();
+        void shellNavigate("/search");
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [shellNavigate]);
   const backup = useQuery({
     enabled: !hostedMode(),
     queryKey: scope.key("sidebar-backup-status"),

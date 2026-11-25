@@ -79,6 +79,8 @@ async function propertiesFor(kind: string, id: string, signal: AbortSignal): Pro
   }
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function useFormTimeZone(
   values: Record<string, unknown>,
   source: Record<string, unknown>,
@@ -91,11 +93,14 @@ export function useFormTimeZone(
   const relatedId = scalar(context.relatedEntityId);
   const relatedKind = scalar(context.relatedEntityType);
   const links = Array.isArray(context.links) ? context.links.map(record) : [];
-  const references = propertyId
+  const rawReferences = propertyId
     ? [{ entityType: "property", entityId: propertyId }]
     : relatedId
       ? [{ entityType: relatedKind, entityId: relatedId }]
       : links;
+  const references = rawReferences.filter(
+    (link) => !!scalar(link.entityType) && UUID_RE.test(scalar(link.entityId)),
+  );
   const query = useQuery({
     queryKey: scope.key("form-property-time-zone", references),
     enabled: enabled && !suppliedZone && references.length > 0,

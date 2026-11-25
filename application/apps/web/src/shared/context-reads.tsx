@@ -385,7 +385,8 @@ export function Directory({
                         <Link to={`/properties/${property.id}/overview`}>
                           {property.displayName}
                         </Link>{" "}
-                        · {property.addressLine1}, {property.city} · {label(property.status)}
+                        · {[property.addressLine1, property.city].filter(Boolean).join(", ")} ·{" "}
+                        {label(property.status)}
                       </li>
                     ))}
                   </ul>

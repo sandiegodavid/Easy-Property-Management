@@ -274,9 +274,11 @@ export function Fields({
                 />
               );
             const items: unknown[] = Array.isArray(current) ? current : [];
+            const arrayRequired =
+              Boolean(shape.required?.includes(key)) || (childShape.minItems ?? 0) > 0;
             return (
               <fieldset key={key}>
-                <legend>{name}</legend>
+                <legend>{arrayRequired ? `${name} (required)` : name}</legend>
                 {items.map((item, index) => (
                   <fieldset key={index}>
                     <legend>

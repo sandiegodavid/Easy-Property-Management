@@ -488,9 +488,15 @@ export function PortfolioCommand() {
       space && space.currentOccupancy.id === child
         ? space.currentOccupancy
         : space?.scheduledOccupancyTimeline.find((item) => item.id === child);
-    if (!period)
-      return <p role="alert">This occupancy period is no longer in the displayed timeline.</p>;
-    initial.occupancy = { occupancyStatus: period.occupancyStatus, effectiveOn: period.startsOn };
+    if (!completed && !period)
+      return (
+        <>
+          <ParentBackLink to={space ? `/properties/${space.propertyId}/units` : "/properties"} />
+          <p role="alert">This occupancy period is no longer in the displayed timeline.</p>
+        </>
+      );
+    if (period)
+      initial.occupancy = { occupancyStatus: period.occupancyStatus, effectiveOn: period.startsOn };
   }
   const owners =
     source.data?.property?.ownerships.flatMap((item) =>

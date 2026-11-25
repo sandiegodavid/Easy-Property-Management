@@ -1072,7 +1072,7 @@ export function workflowDispatch(openapi) {
   const cases = workflowDefinitions
     .map(([key, , method, path, , , childKey]) => {
       if (key === "maintenance.appointment.finish")
-        return `    case "maintenance.appointment.finish": { const { cancelled, reason, ...request } = body; return cancelled ? api.POST("/api/maintenance-appointments/{appointment_id}/cancel", { params: { path: { appointment_id: child } }, body: { ...request, reason } as components["schemas"]["Reason"] }) : api.POST("/api/maintenance-appointments/{appointment_id}/complete", { params: { path: { appointment_id: child } }, body: { ...request, outcomeNote: reason } as components["schemas"]["AppointmentFinish"] }); }`;
+        return `    case "maintenance.appointment.finish": { const { cancelled, reason, ...request } = body; return cancelled ? api.POST("/api/maintenance-appointments/{appointment_id}/cancel", { params: { path: { appointment_id: child } }, headers, body: { ...request, reason } as components["schemas"]["Reason"] }) : api.POST("/api/maintenance-appointments/{appointment_id}/complete", { params: { path: { appointment_id: child } }, headers, body: { ...request, outcomeNote: reason } as components["schemas"]["AppointmentFinish"] }); }`;
       if (
         key === "inspection.evidence.attach" ||
         key === "file.upload" ||

@@ -69,7 +69,7 @@ export function RecoveryPage() {
         saved,
       );
       try {
-        if (hostedMode()) await controller.claimEditing();
+        if (hostedMode()) await controller.claimEditing(true);
         if (discard) await controller.discard();
         else {
           await controller.reconcile();

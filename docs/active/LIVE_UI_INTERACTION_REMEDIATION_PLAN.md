@@ -5,7 +5,7 @@
 **Live Release Tested:** `pilot0-20261124-review` (`https://demo-a.epmdemo.xyz/`)
 **Test Plan:** [interaction-test-plan.md](../ui/interaction-test-plan.md) (Phase 1 `G-01`..`H-05` + Phase 2 `P2-OF-01`..`P2-CF-01`)
 **Findings & Test Results:** [live-interaction-test-results-2026-11-25.md](../ui/live-interaction-test-results-2026-11-25.md)
-**Status:** Ready for Implementation (4 batches / 12 slices)
+**Status:** Completed & Verified in Local Docker (2026-11-25 — 18/18 findings resolved; Batch 4 tracked as scope-owned)
 
 ---
 
@@ -23,7 +23,8 @@ This plan organizes all confirmed defects into **4 risk-ordered batches**. Each 
 
 ## 2. Batch 1 — P1 Functional Blockers & Broken Workflows
 
-### Slice 1.1 — Fix Provider `Full ID number (optional)` Recovery & Save (`P2-PR-02`) — **Pending**
+### Slice 1.1 — Fix Provider `Full ID number (optional)` Recovery & Save (`P2-PR-02`) — **Completed**
+- **Checkpoint**: Aligned `ProviderOfficialIdDraftForm` (`operator/application/provider_forms.py`) to `documentNumber` matching `vendors/application/id_contract.py` and `official-id-fields.tsx`. Verified with `operator/tests/test_provider_recovery.py`.
 - **Symptom:** On `/providers?workflow=provider.update&target=<providerId>`, entering any value in `Full ID number (optional)` triggers `PUT /api/operator/recovery/...` → **`HTTP 422: "Recovery payload does not match the registered form."`** and blocks `Save provider profile changes` (no `PATCH` request is sent). Omitting `Full ID number` and filling only `Last four` saves cleanly, leaving `Show ID number` / `Hide ID number` untestable.
 - **Root-Cause Investigation Targets:**
   - Frontend workflow form / recovery payload serializer (`application/apps/web/src/workflows/` and recovery draft hook) — verify whether secret/sensitive `Full ID number` fields are excluded from recovery or mismatched with the registered recovery schema.
@@ -33,13 +34,15 @@ This plan organizes all confirmed defects into **4 risk-ordered batches**. Each 
   - Saved full ID number stays masked by default and toggles cleanly via `Show ID number` / `Hide ID number`.
   - Sensitive full ID values are never persisted in unredacted draft recovery storage if excluded by policy (handle cleanly without blocking submit).
 
-### Slice 1.2 — Fix `Finish appointment` (`Record outcome`) Missing Draft/Prepared Headers (`Maintenance`) — **Pending**
+### Slice 1.2 — Fix `Finish appointment` (`Record outcome`) Missing Draft/Prepared Headers (`Maintenance`) — **Completed**
+- **Checkpoint**: Added missing `headers` parameter to both `/cancel` and `/complete` `api.POST` calls for `maintenance.appointment.finish` in `scripts/workflow-contracts.mjs` and `packages/contracts/src/generated/workflow-dispatch.ts`.
 - **Symptom:** On `/maintenance?workflow=maintenance.appointment.finish&target=<appointmentId>`, submitting `Save finish appointment` (both `Completed` and `Cancelled`) fails immediately with **`HTTP 409: "This editor no longer owns the saved form."`** on `POST /api/maintenance-appointments/:id/complete` and `/cancel` because the client omits `x-epm-draft-lease` / `x-epm-prepared-form` headers.
 - **Acceptance Criteria:**
   - `maintenance.appointment.finish` attaches the active draft lease and prepared form headers on both `/complete` and `/cancel` submissions.
   - Both `Completed` and `Cancelled` outcomes succeed cleanly and update the appointment and issue journal.
 
-### Slice 1.3 — Fix Hosted SPA Fallback for Invalid & Deep-Link Routes (`G-06`) — **Pending**
+### Slice 1.3 — Fix Hosted SPA Fallback for Invalid & Deep-Link Routes (`G-06`) — **Completed**
+- **Checkpoint**: Updated `OperatorIdentityMiddleware` (`hosted_access/infrastructure/operator_identity_runtime.py`) to forward `GET`/`HEAD` `Accept: text/html` non-API paths to `PackagedWebMiddleware` when business or recovery mode is active, returning SPA `Page unavailable` (404 HTML + `Return Home`) instead of raw 503 JSON. Verified with `hosted_access/tests/test_identity_exit_gaps.py`.
 - **Symptom:** Navigating directly to `/nonexistent-route`, `/properties/not-a-uuid/overview`, `/maintenance/:id/details`, `/money/expenses/:id/details`, `/leases/:id/overview`, or `/coverage/property/:id/overview` returns raw **`HTTP 503`** JSON `{"message":"Workspace access is unavailable."}` instead of rendering the SPA `Page unavailable` screen with `Return Home` (or loading valid deep links).
 - **Root-Cause Investigation Targets:**
   - Hosted Operator web router / Caddy / FastAPI SPA route matching in `application/apps/server/app/modules/hosted_access/` and `application/apps/server/app/bootstrap/api.py`.
@@ -47,7 +50,8 @@ This plan organizes all confirmed defects into **4 risk-ordered batches**. Each 
   - Valid client-side deep links serve the SPA HTML shell (`200`) for `Accept: text/html` requests and render the target page.
   - Invalid/unknown paths render the SPA `Page unavailable` fallback with a working `Return Home` link (never `HTTP 503 Workspace access is unavailable`).
 
-### Slice 1.4 — Fix Home `"View all..."` Collection Links & Calendar Card Clipping (`H-03`, `H-04`) — **Pending**
+### Slice 1.4 — Fix Home `"View all..."` Collection Links & Calendar Card Clipping (`H-03`, `H-04`) — **Completed**
+- **Checkpoint**: Updated `.home-grid` / `.home-section` min/max-height rules so Calendar and Information review cards never collapse to 174px, and added `pointer-events: none` on `.home-disclosure-help > p` so hover help tooltips never intercept `"View all..."` clicks (`apps/web/src/style.css`).
 - **Symptom:**
   - On `/home`, clicking `"View all Calendar and appointments (4 items)"` or `"View all Information review (19 items)"` leaves the URL at `/home` without navigating (even though direct navigation to `/home/collections/appointments` and `/home/collections/information_review` returns `200`).
   - The `"Calendar and appointments"` card container height (`174px`–`199px`) clips the first item (`284px` tall) vertically and hides remaining items.
@@ -55,13 +59,15 @@ This plan organizes all confirmed defects into **4 risk-ordered batches**. Each 
   - Clicking every `"View all..."` link on `/home` navigates cleanly to `/home/collections/*` with active filters preserved.
   - Calendar card expands or scrolls cleanly without clipping item text or hiding actions.
 
-### Slice 1.5 — Fix `Create conversation` Empty `Entity id` Lookup (`403`) & Required `Participants` Label (`MT-03`) — **Pending**
+### Slice 1.5 — Fix `Create conversation` Empty `Entity id` Lookup (`403`) & Required `Participants` Label (`MT-03`) — **Completed**
+- **Checkpoint**: Guarded `useFormTimeZone` (`apps/web/src/shared/form-time-zone.tsx`) to query property timezones only when `entityType` is non-empty and `entityId` is a valid UUID; added `(required)` to required array `<legend>` elements in `apps/web/src/workflows/fields.tsx`.
 - **Symptom:** On `/conversations?workflow=communication.create`, selecting `Links → Entity type = Maintenance issue` while `Entity id` is still empty fires `GET /api/maintenance-issues/` → **`HTTP 403`**, permanently locking the form with `"Could not load the property's time zone. Reload the form to try again."` Additionally, `Participants` fails validation with `"Participants has too many or too few entries."` when empty despite not being labeled `(required)`.
 - **Acceptance Criteria:**
   - Timezone lookup only fires once both `Entity type` and a non-empty valid `Entity id` are present.
   - `Participants` is clearly labeled `(required)` (or validated inline before submission without an opaque error).
 
-### Slice 1.6 — Fix Property & Owner Overview `Tasks` Section (`source_read_unavailable`) (`P-03`, `O-02`) — **Pending**
+### Slice 1.6 — Fix Property & Owner Overview `Tasks` Section (`source_read_unavailable`) (`P-03`, `O-02`) — **Completed**
+- **Checkpoint**: Converted chained `OverviewSources` reference subqueries (`operator/infrastructure/overview_sources.py`) to SQLite CTEs (`.cte(...)`) and added explicit `.select_from(scope.references)` in `tasks/infrastructure/summary_reader.py` to avoid deep nested compound-SELECT expansion. Verified with `operator/tests/test_overviews.py` (12 passed).
 - **Symptom:** On `/properties/:id/overview` and `/owners/:id/overview`, the `Tasks` section renders `"This source is unavailable. Other sections remain independent."` (`availability: "unavailable"`, `reasonCode: "source_read_unavailable"`). Clicking `Retry section` does not recover it.
 - **Acceptance Criteria:**
   - Property Overview and Owner Overview `Tasks` sections load scoped tasks cleanly with zero `source_read_unavailable` errors.
@@ -71,7 +77,8 @@ This plan organizes all confirmed defects into **4 risk-ordered batches**. Each 
 
 ## 3. Batch 2 — P2 Hosted Draft Recovery, Resilience & Navigation/State Coherence
 
-### Slice 2.1 — Fix Draft Recovery Same-Tab Lease `409`, `Submission needs checking` Discard & Intermittent Hosted `503`s (`G-03`) — **Pending**
+### Slice 2.1 — Fix Draft Recovery Same-Tab Lease `409`, `Submission needs checking` Discard & Intermittent Hosted `503`s (`G-03`) — **Completed**
+- **Checkpoint**: Persisted per-tab draft lease tokens in `sessionStorage` in `apps/web/src/shared/recovery.ts` (reusing same-tab lease via `renew: true` while preserving cross-tab takeover protection) and added 350ms retry on transient `HTTP 503`; updated `apps/web/src/shared/recovery-page.tsx` to call `claimEditing(true)` on Discard/Check submission.
 - **Symptom:**
   - Resuming a draft from `/settings/recovery` via `Continue editing` in the same tab hits `POST /api/hosted/drafts/{id}/lease -> HTTP 409`, locking the form behind `Take over editing`.
   - Clicking `Discard` or `Check submission` on `Submission needs checking` rows in `/settings/recovery` fails with `HTTP 409 ("This editor no longer owns the saved form")` and leaves cards stuck until the user opens `View submission`, takes over editing, and discards inside the workflow view.
@@ -81,7 +88,8 @@ This plan organizes all confirmed defects into **4 risk-ordered batches**. Each 
   - `Discard` and `Check submission` on `Submission needs checking` rows succeed directly from `/settings/recovery`.
   - Identify and fix root cause of intermittent `503`s on hosted session/draft endpoints (e.g., lock contention, socket timeout, or retry/backoff handling) and ensure `Loading displayed ...` never hangs indefinitely on transient failure.
 
-### Slice 2.2 — Fix Global `Ctrl+K` / `Cmd+K` Shortcut, Missing `/parties` `Use identity as tenant` Action & Tenant Routing (`G-02`, `T-03`, `P2-OW-03`) — **Pending**
+### Slice 2.2 — Fix Global `Ctrl+K` / `Cmd+K` Shortcut, Missing `/parties` `Use identity as tenant` Action & Tenant Routing (`G-02`, `T-03`, `P2-OW-03`) — **Completed**
+- **Checkpoint**: Added global `Ctrl+K` / `Cmd+K` keyboard listener in `apps/web/src/app/shell.tsx`; exposed `Use identity as tenant` in `/parties` `More actions` and `Add official ID` in Tenant `Official identification` (`apps/web/src/workflows/identity-detail.tsx`); updated `party.patch` post-save destination to return to `/tenants` when initiated from `/tenants` (`apps/web/src/workflows/saved-command.tsx`).
 - **Symptom:**
   - Pressing `Control+k` or `Meta+k` on `/home` does not navigate to `/search` (only clicking `Search (Ctrl/⌘ K)` works).
   - `/parties?identity=<id>` `More actions` menu omits `Use identity as tenant` (only reachable via direct `/tenants?workflow=tenant.designate&target=<id>`).
@@ -91,7 +99,8 @@ This plan organizes all confirmed defects into **4 risk-ordered batches**. Each 
   - `/parties?identity=<id>` exposes `Use identity as tenant` in `More actions` when the identity is not yet a tenant.
   - Tenant `Official identification` card exposes an `Add official ID` action, and `Edit name and identity` initiated from `/tenants` returns to `/tenants?identity=<id>`.
 
-### Slice 2.3 — Fix Post-Save Dead Ends, Stale Parent Views & Superseded Inspection Back Link (`P2-OF-01`, `P2-OW-01`, `P2-PR-01`, `P2-LS-03`) — **Pending**
+### Slice 2.3 — Fix Post-Save Dead Ends, Stale Parent Views & Superseded Inspection Back Link (`P2-OF-01`, `P2-OW-01`, `P2-PR-01`, `P2-LS-03`) — **Completed**
+- **Checkpoint**: Guarded missing-child checks with `!completed` (plus `<ParentBackLink>`) in `portfolio.tsx` and `work-command.tsx`; added `refetchType: "all"` to post-save query invalidation in `command.tsx`; hid top superseded `<ParentBackLink>` after save completion in `inspections.tsx`.
 - **Symptom:**
   - `Correct occupancy` and `Correct work entry` save successfully but land on stale error messages (`"This occupancy period is no longer in the displayed timeline."` / `"Select an effective entry from this journal page for correction."`) with no `Back` link.
   - After saving `Change ownership` (`50%/50%`) and clicking `Back to property`, Property Overview `Owners` stayed stale (`You 100%`) until reload; after `Assign category` and `Back to provider`, Provider `Categories` stayed `"None recorded."` until reload.
@@ -101,7 +110,8 @@ This plan organizes all confirmed defects into **4 risk-ordered batches**. Each 
   - Parent property and provider views invalidate/refetch cached queries upon return from mutation workflows so updates appear immediately without reload.
   - `Correct finalized inspection` updates both top and bottom back links to the newly created corrected inspection ID.
 
-### Slice 2.4 — Fix Auto-Save `422` on Empty Nested Rows & Future-Lease Prepaid Check Payer Filter (`L-03`, `L-04`, `P2-MN-02`) — **Pending**
+### Slice 2.4 — Fix Auto-Save `422` on Empty Nested Rows & Future-Lease Prepaid Check Payer Filter (`L-03`, `L-04`, `P2-MN-02`) — **Completed**
+- **Checkpoint**: Made `ObservationForm` (`itemName`, `conditionState`) and `AreaForm` (`displayName`) optional in incomplete draft recovery schema (`operator/application/inspection_forms.py`); filtered `payerPartyId` choices in `money-command.tsx` to participants active on today's date for prepaid check workflows.
 - **Symptom:**
   - Clicking `Add observations entry` in Inspection Draft / Inspection Template immediately fires `PUT /api/operator/recovery/{id} -> HTTP 422` while the newly expanded observation fields are empty.
   - `Schedule prepaid check` offers a participant from a future-dated signed lease in `Payer party id`, then rejects submission with `409: "Prepaid-check payer must be an active lease participant."`
@@ -113,7 +123,8 @@ This plan organizes all confirmed defects into **4 risk-ordered batches**. Each 
 
 ## 4. Batch 3 — P3 Layout, Form UX, Copy & Console Hygiene
 
-### Slice 3.1 — Fix Horizontal Clipping (`1280×800`), Home Filter Gap, Skeleton Overlap & Oversized Selects (`G-01`, `H-01`, `P-01`, `P-03`, `M-01`..`M-08`) — **Pending**
+### Slice 3.1 — Fix Horizontal Clipping (`1280×800`), Home Filter Gap, Skeleton Overlap & Oversized Selects (`G-01`, `H-01`, `P-01`, `P-03`, `M-01`..`M-08`) — **Completed**
+- **Checkpoint**: Updated `.page-tabs`, `.property-status-tabs`, `.home-skeleton`, and `.sidebar-footer` in `apps/web/src/style.css` so sub-tabs and quick filters wrap cleanly at `1280×800`, sidebar footer text is never clipped at `800px` height, and Home loading skeletons clear card headings.
 - **Symptom:**
   - At `1280×800`: `/properties` quick-filter bar clips on the right; `/properties/:id/*` clips `Property setup` offscreen; `/money` clips `Expense categories` and pushes `Reporting` offscreen (and filter bars wrap with zero row gap); left sidebar clips the bottom line of `"Backups are managed by the administrator."`
   - `/home`: ~200px blank vertical gap between `"Property"` label and `<select>` in `Filters`; loading skeletons overlap `"Calendar and appointments"` and `"Information review"` headings.
@@ -123,7 +134,8 @@ This plan organizes all confirmed defects into **4 risk-ordered batches**. Each 
   - Sidebar footer text is never clipped at `800px` viewport height.
   - Home filter grid and loading skeletons align cleanly with no overlap or blank gaps; `<select>` controls use standard height.
 
-### Slice 3.2 — Improve Auto-Generated Form UX, Labels, Enums & Console Hygiene (`L-02`, `M-04`, `M-06`, `O-01`, `PR-02`, `MT-03`) — **Pending**
+### Slice 3.2 — Improve Auto-Generated Form UX, Labels, Enums & Console Hygiene (`L-02`, `M-04`, `M-06`, `O-01`, `PR-02`, `MT-03`) — **Completed**
+- **Checkpoint**: Filtered `undefined` object keys in `canonicalRequest()` (`shared/mutations.ts`) to eliminate uncaught recovery JSON console errors; mapped `finance.rent_expectation.*` back link to `Back to rent` (`workflows/saved-command.tsx`); added human labels for `startsAtUtc`/`endsAtUtc`/`scheduledTimezone` and enum humanization (`workflows/readable-facts.tsx`); removed stray comma in `/owners` property subtitle (`shared/context-reads.tsx`); defaulted `occupancyStartsOn` on `Create lease draft` (`workflows/leasing.tsx`).
 - **Symptom:**
   - **Console errors:** Persistent CSP error (`Loading the script '[redacted-url]' violates "script-src 'self'"`) on every route; `Uncaught Error: Recovery accepts JSON fields only...` on `PR-02`.
   - **Raw UUID / minor-unit inputs:** `Create lease draft` (also missing default move-in date / timezone label and ordering End before Start), `Create deposit account`, `Record owner rent report`, `Add lease participant`, and settlement deduction `Source id` expose raw UUID textboxes and minor-unit integer inputs without pickers or currency formatting.

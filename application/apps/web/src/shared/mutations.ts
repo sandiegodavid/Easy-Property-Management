@@ -106,6 +106,7 @@ export function canonicalRequest(value: unknown): string {
   if (typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) {
     const record = value as Record<string, unknown>;
     return `{${Object.keys(record)
+      .filter((key) => record[key] !== undefined)
       .sort()
       .map((key) => `${JSON.stringify(key)}:${canonicalRequest(record[key])}`)
       .join(",")}}`;

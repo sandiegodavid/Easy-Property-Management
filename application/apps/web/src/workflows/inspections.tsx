@@ -9,6 +9,7 @@ import { record, workflows, type Workflow } from "@epm/contracts/workflows";
 import type { components } from "@epm/contracts/generated";
 import { useWorkspace } from "../app/workspace-gate";
 import { CommandLinks, CommandLoader, workflowUrl } from "./command";
+import { useSaveCompletion } from "./saved-command";
 import { Facts, History, readResult } from "./reads";
 import { ReadableFacts } from "./readable-facts";
 import { EvidenceItem } from "./evidence-item";
@@ -559,6 +560,7 @@ async function inspectionSource(definition: Workflow, target?: string, signal?: 
 }
 
 function InspectionCommand() {
+  const { completed, onSaved } = useSaveCompletion();
   const [params] = useSearchParams();
   const definition = workflows.find((item) => item.formKey === params.get("workflow"))!;
   const target = params.get("target") ?? undefined;
@@ -606,7 +608,7 @@ function InspectionCommand() {
   };
   return (
     <>
-      <ParentBackLink to={item.returnTo} />
+      {!completed && <ParentBackLink to={item.returnTo} />}
       {templates.error && (
         <p role="alert">Template choices are unavailable: {templates.error.message}</p>
       )}
@@ -631,6 +633,7 @@ function InspectionCommand() {
       )}
       <CommandLoader
         showParentLink={false}
+        onSaved={onSaved}
         definition={{ ...definition, schema: item.schema }}
         sourceId={target}
         revision={item.revision}

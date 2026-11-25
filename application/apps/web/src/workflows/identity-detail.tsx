@@ -209,6 +209,16 @@ export function IdentityDetail({
         <section className="person-detail-panel" aria-label="Official identification">
           <header className="person-detail-section-heading">
             <h3>Official identification</h3>
+            {!tenant.profile.archivedAt && (
+              <CommandLinks
+                target={party.id}
+                keys={["tenant.profile.patch"]}
+                labels={{ "tenant.profile.patch": "Add official ID" }}
+                title="Add official ID"
+                asButtons
+                collapsible={false}
+              />
+            )}
           </header>
           <p className="person-detail-intro">
             Record at least one official ID before executing a lease. Store only the last four
@@ -281,14 +291,14 @@ export function IdentityDetail({
           <CommandLinks
             target={party.id}
             keys={[
-              ...(tenant === null ? ["tenant.designate"] : []),
+              ...(!party.activeRoles?.includes("tenant") ? ["tenant.designate"] : []),
               ...(!party.activeRoles?.includes("provider") ? ["provider.designate"] : []),
               "party.archive",
             ]}
             title="More actions"
             labels={{
               "party.archive": "Archive person or organization",
-              "tenant.designate": "Add tenant role",
+              "tenant.designate": "Use identity as tenant",
               "provider.designate": "Add provider role",
             }}
           />

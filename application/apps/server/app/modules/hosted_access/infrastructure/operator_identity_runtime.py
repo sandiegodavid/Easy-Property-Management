@@ -27,7 +27,7 @@ from app.modules.hosted_access.api.managed_business import (
 from app.modules.hosted_access.domain.models import HostedAccessError
 from app.modules.hosted_access.infrastructure.managed_draft_leases import ManagedDraftLeases
 from app.platform.hosted_security_headers import API_SECURITY_HEADERS
-from app.platform.web_delivery import PackagedWebMiddleware, browser_route
+from app.platform.web_delivery import PackagedWebMiddleware, accepts_html, browser_route
 from app.modules.hosted_access.api.operator_recovery import (
     RECOVERY_ROUTE_PREFIX,
     OperatorRecoveryInputs,
@@ -133,7 +133,19 @@ class DestinationHTTP:
             and (
                 scope["path"] == "/sign-in"
                 or scope["path"].startswith("/assets/")
-                or ((self.business or self.recovery_mode) and browser_route(scope["path"]))
+                or (
+                    (self.business or self.recovery_mode)
+                    and (
+                        browser_route(scope["path"])
+                        or (
+                            accepts_html(scope["headers"])
+                            and not scope["path"].startswith(("/api/", "/auth/", "/__/"))
+                            and scope["path"]
+                            not in {"/api", "/health", "/openapi.json", "/docs", "/redoc"}
+                            and not scope["path"].startswith("/openapi.json/")
+                        )
+                    )
+                )
             )
         ):
             response = JSONResponse(

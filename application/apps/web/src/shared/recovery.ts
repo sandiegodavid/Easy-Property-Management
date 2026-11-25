@@ -68,6 +68,42 @@ export const recoveryApi = {
  * Caller supplies a registered allowlisted payload, never a whole form/DOM object.
  * No localStorage: OPS is the durable recovery store, including across restore.
  */
+function readTabLeaseToken(id: string): string | undefined {
+  try {
+    return window.sessionStorage.getItem(`epm:draft-lease:${id}`) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeTabLeaseToken(id: string, token: string): void {
+  try {
+    window.sessionStorage.setItem(`epm:draft-lease:${id}`, token);
+  } catch {
+    // Ignore storage unavailability in restricted contexts.
+  }
+}
+
+function clearTabLeaseToken(id: string): void {
+  try {
+    window.sessionStorage.removeItem(`epm:draft-lease:${id}`);
+  } catch {
+    // Ignore storage unavailability in restricted contexts.
+  }
+}
+
+function randomLeaseToken(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return btoa(String.fromCharCode(...bytes))
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replaceAll("=", "");
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 export class RecoveryController {
   private snapshot: RecoverySnapshot;
   private listeners = new Set<() => void>();
@@ -134,20 +170,19 @@ export class RecoveryController {
   async claimEditing(takeover = false) {
     this.scope.requireWrite();
     if (this.leaseRequest) return this.leaseRequest;
-    const bytes = crypto.getRandomValues(new Uint8Array(32));
-    const token =
-      this.pendingClaim ??
-      btoa(String.fromCharCode(...bytes))
-        .replaceAll("+", "-")
-        .replaceAll("/", "_")
-        .replaceAll("=", "");
+    const savedTabToken = !takeover ? readTabLeaseToken(this.id) : undefined;
+    const token = this.pendingClaim ?? savedTabToken ?? randomLeaseToken();
     this.pendingClaim = token;
-    this.leaseRequest = this.claimLease(token, takeover).finally(() => {
+    this.leaseRequest = this.claimLease(
+      token,
+      takeover,
+      !!savedTabToken && !this.leaseToken,
+    ).finally(() => {
       this.leaseRequest = undefined;
     });
     return this.leaseRequest;
   }
-  private async claimLease(token: string, takeover: boolean) {
+  private async claimLease(token: string, takeover: boolean, tryRenewFirst = false) {
     const fence = this.leaseFence;
     // A lost response may have advanced the durable revision. Read only the
     // authority revision; never replace/rebase an immutable pending operation.
@@ -156,7 +191,23 @@ export class RecoveryController {
       const result = await this.readSavedForm();
       revision = result?.revision ?? 0;
     }
-    if (fence === this.leaseFence) await this.updateLease(token, takeover, false, revision);
+    if (fence !== this.leaseFence) return;
+    if (tryRenewFirst) {
+      try {
+        await this.updateLease(token, false, true, revision);
+        return;
+      } catch (error) {
+        // If this tab's previous lease expired, fall through to a normal claim.
+        if (error instanceof MutationFailure && error.status === 409) {
+          const fresh = randomLeaseToken();
+          this.pendingClaim = fresh;
+          if (fence === this.leaseFence) await this.updateLease(fresh, takeover, false, revision);
+          return;
+        }
+        throw error;
+      }
+    }
+    await this.updateLease(token, takeover, false, revision);
   }
   private async updateLease(
     token: string,
@@ -166,15 +217,31 @@ export class RecoveryController {
   ) {
     const fence = this.leaseFence;
     try {
-      const result = await mutation(() =>
-        api.POST("/api/hosted/drafts/{record_id}/lease", {
-          params: { path: { record_id: this.id } },
-          body: { token, expectedRevision, takeover, renew },
-        }),
-      );
+      let result;
+      try {
+        result = await mutation(() =>
+          api.POST("/api/hosted/drafts/{record_id}/lease", {
+            params: { path: { record_id: this.id } },
+            body: { token, expectedRevision, takeover, renew },
+          }),
+        );
+      } catch (firstError) {
+        if (firstError instanceof MutationFailure && firstError.status === 503) {
+          await sleep(350);
+          result = await mutation(() =>
+            api.POST("/api/hosted/drafts/{record_id}/lease", {
+              params: { path: { record_id: this.id } },
+              body: { token, expectedRevision, takeover, renew },
+            }),
+          );
+        } else {
+          throw firstError;
+        }
+      }
       this.scope.requireWrite();
       if (this.disposed || fence !== this.leaseFence) return;
       this.leaseToken = token;
+      writeTabLeaseToken(this.id, token);
       this.leaseExpires = Date.parse(result.expiresAt);
       this.leaseRenewed = Date.now();
       if (!renew) this.lastInteraction = Date.now();
@@ -188,6 +255,7 @@ export class RecoveryController {
       if (fence !== this.leaseFence) throw error;
       if (error instanceof MutationFailure && !error.outcomeUnknown) this.pendingClaim = undefined;
       this.leaseToken = undefined;
+      clearTabLeaseToken(this.id);
       this.publish({
         editAuthority: "required",
         error: error instanceof Error ? error.message : "Claim editing before saving.",
@@ -627,7 +695,7 @@ export class RecoveryController {
     window.addEventListener("epm-session-paused", this.pauseLease);
     if (
       hostedMode() &&
-      !managedHostedMode() &&
+      (!managedHostedMode() || readTabLeaseToken(this.id) !== undefined) &&
       this.snapshot.record &&
       this.scope.canWrite &&
       this.snapshot.command !== "committed"

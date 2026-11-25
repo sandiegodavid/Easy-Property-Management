@@ -28,6 +28,7 @@ from app.platform.testing_client import LocalApiClient
 from app.modules.host_agent.application.auth_routes import IdentityCookiePolicy
 from app.modules.hosted_access.api.managed_business import ManagedBusinessInputs
 from app.modules.hosted_access.application.identity_evidence import IdentityBinding
+from app.modules.hosted_access.infrastructure.destination_identity import DestinationIdentity
 from app.modules.hosted_access.infrastructure.free_storage_admission import (
     FreeStorageAdmission,
     PhysicalQuotaHeadroom,
@@ -191,7 +192,7 @@ def _ensure_access_database(access_db_path: Path) -> None:
 def _mint_operator_session(access_engine) -> tuple[str, int]:
     now = now_ms()
     session_secret = token_urlsafe(32)
-    csrf_secret = token_urlsafe(32)
+    csrf_secret = DestinationIdentity.csrf_token(session_secret)
     ttl_ms = 8 * 60 * 60 * 1000
     expires_at = now + ttl_ms
     with immediate_transaction(access_engine) as conn:
@@ -303,6 +304,7 @@ def build_local_operator_app():
     business_engine = create_sqlite_engine(WorkspacePaths(root=workspace_root).database)
 
     usage_store = UsageAccountingStore(access_engine, business_engine, clock=now_ms)
+    usage_store.refresh_usage_state()
     storage_admission = FreeStorageAdmission(
         usage_store,
         physical_headroom=lambda: _read_physical_headroom(
