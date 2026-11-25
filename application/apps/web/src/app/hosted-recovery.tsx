@@ -493,7 +493,7 @@ export function HostedRecovery({
 
   if (loadState.status === "loading") {
     return (
-      <section aria-labelledby={headingId}>
+      <section className="settings-card" aria-labelledby={headingId}>
         <h3 id={headingId}>Data and backup</h3>
         <p role="status">Loading backup and recovery status…</p>
       </section>
@@ -502,7 +502,7 @@ export function HostedRecovery({
 
   if (loadState.status === "unavailable") {
     return (
-      <section aria-labelledby={headingId}>
+      <section className="settings-card" aria-labelledby={headingId}>
         <h3 id={headingId}>Data and backup</h3>
         <p role={embedded ? "status" : "alert"}>
           {reauthRequired
@@ -533,7 +533,7 @@ export function HostedRecovery({
   const points = payload.catalog.data?.items ?? [];
 
   return (
-    <section aria-labelledby={headingId}>
+    <section className="settings-card" aria-labelledby={headingId}>
       {isRecoveryMode ? (
         <div role="status" aria-live="polite">
           <h2 id={headingId}>Workspace recovery mode</h2>
@@ -628,9 +628,14 @@ export function HostedRecovery({
             No verified recovery points are currently listed in this workspace catalog.
             {payload.availability_reason ? ` (${payload.availability_reason})` : ""}
           </p>
-          <button type="button" disabled={busy} onClick={() => void handleReconstructCatalog()}>
-            {busy ? "Scanning…" : "Reconstruct catalog from off-host backup"}
-          </button>
+          <div className="settings-card-actions">
+            <button type="button" disabled={busy} onClick={() => void handleReconstructCatalog()}>
+              {busy ? "Scanning…" : "Reconstruct catalog from off-host backup"}
+            </button>
+            <button type="button" disabled={busy} onClick={() => void loadStatus()}>
+              Refresh recovery status
+            </button>
+          </div>
         </div>
       ) : (
         <div>
@@ -667,13 +672,18 @@ export function HostedRecovery({
               );
             })}
           </fieldset>
-          <button
-            type="button"
-            disabled={busy || !selectedPointId}
-            onClick={() => void handlePreview()}
-          >
-            {busy ? "Preparing preview…" : "Preview restore"}
-          </button>
+          <div className="settings-card-actions">
+            <button
+              type="button"
+              disabled={busy || !selectedPointId}
+              onClick={() => void handlePreview()}
+            >
+              {busy ? "Preparing preview…" : "Preview restore"}
+            </button>
+            <button type="button" disabled={busy} onClick={() => void loadStatus()}>
+              Refresh recovery status
+            </button>
+          </div>
         </div>
       )}
 
@@ -760,10 +770,6 @@ export function HostedRecovery({
           )}
         </div>
       )}
-
-      <button type="button" disabled={busy} onClick={() => void loadStatus()}>
-        Refresh recovery status
-      </button>
     </section>
   );
 }

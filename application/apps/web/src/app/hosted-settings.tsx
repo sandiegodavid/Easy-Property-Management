@@ -231,143 +231,147 @@ export function HostedSettings() {
   if (!hosted) return null;
 
   return (
-    <section aria-labelledby="hosted-settings-heading">
-      <h3 id="hosted-settings-heading">Workspace plan and storage</h3>
-      {state.status === "loading" && <p role="status">Loading workspace plan and storage…</p>}
-      {state.status === "error" && (
-        <div>
-          <p role="alert">{state.message}</p>
-          <button type="button" disabled={refreshing} onClick={() => void refresh()}>
-            {refreshing ? "Refreshing…" : "Retry"}
-          </button>
-        </div>
-      )}
-      {state.status === "ready" && (
-        <div>
-          <dl>
-            <dt>Plan</dt>
-            <dd>
-              {state.payload.usage.state === "ready" && state.payload.usage.data
-                ? `${formatPlanName(state.payload.usage.data.plan)} (${formatDecimalBytes(state.payload.usage.data.usable_bytes)} logical storage)`
-                : "Free pilot (50.00 MB logical storage)"}
-            </dd>
+    <>
+      <section className="settings-card" aria-labelledby="hosted-settings-heading">
+        <h3 id="hosted-settings-heading">Workspace plan and storage</h3>
+        {state.status === "loading" && <p role="status">Loading workspace plan and storage…</p>}
+        {state.status === "error" && (
+          <div>
+            <p role="alert">{state.message}</p>
+            <button type="button" disabled={refreshing} onClick={() => void refresh()}>
+              {refreshing ? "Refreshing…" : "Retry"}
+            </button>
+          </div>
+        )}
+        {state.status === "ready" && (
+          <div>
+            <dl>
+              <dt>Plan</dt>
+              <dd>
+                {state.payload.usage.state === "ready" && state.payload.usage.data
+                  ? `${formatPlanName(state.payload.usage.data.plan)} (${formatDecimalBytes(state.payload.usage.data.usable_bytes)} logical storage)`
+                  : "Free pilot (50.00 MB logical storage)"}
+              </dd>
 
-            <dt>Storage usage</dt>
-            <dd>
-              {state.payload.usage.state === "ready" && state.payload.usage.data ? (
-                (() => {
-                  const usable = Math.max(1, state.payload.usage.data.usable_bytes);
-                  const used = Math.max(0, state.payload.usage.data.used_bytes);
-                  const remaining =
-                    state.payload.usageBreakdown?.remainingBytes ?? Math.max(0, usable - used);
-                  const percent = Math.min(100, Math.round((used / usable) * 100));
-                  return (
-                    <div>
-                      <progress
-                        aria-label="Free pilot storage usage"
-                        max={usable}
-                        value={Math.min(used, usable)}
-                      />
+              <dt>Storage usage</dt>
+              <dd>
+                {state.payload.usage.state === "ready" && state.payload.usage.data ? (
+                  (() => {
+                    const usable = Math.max(1, state.payload.usage.data.usable_bytes);
+                    const used = Math.max(0, state.payload.usage.data.used_bytes);
+                    const remaining =
+                      state.payload.usageBreakdown?.remainingBytes ?? Math.max(0, usable - used);
+                    const percent = Math.min(100, Math.round((used / usable) * 100));
+                    return (
+                      <div>
+                        <progress
+                          aria-label="Free pilot storage usage"
+                          max={usable}
+                          value={Math.min(used, usable)}
+                        />
+                        <p>
+                          {formatDecimalBytes(used)} of {formatDecimalBytes(usable)} used ({percent}
+                          %) — {formatDecimalBytes(remaining)} remaining.
+                        </p>
+                        {state.payload.usageBreakdown && (
+                          <p className="ui-muted">
+                            Database:{" "}
+                            {formatDecimalBytes(state.payload.usageBreakdown.committedDbBytes)}
+                            {" · "}Retained files:{" "}
+                            {formatDecimalBytes(state.payload.usageBreakdown.retainedFileBytes)}
+                            {state.payload.usageBreakdown.reservedBytes > 0
+                              ? ` · Active writes: ${formatDecimalBytes(state.payload.usageBreakdown.reservedBytes)}`
+                              : ""}
+                          </p>
+                        )}
+                        {typeof state.payload.usage.freshness?.as_of === "number" && (
+                          <p className="ui-muted">
+                            Observed at {formatEpochMs(state.payload.usage.freshness.as_of)}
+                          </p>
+                        )}
+                        {percent >= 90 && (
+                          <p role="status">
+                            Storage is near the Free pilot 50.00 MB limit. Remove unneeded files or
+                            contact the administrator if you need help.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()
+                ) : (
+                  <p>
+                    Unavailable
+                    {state.payload.usage.freshness?.error_code
+                      ? ` (${state.payload.usage.freshness.error_code})`
+                      : ""}
+                    .
+                  </p>
+                )}
+              </dd>
+
+              <dt>Backup protection</dt>
+              <dd>
+                {state.payload.protection.state === "ready" && state.payload.protection.data ? (
+                  <p>
+                    {state.payload.protection.data.state === "unchanged"
+                      ? "Protected — unchanged since verified point"
+                      : state.payload.protection.data.status === "protected"
+                        ? "Protected"
+                        : "Degraded"}
+                    {typeof state.payload.protection.data.last_verified_at === "number"
+                      ? ` — latest verified point: ${formatEpochMs(state.payload.protection.data.last_verified_at)}`
+                      : ""}
+                  </p>
+                ) : (
+                  <p>Unavailable — backup protection is not yet active.</p>
+                )}
+              </dd>
+
+              <dt>Support contact</dt>
+              <dd>{state.payload.support_contact ?? "Contact your workspace administrator."}</dd>
+
+              {state.payload.maintenance.state === "ready" &&
+                state.payload.maintenance.data?.message && (
+                  <>
+                    <dt>Maintenance notice</dt>
+                    <dd>
                       <p>
-                        {formatDecimalBytes(used)} of {formatDecimalBytes(usable)} used ({percent}
-                        %) — {formatDecimalBytes(remaining)} remaining.
+                        <strong>
+                          {isMaintenanceInProgressRevision(
+                            state.payload.maintenance.freshness?.source_revision,
+                          )
+                            ? "Updating your workspace: "
+                            : "Scheduled window: "}
+                        </strong>
+                        {state.payload.maintenance.data.message}
                       </p>
-                      {state.payload.usageBreakdown && (
-                        <p className="ui-muted">
-                          Database:{" "}
-                          {formatDecimalBytes(state.payload.usageBreakdown.committedDbBytes)}
-                          {" · "}Retained files:{" "}
-                          {formatDecimalBytes(state.payload.usageBreakdown.retainedFileBytes)}
-                          {state.payload.usageBreakdown.reservedBytes > 0
-                            ? ` · Active writes: ${formatDecimalBytes(state.payload.usageBreakdown.reservedBytes)}`
-                            : ""}
-                        </p>
-                      )}
-                      {typeof state.payload.usage.freshness?.as_of === "number" && (
-                        <p className="ui-muted">
-                          Observed at {formatEpochMs(state.payload.usage.freshness.as_of)}
-                        </p>
-                      )}
-                      {percent >= 90 && (
-                        <p role="status">
-                          Storage is near the Free pilot 50.00 MB limit. Remove unneeded files or
-                          contact the administrator if you need help.
-                        </p>
-                      )}
-                    </div>
-                  );
-                })()
-              ) : (
-                <p>
-                  Unavailable
-                  {state.payload.usage.freshness?.error_code
-                    ? ` (${state.payload.usage.freshness.error_code})`
-                    : ""}
-                  .
-                </p>
-              )}
-            </dd>
-
-            <dt>Backup protection</dt>
-            <dd>
-              {state.payload.protection.state === "ready" && state.payload.protection.data ? (
-                <p>
-                  {state.payload.protection.data.state === "unchanged"
-                    ? "Protected — unchanged since verified point"
-                    : state.payload.protection.data.status === "protected"
-                      ? "Protected"
-                      : "Degraded"}
-                  {typeof state.payload.protection.data.last_verified_at === "number"
-                    ? ` — latest verified point: ${formatEpochMs(state.payload.protection.data.last_verified_at)}`
-                    : ""}
-                </p>
-              ) : (
-                <p>Unavailable — backup protection is not yet active.</p>
-              )}
-            </dd>
-
-            <dt>Support contact</dt>
-            <dd>{state.payload.support_contact ?? "Contact your workspace administrator."}</dd>
-
-            {state.payload.maintenance.state === "ready" &&
-              state.payload.maintenance.data?.message && (
-                <>
-                  <dt>Maintenance notice</dt>
-                  <dd>
-                    <p>
-                      <strong>
-                        {isMaintenanceInProgressRevision(
-                          state.payload.maintenance.freshness?.source_revision,
-                        )
-                          ? "Updating your workspace: "
-                          : "Scheduled window: "}
-                      </strong>
-                      {state.payload.maintenance.data.message}
-                    </p>
-                    {(() => {
-                      const start = formatWindowBoundary(state.payload.maintenance.data.starts_at);
-                      const end = formatWindowBoundary(state.payload.maintenance.data.ends_at);
-                      return start && end ? (
-                        <p className="ui-muted">
-                          Window: {start} – {end}
-                        </p>
-                      ) : null;
-                    })()}
-                  </dd>
-                </>
-              )}
-          </dl>
-          <p className="ui-muted" data-testid="pilot0-disclosure">
-            Free invitation-only pilot · Best-effort support · 24-hour nightly backup objective with
-            platform-managed encryption keys (not zero-knowledge) · Shared announced maintenance
-            window · No contractual SLA.
-          </p>
-          <button type="button" disabled={refreshing} onClick={() => void refresh()}>
-            {refreshing ? "Refreshing…" : "Refresh storage usage"}
-          </button>
-        </div>
-      )}
+                      {(() => {
+                        const start = formatWindowBoundary(
+                          state.payload.maintenance.data.starts_at,
+                        );
+                        const end = formatWindowBoundary(state.payload.maintenance.data.ends_at);
+                        return start && end ? (
+                          <p className="ui-muted">
+                            Window: {start} – {end}
+                          </p>
+                        ) : null;
+                      })()}
+                    </dd>
+                  </>
+                )}
+            </dl>
+            <p className="ui-muted" data-testid="pilot0-disclosure">
+              Free invitation-only pilot · Best-effort support · 24-hour nightly backup objective
+              with platform-managed encryption keys (not zero-knowledge) · Shared announced
+              maintenance window · No contractual SLA.
+            </p>
+            <button type="button" disabled={refreshing} onClick={() => void refresh()}>
+              {refreshing ? "Refreshing…" : "Refresh storage usage"}
+            </button>
+          </div>
+        )}
+      </section>
       <HostedRecovery embedded />
-    </section>
+    </>
   );
 }

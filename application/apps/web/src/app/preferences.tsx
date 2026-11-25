@@ -177,60 +177,68 @@ export function PreferenceSettings() {
     setDraft({ ...draft, destinationOrder: ["home", ...order, "settings"] });
   }
   return (
-    <>
-      <h2>Appearance and navigation</h2>
-      <nav aria-label="Settings sections">
-        <ul>
-          <li>
-            <Link to="/settings/provider-categories">Provider categories</Link>
-          </li>
-          {!hostedMode() && (
+    <div className="settings-page">
+      <header className="settings-header">
+        <h2>Appearance and navigation</h2>
+        <nav className="settings-links" aria-label="Settings sections">
+          <ul>
             <li>
-              <Link to="/settings/ai">AI assistance</Link>
+              <Link to="/settings/provider-categories">Provider categories</Link>
             </li>
-          )}
-        </ul>
-      </nav>
+            {!hostedMode() && (
+              <li>
+                <Link to="/settings/ai">AI assistance</Link>
+              </li>
+            )}
+          </ul>
+        </nav>
+      </header>
       {managedHostedMode() && <HostedSettings />}
       {!writable && (
-        <p>Preference editing requires available preferences and workspace write access.</p>
+        <p className="settings-notice" role="status">
+          Preference editing requires available preferences and workspace write access.
+        </p>
       )}
-      <fieldset disabled={!editable}>
+      <fieldset className="settings-card" disabled={!editable}>
         <legend>Appearance</legend>
-        {(["light", "dark"] as const).map((appearance) => (
-          <label key={appearance}>
-            <input
-              type="radio"
-              name="appearance"
-              checked={draft.appearance === appearance}
-              onChange={() => setDraft({ ...draft, appearance })}
-            />
-            {appearance === "light" ? "Light" : "Dark"}
-          </label>
-        ))}
-      </fieldset>
-      <fieldset>
-        <legend>Home</legend>
-        <label htmlFor="home-refresh-frequency">Automatic refresh</label>
-        <select
-          id="home-refresh-frequency"
-          name="homeRefreshMinutes"
-          value={homeRefreshMinutes}
-          onChange={(event) => {
-            const minutes = homeRefreshChoices.find(
-              (value) => value === Number(event.target.value),
-            );
-            if (minutes !== undefined) setHomeRefreshMinutes(minutes);
-          }}
-          aria-describedby="home-refresh-help"
-        >
-          {homeRefreshChoices.map((minutes) => (
-            <option key={minutes} value={minutes}>
-              Every {minutes} {minutes === 1 ? "minute" : "minutes"}
-              {minutes === 5 ? " (default)" : ""}
-            </option>
+        <div className="settings-radio-row">
+          {(["light", "dark"] as const).map((appearance) => (
+            <label key={appearance}>
+              <input
+                type="radio"
+                name="appearance"
+                checked={draft.appearance === appearance}
+                onChange={() => setDraft({ ...draft, appearance })}
+              />
+              {appearance === "light" ? "Light" : "Dark"}
+            </label>
           ))}
-        </select>
+        </div>
+      </fieldset>
+      <fieldset className="settings-card">
+        <legend>Home</legend>
+        <div className="settings-field-row">
+          <label htmlFor="home-refresh-frequency">Automatic refresh</label>
+          <select
+            id="home-refresh-frequency"
+            name="homeRefreshMinutes"
+            value={homeRefreshMinutes}
+            onChange={(event) => {
+              const minutes = homeRefreshChoices.find(
+                (value) => value === Number(event.target.value),
+              );
+              if (minutes !== undefined) setHomeRefreshMinutes(minutes);
+            }}
+            aria-describedby="home-refresh-help"
+          >
+            {homeRefreshChoices.map((minutes) => (
+              <option key={minutes} value={minutes}>
+                Every {minutes} {minutes === 1 ? "minute" : "minutes"}
+                {minutes === 5 ? " (default)" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
         <p id="home-refresh-help" className="ui-muted">
           This refresh interval saves automatically for this browser. Home refreshes at this
           interval while open. Needs action may update sooner when a deadline or follow-up becomes
@@ -238,15 +246,15 @@ export function PreferenceSettings() {
         </p>
         {homeRefreshMessage && <p role="status">{homeRefreshMessage}</p>}
       </fieldset>
-      <fieldset disabled={!editable}>
+      <fieldset className="settings-card" disabled={!editable}>
         <legend>Navigation</legend>
-        <p>
+        <p className="ui-muted">
           Home and Settings stay accessible. Hidden destinations remain in More and contextual
           links; hiding them does not hide obligations.
         </p>
-        <ol>
+        <ol className="settings-nav-list">
           {middle.map((id, index) => (
-            <li key={id}>
+            <li key={id} className="settings-nav-item">
               <label>
                 <input
                   type="checkbox"
@@ -262,42 +270,60 @@ export function PreferenceSettings() {
                 />
                 {destination(id)?.label}
               </label>
-              <button
-                aria-label={`Move ${destination(id)?.label} up`}
-                disabled={index === 0}
-                onClick={() => move(index, -1)}
-              >
-                Up
-              </button>
-              <button
-                aria-label={`Move ${destination(id)?.label} down`}
-                disabled={index === middle.length - 1}
-                onClick={() => move(index, 1)}
-              >
-                Down
-              </button>
+              <span className="settings-nav-order">
+                <button
+                  type="button"
+                  aria-label={`Move ${destination(id)?.label} up`}
+                  disabled={index === 0}
+                  onClick={() => move(index, -1)}
+                >
+                  Up
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Move ${destination(id)?.label} down`}
+                  disabled={index === middle.length - 1}
+                  onClick={() => move(index, 1)}
+                >
+                  Down
+                </button>
+              </span>
             </li>
           ))}
         </ol>
-        <button
-          onClick={() => {
-            setDraft({ ...defaults, revision: draft.revision });
-            setHomeRefreshMinutes(5);
-          }}
-        >
-          Restore defaults
-        </button>
+        <div className="settings-card-actions">
+          <button
+            type="button"
+            onClick={() => {
+              setDraft({ ...defaults, revision: draft.revision });
+              setHomeRefreshMinutes(5);
+            }}
+          >
+            Restore defaults
+          </button>
+        </div>
       </fieldset>
-      <p>Use Save preferences to save your appearance and navigation choices.</p>
-      <button disabled={!writable || pending || conflict} onClick={() => void save()}>
-        {pending ? "Saving…" : attempt ? "Retry save" : "Save preferences"}
-      </button>
-      {conflict && (
-        <button disabled={pending} onClick={() => void loadCurrent()}>
-          Load current preferences
-        </button>
-      )}
-      {message && <p role="status">{message}</p>}
-    </>
+      <div className="settings-save-bar">
+        <p className="ui-muted">
+          Use Save preferences to save your appearance and navigation choices.
+        </p>
+        <div className="settings-card-actions">
+          <button
+            type="button"
+            className="primary-action"
+            disabled={!writable || pending || conflict}
+            onClick={() => void save()}
+          >
+            {pending ? "Saving…" : attempt ? "Retry save" : "Save preferences"}
+          </button>
+          {conflict && (
+            <button type="button" disabled={pending} onClick={() => void loadCurrent()}>
+              Load current preferences
+            </button>
+          )}
+        </div>
+        {message && <p role="status">{message}</p>}
+      </div>
+    </div>
   );
 }
