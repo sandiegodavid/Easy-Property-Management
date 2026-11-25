@@ -6,6 +6,7 @@ On each turn, continue through checkpoints until complete. Save checkpoint and s
 
 - Run focused tests by default.
 - Run the full test suite only when explicitly requested or when a changed integration boundary requires full-suite validation.
+- After every hosted deployment, immediately run the live canary smoke suite (`SMOKE-01` through `SMOKE-05`) as specified in [HOSTED_OPERATOR_POST_DEPLOY_SMOKE_DESIGN.md](docs/active/HOSTED_OPERATOR_POST_DEPLOY_SMOKE_DESIGN.md). Require all five checks to pass before continuing the rollout or marking the deployment complete, and follow the design's failure policy if any check fails.
 
 ## code reviews
 
