@@ -380,6 +380,7 @@ def test_operator_runtime_uses_same_owner_via_bounded_unix_relay(handoffs):
             uid = os.getuid()
             registry = Mock()
             registry.by_origin.return_value = binding
+            registry.by_operator.return_value = binding
             source_lookup = SourceBrowserDirectory(registry, to_source, relay_uid=uid)
             central.source.original.side_effect = source_lookup.original
             source_client = CentralHandoffClient(to_central, uid, lambda: binding)
@@ -428,9 +429,23 @@ def test_operator_runtime_uses_same_owner_via_bounded_unix_relay(handoffs):
                     relay_uid=uid,
                     source_origin=binding.target_origin,
                     central_origin=login_origin,
+                    usage_reader=lambda: SimpleNamespace(
+                        used_bytes=123, usable_bytes=50_000_000, revision=1
+                    ),
                 ),
             )
             with TestClient(app, base_url=binding.target_origin, follow_redirects=False) as client:
+                scope = binding.scope
+                observed = source_lookup.inspect_source(
+                    scope.operator_id, scope.workspace_id, binding.access_epoch
+                )
+                assert (observed.usage_bytes, observed.usable_bytes) == (123, 50_000_000)
+                assert observed.binding == binding
+                assert observed.effective_enabled is True
+                with pytest.raises(ProviderDenied):
+                    source_lookup.inspect_source(
+                        scope.operator_id, scope.workspace_id, binding.access_epoch + 1
+                    )
                 assert client.get("/api/hosted/session").status_code == 401
                 assert client.get("/api/properties").status_code == 503
                 assert (

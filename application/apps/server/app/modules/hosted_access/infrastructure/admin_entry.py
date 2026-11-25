@@ -231,6 +231,7 @@ def build_admin_runtime(
     ui_directory: Path,
     proxy=None,
     clock=None,
+    source_inspector=None,
 ) -> AdminRuntimeBundle:
     """Build normal Admin app (with AdminControl + recovery) or D5 recovery-mode fallback."""
     now_clock = clock or (lambda: time_ns() // 1_000_000)
@@ -278,6 +279,7 @@ def build_admin_runtime(
             clock=now_clock,
             issuer=setup.realm.alias,
             application_directory=deployment.application_directory,
+            source_inspector=source_inspector,
         )
         web = {
             "firebase": {

@@ -12,7 +12,9 @@ from threading import RLock
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from fastapi import FastAPI
 from pydantic import TypeAdapter
-from sqlalchemy import Engine
+from sqlalchemy import Engine, text
+
+from app.modules.hosted_access.application.handoff_channel import SourceInspection
 from starlette.responses import JSONResponse
 
 from app.modules.host_agent.infrastructure.identity_relay import SourceIdentityDispatch
@@ -256,11 +258,40 @@ def compose_operator_identity(
         proof_owner=inputs.lifecycle_proof_owner,
     )
     app.state.hosted_source_lifecycle = lifecycle
+
+    def inspect_source(binding):
+        if binding != current_binding():
+            raise ProviderDenied()
+        usage = inputs.usage_reader() if inputs.usage_reader is not None else None
+        if usage is None:
+            raise ProviderUnavailable()
+        with inputs.engine.connect() as connection:
+            meta = (
+                connection.execute(
+                    text(
+                        "SELECT effective_access, access_epoch, revision FROM main.access_meta WHERE id = 1"
+                    )
+                )
+                .mappings()
+                .one()
+            )
+        if meta["access_epoch"] != binding.access_epoch:
+            raise ProviderDenied()
+        return SourceInspection(
+            binding=binding,
+            effective_enabled=meta["effective_access"] == "enabled",
+            usage_bytes=usage.used_bytes,
+            usable_bytes=usage.usable_bytes,
+            source_revision=max(meta["revision"], usage.revision),
+            observed_at=inputs.clock(),
+        )
+
     dispatch = DestinationDispatch(
         owner,
         runtime=runtime,
         lifecycle=SourceIdentityDispatch(lifecycle, authenticate),
         sessions=sessions,
+        inspector=inspect_source,
     )
     auth = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
     auth.router.redirect_slashes = False

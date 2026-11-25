@@ -184,6 +184,12 @@ Verify both readiness and Docker health:
 
 > **Gotcha (`qualified_releases` Immutability):** `admin.sqlite` enforces an `immutable hosted record` trigger on `qualified_releases`. Never `UPDATE` an existing `qualified_releases` row in place; when admitting brand-new Pilot 0 operators on a newer release, `INSERT` a new `release_id` row with the new Operator image digest instead.
 
+### Admin source inspection
+
+The source inspector uses the private Host Agent identity relay to read effective access and logical usage from the bound Operator. Roll out the relay protocol update, the Admin image, and the Operator image together. Verify **Refresh source** on Demo A and confirm that **Source access** and **Free usage** reflect the Operator's current state. Run the [live canary smoke gate](../../active/HOSTED_OPERATOR_POST_DEPLOY_SMOKE_DESIGN.md#5-rollout-integration--passfail-gate) before completing rollout.
+
+See the [source inspection checkpoint](pilot0-source-inspection-checkpoint.md) for current rollout and catalog status.
+
 ---
 
 ## 5. Clean Up Temporary Build Artifacts

@@ -19,6 +19,8 @@ from app.modules.hosted_access.application.handoff_channel import (
     DestinationObservation,
     HandoffAccepted,
     HandoffRequest,
+    InspectSource,
+    SourceInspection,
     LookupIssuance,
     ObserveDestination,
     ObserveRecent,
@@ -77,6 +79,8 @@ def _decode_result(call, raw):
         return None
     if isinstance(call, IdentityRelayCall):
         model = OperationOutcome[SourceResult]
+    elif isinstance(call, InspectSource):
+        model = SourceInspection
     elif isinstance(call, ObserveDestination):
         model = DestinationObservation
     elif isinstance(call, LookupIssuance):
@@ -205,7 +209,7 @@ class IdentityRelay:
             return invoke_identity(
                 endpoint.path, call, expected_uid=endpoint.uid, deadline=deadline
             )
-        elif isinstance(call, (ObserveDestination, LookupIssuance, ObserveRecent)):
+        elif isinstance(call, (ObserveDestination, LookupIssuance, ObserveRecent, InspectSource)):
             intent = call.binding
         else:
             raise HostAgentDenied()

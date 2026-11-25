@@ -16,7 +16,28 @@ from app.modules.hosted_access.application.identity_states import (
 )
 from app.modules.hosted_access.application.source_contracts import SourceCommand
 from pydantic import model_validator
-from app.platform.hosted_contracts.values import CanonicalId, Contract, EpochMillis, RequestHash
+from app.platform.hosted_contracts.values import (
+    CanonicalId,
+    Contract,
+    Count,
+    EpochMillis,
+    RequestHash,
+    Revision,
+)
+
+
+class InspectSource(Contract):
+    method: Literal["inspect_source"] = "inspect_source"
+    binding: IdentityBinding
+
+
+class SourceInspection(Contract):
+    binding: IdentityBinding
+    effective_enabled: bool
+    usage_bytes: Count
+    usable_bytes: Count
+    source_revision: Revision
+    observed_at: EpochMillis
 
 
 class ObserveDestination(Contract):
@@ -130,12 +151,15 @@ HandoffRequest = Annotated[
     | AcknowledgeIssuance
     | ObserveRecent
     | RefreshStatus
-    | ReconcileRevocation,
+    | ReconcileRevocation
+    | InspectSource,
     Field(discriminator="method"),
 ]
 
 
 def check_reply(call, result):
+    if isinstance(call, InspectSource):
+        return isinstance(result, SourceInspection) and result.binding == call.binding
     if isinstance(call, ObserveDestination):
         return (
             isinstance(result, DestinationObservation)

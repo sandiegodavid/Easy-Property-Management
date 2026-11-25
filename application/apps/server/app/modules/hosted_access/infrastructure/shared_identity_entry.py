@@ -302,12 +302,16 @@ def create_app(config_path):
     def clock():
         return time_ns() // 1_000_000
 
+    source = SourceBrowserDirectory(
+        registry, configuration.host_relay_socket, relay_uid=configuration.host_relay_uid
+    )
     bundle = build_admin_runtime(
         deployment,
         setup,
         ui_directory=ui["admin"],
         proxy=configuration.provider_proxy,
         clock=clock,
+        source_inspector=source.inspect_source,
     )
     engine = bundle.engine
     try:
@@ -344,9 +348,6 @@ def create_app(config_path):
             ).all() != [(deployment.deployment_id, setup.origins.central)]:
                 raise ValueError("Current Admin registration differs from the deployed origin.")
 
-        source = SourceBrowserDirectory(
-            registry, configuration.host_relay_socket, relay_uid=configuration.host_relay_uid
-        )
         attempts = CentralAttempts(engine, setup, source, clock=clock)
         readiness = AdminWorkspaceReadiness(engine)
         invitations = CentralInvitations(engine, None, clock=clock, readiness=readiness)

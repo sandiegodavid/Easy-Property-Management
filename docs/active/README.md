@@ -12,6 +12,7 @@ The [agent triage design](agent-triage-design.md) is the accepted direction for 
 - [Full Codebase Remediation Plan](FULL_CODEBASE_REMEDIATION_PLAN.md): 3-batch remediation plan for all 18 confirmed findings from `FULL_CODEBASE_3db88c2c_REVIEW_COMMENTS.txt`.
 - [Live UI Interaction Remediation Plan](LIVE_UI_INTERACTION_REMEDIATION_PLAN.md): 4-batch remediation plan for confirmed Phase 1 & Phase 2 findings from live testing `https://demo-a.epmdemo.xyz/` (`pilot0-20261124-review` / `5ed202f5`).
 - [Hosted Operator Post-Deployment Smoke Tests Design](HOSTED_OPERATOR_POST_DEPLOY_SMOKE_DESIGN.md): 5 fast, self-cleaning end-to-end Operator workflow smoke tests (`SMOKE-01`..`SMOKE-05`) to assess app health after each deployment.
+- [Demo A smoke remediation plan](DEMO_A_SMOKE_REMEDIATION_PLAN.md): blockers from the November 25 live canary run.
 - [PORTAL-001/002 and FIN-009 plan](PORTALS_IMPLEMENTATION_PLAN.md): tenant/owner workflows following hosting, shared late-fee source and cross-portal acceptance.
 - [PAY-001](PAY-001_DESIGN.md): qualified payment engine reused by the tenant portal; operator subscriptions are owned by HOSTED-001.
 

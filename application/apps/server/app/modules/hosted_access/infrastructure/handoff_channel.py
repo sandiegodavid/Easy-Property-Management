@@ -17,6 +17,7 @@ from app.modules.hosted_access.application.handoff_channel import (
     AcknowledgeIssuance,
     DestinationObservation,
     HandoffAccepted,
+    InspectSource,
     LookupIssuance,
     ObserveDestination,
     ObserveRecent,
@@ -38,9 +39,10 @@ def _check_deadline(deadline):
 
 
 class DestinationDispatch:
-    def __init__(self, owner, *, runtime, lifecycle=None, sessions=None):
+    def __init__(self, owner, *, runtime, lifecycle=None, sessions=None, inspector=None):
         self.owner, self.runtime, self.lifecycle = owner, runtime, lifecycle
         self.sessions = sessions
+        self.inspector = inspector
 
     def __call__(self, request, *, deadline):
         _check_deadline(deadline)
@@ -48,6 +50,13 @@ class DestinationDispatch:
             raise ProviderUnavailable()
         if isinstance(request, IdentityRelayCall) and self.lifecycle is not None:
             return self.lifecycle(request, deadline=deadline)
+        if isinstance(request, InspectSource):
+            if (
+                self.inspector is None
+                or self.runtime.workspace_id != request.binding.scope.workspace_id
+            ):
+                raise ProviderUnavailable()
+            return self.inspector(request.binding)
         if not isinstance(request, (ObserveDestination, LookupIssuance, ObserveRecent)):
             raise ProviderDenied()
         if self.runtime.workspace_id != request.binding.scope.workspace_id:
@@ -174,6 +183,12 @@ class SourceBrowserDirectory:
     def current(self, context):
         if self.inspect_start(context.operator_id, context.source_attempt_id) != context:
             raise ProviderDenied()
+
+    def inspect_source(self, operator_id, workspace_id, access_epoch):
+        binding = self.registry.by_operator(operator_id)
+        if binding.scope.workspace_id != workspace_id or binding.access_epoch != access_epoch:
+            raise ProviderDenied()
+        return _private_call(self.path, self.uid, InspectSource(binding=binding))
 
     def observe_recent(self, binding, challenge_id):
         return _private_call(
