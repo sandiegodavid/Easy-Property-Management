@@ -156,7 +156,7 @@ function destination(
     };
   if (form.startsWith("maintenance."))
     return {
-      to: `/maintenance?record=issue&id=${source ?? scalar(item.issueId, id)}`,
+      to: `/maintenance?record=issue&id=${source || scalar(item.issueId, id)}`,
       label: "Back to maintenance issue",
     };
   if (form.startsWith("communication."))

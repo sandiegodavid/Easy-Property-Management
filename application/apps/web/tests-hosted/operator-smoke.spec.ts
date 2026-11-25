@@ -1,10 +1,4 @@
-import {
-  expect,
-  test,
-  type APIRequestContext,
-  type Page,
-  type Response,
-} from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page, type Response } from "@playwright/test";
 
 const BASE_URL = (process.env.EPM_SMOKE_BASE_URL ?? "http://localhost:18802").replace(/\/$/, "");
 const IS_LOCAL_CONTAINER =
@@ -66,6 +60,11 @@ async function ensureSignedIn(page: Page): Promise<void> {
     page.url(),
     "Expected authenticated redirect to /home. For live canary runs, pass EPM_SMOKE_STORAGE_STATE.",
   ).toMatch(/\/home(\?|$)/);
+  const settings = await page.request.get("/api/hosted/settings", { timeout: 10_000 });
+  expect(
+    settings.status(),
+    "Home can render a sign-in screen at the same URL. Provide a valid Demo A session.",
+  ).toBe(200);
 }
 
 async function readCsrfToken(page: Page): Promise<string> {
@@ -136,16 +135,14 @@ interface HostedSettingsResponse {
 }
 
 interface FinancialReportingResponse {
-  expensesPaidMinor?: number;
-  totals?: { expensesPaidMinor?: number };
-  summary?: { expensesPaidMinor?: number };
+  summary: { operating: { available: boolean; expensesPaid: string } };
 }
 
-function extractExpensesPaidMinor(report: FinancialReportingResponse): number | null {
-  if (typeof report.expensesPaidMinor === "number") return report.expensesPaidMinor;
-  if (typeof report.totals?.expensesPaidMinor === "number") return report.totals.expensesPaidMinor;
-  if (typeof report.summary?.expensesPaidMinor === "number") return report.summary.expensesPaidMinor;
-  return null;
+function extractExpensesPaidMinor(report: FinancialReportingResponse): number {
+  const operating = report.summary.operating;
+  expect(operating.available).toBe(true);
+  expect(operating.expensesPaid).toMatch(/^-?\d+\.\d{2}$/);
+  return Number(operating.expensesPaid.replace(".", ""));
 }
 
 function isoDateOffset(daysOffset: number): string {
@@ -276,7 +273,9 @@ test.describe.serial("Hosted Operator post-deployment workflow smoke suite", () 
     await searchInput.fill(searchTerm.slice(0, 1));
     await expect(page.getByText(/at least two characters/i).first()).toBeVisible();
     await searchInput.fill(searchTerm);
-    await expect(page.getByRole("link", { name: targetProperty.displayName }).first()).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: targetProperty.displayName }).first(),
+    ).toBeVisible();
 
     // Regression guard for P-03 / O-02: Property & Owner Overview Tasks section must load cleanly.
     await page.goto(`/properties/${targetProperty.id}/overview`, { waitUntil: "networkidle" });
@@ -294,7 +293,9 @@ test.describe.serial("Hosted Operator post-deployment workflow smoke suite", () 
 
     // Verify Leasing and Providers directories render cleanly.
     await page.goto("/leasing", { waitUntil: "networkidle" });
-    await expect(page.getByRole("button", { name: "Create lease draft", exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Create lease draft", exact: true }),
+    ).toBeVisible();
     await page.goto("/providers", { waitUntil: "networkidle" });
     await expect(page.getByRole("button", { name: "Create provider", exact: true })).toBeVisible();
 
@@ -405,15 +406,18 @@ test.describe.serial("Hosted Operator post-deployment workflow smoke suite", () 
       await page.goto(`/leases/${createdLeaseId}/details`, { waitUntil: "networkidle" });
       await expect(page.getByText("Draft").first()).toBeVisible();
 
-      const voidLeaseResp = await page.request.post(`${BASE_URL}/api/leases/${createdLeaseId}/void`, {
-        headers,
-        data: {
-          expectedRevision: spaceRevision,
-          expectedLeaseRevision: draftLease.leaseRevision,
-          idempotencyKey: crypto.randomUUID(),
-          confirmed: true,
+      const voidLeaseResp = await page.request.post(
+        `${BASE_URL}/api/leases/${createdLeaseId}/void`,
+        {
+          headers,
+          data: {
+            expectedRevision: spaceRevision,
+            expectedLeaseRevision: draftLease.leaseRevision,
+            idempotencyKey: crypto.randomUUID(),
+            confirmed: true,
+          },
         },
-      });
+      );
       expect(voidLeaseResp.ok(), `Void draft lease failed: ${await voidLeaseResp.text()}`).toBe(
         true,
       );
@@ -473,7 +477,7 @@ test.describe.serial("Hosted Operator post-deployment workflow smoke suite", () 
 
     const today = isoDateOffset(0);
     const monthStart = `${today.slice(0, 7)}-01`;
-    const reportPath = `/api/financial-reporting/summary?fromOn=${monthStart}&throughOn=${today}&propertyState=all`;
+    const reportPath = `/api/money/properties?fromOn=${monthStart}&throughOn=${today}&propertyState=all`;
 
     const baselineReport = await fetchJson<FinancialReportingResponse>(page.request, reportPath);
     const baselineExpensesMinor = extractExpensesPaidMinor(baselineReport);
@@ -502,7 +506,7 @@ test.describe.serial("Hosted Operator post-deployment workflow smoke suite", () 
           propertyId: firstProp.id,
           spaceId: firstProp.spaces[0].id,
           categoryId: categories[0].id,
-          payeeName: "Smoke Hardware Supply",
+          payeeName: `${RUN_TAG} Smoke Hardware Supply`,
           paidByKind: "local_operator",
           paidOn: today,
           amount: "0.00",
@@ -521,7 +525,7 @@ test.describe.serial("Hosted Operator post-deployment workflow smoke suite", () 
           propertyId: firstProp.id,
           spaceId: firstProp.spaces[0].id,
           categoryId: categories[0].id,
-          payeeName: "Smoke Hardware Supply",
+          payeeName: `${RUN_TAG} Smoke Hardware Supply`,
           paidByKind: "local_operator",
           paidOn: today,
           amount: "12.34",
@@ -533,14 +537,18 @@ test.describe.serial("Hosted Operator post-deployment workflow smoke suite", () 
         createExpense.ok(),
         `Create expense failed (${createExpense.status()}): ${await createExpense.text()}`,
       ).toBe(true);
-      const expense = (await createExpense.json()) as { id: string; revision: number };
+      const expense = (await createExpense.json()) as { id: string; expenseRevision: number };
       createdExpenseId = expense.id;
 
       // Verify in UI and Reporting + Settings usage accounting.
-      await page.goto("/money?tab=expenses", { waitUntil: "networkidle" });
-      await expect(page.getByText(`${RUN_TAG} Filter Replacement`).first()).toBeVisible();
+      await page.goto(`/money?tab=expenses&propertyId=${firstProp.id}`, {
+        waitUntil: "networkidle",
+      });
+      await expect(
+        page.getByRole("link", { name: `${RUN_TAG} Smoke Hardware Supply` }),
+      ).toBeVisible();
 
-      if (baselineExpensesMinor !== null) {
+      {
         const afterReport = await fetchJson<FinancialReportingResponse>(page.request, reportPath);
         expect(extractExpensesPaidMinor(afterReport)).toBe(baselineExpensesMinor + 1234);
       }
@@ -554,19 +562,22 @@ test.describe.serial("Hosted Operator post-deployment workflow smoke suite", () 
       expect(settings.usage.data?.used_bytes ?? 50_000_001).toBeLessThan(50_000_000);
 
       // 4.5 Void expense and confirm Reporting returns to baseline.
-      const voidResp = await page.request.post(`${BASE_URL}/api/expenses/${createdExpenseId}/void`, {
-        headers,
-        data: {
-          expectedRevision: expense.revision,
-          idempotencyKey: crypto.randomUUID(),
-          confirmed: true,
-          reason: `${RUN_TAG} post-deploy smoke cleanup`,
+      const voidResp = await page.request.post(
+        `${BASE_URL}/api/expenses/${createdExpenseId}/void`,
+        {
+          headers,
+          data: {
+            expectedRevision: expense.expenseRevision,
+            idempotencyKey: crypto.randomUUID(),
+            confirmed: true,
+            reason: `${RUN_TAG} post-deploy smoke cleanup`,
+          },
         },
-      });
+      );
       expect(voidResp.ok(), `Void expense failed: ${await voidResp.text()}`).toBe(true);
       createdExpenseId = null;
 
-      if (baselineExpensesMinor !== null) {
+      {
         const finalReport = await fetchJson<FinancialReportingResponse>(page.request, reportPath);
         expect(extractExpensesPaidMinor(finalReport)).toBe(baselineExpensesMinor);
       }
@@ -574,16 +585,20 @@ test.describe.serial("Hosted Operator post-deployment workflow smoke suite", () 
       if (createdExpenseId) {
         const current = await page.request.get(`${BASE_URL}/api/expenses/${createdExpenseId}`);
         if (current.ok()) {
-          const data = (await current.json()) as { revision: number };
-          await page.request.post(`${BASE_URL}/api/expenses/${createdExpenseId}/void`, {
-            headers,
-            data: {
-              expectedRevision: data.revision,
-              idempotencyKey: crypto.randomUUID(),
-              confirmed: true,
-              reason: `${RUN_TAG} finally cleanup`,
+          const data = (await current.json()) as { expenseRevision: number };
+          const cleanup = await page.request.post(
+            `${BASE_URL}/api/expenses/${createdExpenseId}/void`,
+            {
+              headers,
+              data: {
+                expectedRevision: data.expenseRevision,
+                idempotencyKey: crypto.randomUUID(),
+                confirmed: true,
+                reason: `${RUN_TAG} finally cleanup`,
+              },
             },
-          });
+          );
+          expect(cleanup.ok(), `Void smoke expense: ${cleanup.status()}`).toBe(true);
         }
       }
     }
@@ -640,7 +655,7 @@ test.describe.serial("Hosted Operator post-deployment workflow smoke suite", () 
         {
           headers,
           data: {
-            expectedRevision: 0,
+            expectedRevision: issue.revision,
             idempotencyKey: crypto.randomUUID(),
             purpose: appointmentTitle,
             startsAtUtc: `${tomorrow}T17:00:00Z`,
@@ -659,21 +674,23 @@ test.describe.serial("Hosted Operator post-deployment workflow smoke suite", () 
 
       // 5.3 Verify appointment surfaces on /home Calendar and appointments.
       await page.goto("/home", { waitUntil: "networkidle" });
-      await expect(page.getByText(appointmentTitle).first()).toBeVisible();
+      await expect(
+        page
+          .getByRole("region", { name: "Calendar and appointments" })
+          .getByRole("button", { name: issueTitle }),
+      ).toBeVisible();
 
       // 5.4 Exercise UI maintenance.appointment.finish (regression guard for Slice 1.2 draft-lease headers).
       await page.goto(
-        `/maintenance?workflow=maintenance.appointment.finish&target=${createdAppointmentId}`,
+        `/maintenance?workflow=maintenance.appointment.finish&target=${createdIssueId}&child=${createdAppointmentId}`,
         { waitUntil: "networkidle" },
       );
-      const cancelledCheckbox = page.getByLabel(/Cancel/i).first();
-      if ((await cancelledCheckbox.count()) > 0 && (await cancelledCheckbox.isVisible())) {
-        await cancelledCheckbox.check();
-      }
-      const reasonInput = page.getByLabel(/Reason|Outcome|Note/i).first();
-      if ((await reasonInput.count()) > 0) {
-        await reasonInput.fill(`${RUN_TAG} smoke appointment finished cleanly`);
-      }
+      const finishForm = page.getByRole("region", { name: "Finish appointment" });
+      await finishForm.getByRole("checkbox", { name: "I confirm this lifecycle change" }).check();
+      await finishForm.getByRole("checkbox", { name: "Cancelled", exact: true }).check();
+      await finishForm
+        .getByRole("textbox", { name: "Reason", exact: true })
+        .fill(`${RUN_TAG} smoke appointment cancelled cleanly`);
 
       const finishResponsePromise = page.waitForResponse(
         (resp) =>
@@ -681,7 +698,7 @@ test.describe.serial("Hosted Operator post-deployment workflow smoke suite", () 
           resp.request().method() === "POST",
         { timeout: 15_000 },
       );
-      await page.locator('form button[type="submit"]').first().click();
+      await finishForm.getByRole("button", { name: "Save finish appointment" }).click();
       const finishResponse = await finishResponsePromise;
       expect(
         finishResponse.status(),
@@ -709,19 +726,24 @@ test.describe.serial("Hosted Operator post-deployment workflow smoke suite", () 
       expect(cancelIssue.ok(), `Cancel issue failed: ${await cancelIssue.text()}`).toBe(true);
       createdIssueId = null;
     } finally {
-      if (createdAppointmentId) {
-        await page.request.post(
+      if (createdAppointmentId && createdIssueId) {
+        const issue = await fetchJson<{ revision: number }>(
+          page.request,
+          `/api/maintenance-issues/${createdIssueId}`,
+        );
+        const cleanup = await page.request.post(
           `${BASE_URL}/api/maintenance-appointments/${createdAppointmentId}/cancel`,
           {
             headers,
             data: {
-              expectedRevision: 1,
+              expectedRevision: issue.revision,
               idempotencyKey: crypto.randomUUID(),
               confirmed: true,
               reason: `${RUN_TAG} finally cleanup`,
             },
           },
         );
+        expect(cleanup.ok(), `Cancel smoke appointment: ${cleanup.status()}`).toBe(true);
       }
       if (createdIssueId) {
         const current = await page.request.get(
@@ -729,18 +751,15 @@ test.describe.serial("Hosted Operator post-deployment workflow smoke suite", () 
         );
         if (current.ok()) {
           const data = (await current.json()) as { revision: number };
-          await page.request.post(
-            `${BASE_URL}/api/maintenance-issues/${createdIssueId}/cancel`,
-            {
-              headers,
-              data: {
-                expectedRevision: data.revision,
-                idempotencyKey: crypto.randomUUID(),
-                confirmed: true,
-                reason: `${RUN_TAG} finally cleanup`,
-              },
+          await page.request.post(`${BASE_URL}/api/maintenance-issues/${createdIssueId}/cancel`, {
+            headers,
+            data: {
+              expectedRevision: data.revision,
+              idempotencyKey: crypto.randomUUID(),
+              confirmed: true,
+              reason: `${RUN_TAG} finally cleanup`,
             },
-          );
+          });
         }
       }
     }

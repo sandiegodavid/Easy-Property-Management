@@ -118,6 +118,8 @@ Every smoke test inherits these mandatory invariants:
 
 ---
 
+Local Docker validation on November 25, 2026 passed all five checks after aligning Finance and Maintenance with the current app contracts. See the [local results and checkpoint](../ui/local-docker-smoke-results-2026-11-25.md). Live qualification remains a separate gate.
+
 ## 4. Test & Validation Matrix
 
 | Validation Area | Covered By | Concrete Assertion |

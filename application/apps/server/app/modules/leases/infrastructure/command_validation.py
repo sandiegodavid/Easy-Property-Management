@@ -206,7 +206,14 @@ def _history(connection, source_operations):
             or (previous == 0) != (action == "create")
         ):
             raise ValueError("Lease revision history is incomplete.")
-        if effective and not set(BUSINESS_AUDITS[action]).issubset(
+        prior_snapshot = revisions.get((receipt["lease_id"], "snapshot"))
+        draft_void = (
+            action == "void"
+            and prior_snapshot is not None
+            and prior_snapshot.get("status") == "draft"
+        )
+        required_audits = (("lease", "voided"),) if draft_void else BUSINESS_AUDITS[action]
+        if effective and not set(required_audits).issubset(
             business_by_correlation.get(receipt["correlation_id"], set())
         ):
             raise ValueError("Correlated Lease workflow audit evidence is incomplete.")
@@ -237,7 +244,7 @@ def _history(connection, source_operations):
             or response.get("operationId") != receipt["id"]
         ):
             raise ValueError("Response identity differs.")
-        if action in TIMELINE_ACTIONS:
+        if action in TIMELINE_ACTIONS and not draft_void:
             TimelineLeaseResponse.model_validate(response)
             source = source_operations.source_timeline_operation(
                 connection, receipt["idempotency_key"]

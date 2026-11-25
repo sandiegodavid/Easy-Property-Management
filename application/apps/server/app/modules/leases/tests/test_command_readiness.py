@@ -493,7 +493,7 @@ def test_renewal_decision_notes_match_source_command_and_recovery(fixture, notes
     }
     if notes_case == "whitespace":
         before = fixture.service.get(renewal["id"])
-        with pytest.raises(OperatorError, match="valid owning command"):
+        with pytest.raises(OperatorError, match="Renewal notes must contain 1 to 2000 characters"):
             support.prepare_attempt(
                 saved["id"], attempt_key=key, expected_revision=1, idempotency_key=preparation_key
             )
@@ -831,12 +831,9 @@ def test_termination_completion_attempt_recovers_source_derived_reason(fixture, 
         saved["id"], attempt_key=key, expected_revision=1, idempotency_key=preparation_key
     )
 
-    class CompletionDate(date):
-        @classmethod
-        def today(cls):
-            return tomorrow
-
-    with patch("app.modules.leases.application.service.date", CompletionDate):
+    with patch(
+        "app.modules.leases.application.service._zone_today", return_value=tomorrow.isoformat()
+    ):
         original = fixture.service.complete_termination_case(
             case["id"],
             actual_move_out_on=payload["actualMoveOutOn"],
@@ -901,12 +898,9 @@ def test_negotiation_commands_and_completion_replay_original_results(fixture):
     key = str(uuid4())
     tomorrow = date.today() + timedelta(days=1)
 
-    class CompletionDate(date):
-        @classmethod
-        def today(cls):
-            return tomorrow
-
-    with patch("app.modules.leases.application.service.date", CompletionDate):
+    with patch(
+        "app.modules.leases.application.service._zone_today", return_value=tomorrow.isoformat()
+    ):
         result = fixture.service.complete_termination_case(
             case["id"],
             actual_move_out_on=tomorrow.isoformat(),
@@ -1150,6 +1144,26 @@ def test_concurrent_creation_commits_one_receipt_and_original_response(fixture):
             ).scalar_one()
             == 1
         )
+    validate_latest_schema(fixture.workspace.paths.database)
+
+
+def test_voided_unsigned_draft_validates_without_occupancy_history(fixture):
+    draft = _vacant_draft(fixture)
+    before = fixture.portfolio.get_space_status(draft["spaceId"])
+
+    result = fixture.service.void(
+        draft["id"],
+        confirmed=True,
+        expected_revision=before["revision"],
+        expected_lease_revision=draft["leaseRevision"],
+        idempotency_key=str(uuid4()),
+    )
+
+    assert result["status"] == "void"
+    after = fixture.portfolio.get_space_status(draft["spaceId"])
+    assert {key: val for key, val in after.items() if key != "asOf"} == {
+        key: val for key, val in before.items() if key != "asOf"
+    }
     validate_latest_schema(fixture.workspace.paths.database)
 
 

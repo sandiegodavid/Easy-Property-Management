@@ -141,6 +141,43 @@ test("standalone maintenance issue and owner concern creation retain their saved
   }
 });
 
+test("resumed maintenance issue returns to the committed issue", async ({ page, request }) => {
+  const home = await makeProperty(request);
+  const summary = `Resumed issue ${crypto.randomUUID()}`;
+  await page.goto("/maintenance?workflow=maintenance.issue.create");
+  await page
+    .getByRole("combobox", { name: "Property (required)", exact: true })
+    .selectOption(home.id);
+  await page
+    .getByRole("combobox", { name: "Category (required)", exact: true })
+    .selectOption("plumbing");
+  await page.getByRole("textbox", { name: "Summary (required)", exact: true }).fill(summary);
+  await page
+    .getByRole("textbox", { name: "Description (required)", exact: true })
+    .fill("Saved before submitting.");
+  await page.getByRole("button", { name: "Save and close", exact: true }).click();
+  await page.goto("/settings/recovery");
+  await page.getByRole("link", { name: "Continue editing: Report maintenance issue" }).click();
+  await expect(page.getByRole("textbox", { name: "Summary (required)", exact: true })).toHaveValue(
+    summary,
+  );
+
+  const posted = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === "/api/maintenance-issues" &&
+      response.request().method() === "POST",
+  );
+  await submit(page);
+  const response = await posted;
+  expect(response.ok()).toBe(true);
+  const issue = (await response.json()) as { id: string };
+  expect(issue.id).toBeTruthy();
+  const back = page.getByRole("link", { name: "Back to maintenance issue", exact: true });
+  await expect(back).toHaveAttribute("href", `/maintenance?record=issue&id=${issue.id}`);
+  await back.click();
+  await expect(page.getByRole("heading", { name: summary, exact: true })).toBeVisible();
+});
+
 test("lease draft saved screen contains the agreed rent and returns to the new draft", async ({
   page,
   request,
