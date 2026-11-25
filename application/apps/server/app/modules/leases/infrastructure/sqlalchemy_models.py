@@ -34,7 +34,7 @@ class LeaseModel(LocalBase):
         CheckConstraint("contract_ends_on IS NULL OR contract_ends_on > contract_starts_on"),
         CheckConstraint("occupancy_starts_on >= contract_starts_on"),
         CheckConstraint(
-            "(status = 'draft' AND executed_on IS NULL AND actual_move_out_on IS NULL AND end_reason IS NULL) OR (status = 'executed' AND executed_on IS NOT NULL AND actual_move_out_on IS NULL AND end_reason IS NULL) OR (status = 'ended' AND executed_on IS NOT NULL AND actual_move_out_on IS NOT NULL AND end_reason IS NOT NULL AND end_reason = 'contract_completed') OR (status = 'terminated' AND executed_on IS NOT NULL AND actual_move_out_on IS NOT NULL AND end_reason IS NOT NULL AND end_reason IN ('early_termination', 'mutual_termination', 'other')) OR (status = 'void' AND executed_on IS NOT NULL AND actual_move_out_on IS NULL AND end_reason IS NULL)"
+            "(status = 'draft' AND executed_on IS NULL AND actual_move_out_on IS NULL AND end_reason IS NULL) OR (status = 'executed' AND executed_on IS NOT NULL AND actual_move_out_on IS NULL AND end_reason IS NULL) OR (status = 'ended' AND executed_on IS NOT NULL AND actual_move_out_on IS NOT NULL AND end_reason IS NOT NULL AND end_reason = 'contract_completed') OR (status = 'terminated' AND executed_on IS NOT NULL AND actual_move_out_on IS NOT NULL AND end_reason IS NOT NULL AND end_reason IN ('early_termination', 'mutual_termination', 'other')) OR (status = 'void' AND actual_move_out_on IS NULL AND end_reason IS NULL)"
         ),
         Index(
             "leases_space_status_dates",

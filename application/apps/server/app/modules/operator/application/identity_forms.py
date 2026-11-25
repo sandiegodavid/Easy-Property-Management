@@ -6,7 +6,17 @@ from uuid import UUID
 from pydantic import Field, StrictBool, StrictInt, model_validator
 
 from app.modules.operator.domain.models import Contract
-from app.modules.tenants.application.id_contract import OfficialIdRequest
+
+
+class OfficialIdDraftForm(Contract):
+    documentType: (
+        Literal["passport", "drivers_license", "state_id", "national_id", "business_registration"]
+        | None
+    ) = None
+    issuingCountry: str | None = Field(None, max_length=10)
+    lastFour: str | None = Field(None, max_length=10)
+    issuingRegion: str | None = Field(None, max_length=10)
+    expiresOn: str | None = Field(None, max_length=20)
 
 
 class IdentityForm(Contract):
@@ -73,7 +83,7 @@ class ContactRestoreForm(IdentityForm):
 class TenantCreateForm(PartyCreateForm):
     notes: str | None = Field(None, max_length=4000)
     doNotContact: StrictBool | None = None
-    officialIds: list[OfficialIdRequest] | None = Field(None, max_length=10)
+    officialIds: list[OfficialIdDraftForm] | None = Field(None, max_length=10)
 
 
 class TenantDesignateForm(Contract):
@@ -85,7 +95,7 @@ class TenantPatchForm(IdentityForm):
     preferredContactMethodId: UUID | None = None
     doNotContact: StrictBool | None = None
     notes: str | None = Field(None, max_length=4000)
-    officialIds: list[OfficialIdRequest] | None = Field(None, max_length=10)
+    officialIds: list[OfficialIdDraftForm] | None = Field(None, max_length=10)
 
 
 IDENTITY_SCHEMAS = {

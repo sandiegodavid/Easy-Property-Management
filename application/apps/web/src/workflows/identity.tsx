@@ -55,7 +55,9 @@ export function IdentityWorkspace() {
     refetchOnWindowFocus: !definition,
     enabled:
       !!sourceId &&
-      ((!!party.data && !definition) ||
+      ((!!party.data &&
+        !definition &&
+        (party.data.activeRoles?.includes("tenant") || location.pathname === "/tenants")) ||
         (!!definition?.formKey.startsWith("tenant.") && definition.formKey !== "tenant.designate")),
     queryFn: async ({ signal }) => {
       const response = await api.GET("/api/tenants/{party_id}", {

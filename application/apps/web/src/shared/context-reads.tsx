@@ -350,7 +350,14 @@ export function Directory({
       ) : result.data ? (
         <>
           <p role="status">
-            {result.data.matchingTotal} matching {kind === "property" ? "properties" : "owners"}
+            {result.data.matchingTotal} matching{" "}
+            {kind === "property"
+              ? result.data.matchingTotal === 1
+                ? "property"
+                : "properties"
+              : result.data.matchingTotal === 1
+                ? "owner"
+                : "owners"}
             {result.isFetching ? " · Refreshing…" : ""}
           </p>
           <PageAsOf asOf={result.data.asOf} />

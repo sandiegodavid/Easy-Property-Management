@@ -210,7 +210,7 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
                     : ["task.reopen"]
                 }
               />
-              <CommandLinks target={id} keys={["task.delete"]} title="Delete task" />
+              <TaskDeleteAction id={id} status={scalar(value.status, "")} />
               <TaskReminders
                 id={id}
                 active={!!active}
@@ -907,6 +907,23 @@ function IssueProperty({ propertyId }: { propertyId: string }) {
       {property.error && <span role="status"> · Property name unavailable</span>}
     </p>
   );
+}
+function TaskDeleteAction({ id, status }: { id: string; status: string }) {
+  const { scope } = useWorkspace();
+  const reminders = useQuery({
+    queryKey: scope.key("task-reminders", id),
+    queryFn: async ({ signal }) =>
+      readResult(
+        await api.GET("/api/tasks/{task_id}/reminders", {
+          signal,
+          params: { path: { task_id: id }, query: { limit: 100 } },
+        }),
+      ),
+  });
+  if (status !== "open") return null;
+  if (reminders.data?.some((item) => item.status !== "dismissed"))
+    return <p>Only open Tasks without pending or acknowledged reminders can be deleted.</p>;
+  return <CommandLinks target={id} keys={["task.delete"]} title="Delete task" />;
 }
 function TaskReminders({
   id,

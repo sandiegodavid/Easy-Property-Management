@@ -103,7 +103,7 @@ export async function loadWorkflowResult(
         params: { path: { operation_id: operation } },
       }),
     ).result;
-  if (form === "file.upload")
+  if (form.startsWith("file."))
     return readResult(
       await api.GET("/api/files/commands/by-key/{key}", { signal, params: { path: { key } } }),
     );

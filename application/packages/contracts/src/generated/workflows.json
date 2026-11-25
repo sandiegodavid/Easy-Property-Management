@@ -10197,6 +10197,17 @@
           ],
           "title": "Applicability"
         },
+        "archived": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Archived"
+        },
         "areas": {
           "anyOf": [
             {

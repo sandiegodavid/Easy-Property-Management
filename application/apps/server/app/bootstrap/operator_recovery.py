@@ -108,13 +108,12 @@ class OperatorRecoveryReferences:
             return "source_unavailable"
         return specialized_command_state(connection, binding, state, value, payload)
 
-    def attempt_fingerprint(self, value, key, *, connection=None):
-        payload = json.loads(value["payload_json"])
-        if value["form_key"] == "coverage.review":
+    def _standalone_fingerprint(self, form_key, payload, key):
+        if form_key == "coverage.review":
             return self.coverage.fingerprint(payload, key)
-        if value["form_key"] == "task.create":
+        if form_key == "task.create":
             return creation_fingerprint(TaskCreateCommand.from_mapping(payload))
-        if value["form_key"] == "maintenance.issue.create":
+        if form_key == "maintenance.issue.create":
             values = snake_values(payload)
             values["reporter"] = command(
                 ReporterAttribution, snake_values(values.get("reporter") or {})
@@ -126,11 +125,23 @@ class OperatorRecoveryReferences:
                 payload={"command": command(IssueCreate, values)},
                 expected_revision=0,
             )
+        return None
+
+    def attempt_fingerprint(self, value, key, *, connection=None):
+        payload = json.loads(value["payload_json"])
+        if value["form_key"] in {"coverage.review", "task.create", "maintenance.issue.create"}:
+            try:
+                return self._standalone_fingerprint(value["form_key"], payload, key)
+            except (ValueError, TypeError, KeyError) as error:
+                if isinstance(error, OperatorError):
+                    raise
+                raise OperatorError(
+                    str(error) or "Complete a valid owning command before starting an attempt."
+                ) from error
         binding = self.commands.get(value["form_key"])
         if binding is None:
             raise OperatorConflict("This workflow has no registered command binding.")
         try:
-            payload = json.loads(value["payload_json"])
             require_complete_form(value["form_key"], payload)
             binding.validate_input(connection, value["source_id"], payload)
             if (
@@ -150,7 +161,7 @@ class OperatorRecoveryReferences:
             if isinstance(error, OperatorError):
                 raise
             raise OperatorError(
-                "Complete a valid owning command before starting an attempt."
+                str(error) or "Complete a valid owning command before starting an attempt."
             ) from error
         return calculated
 
@@ -368,7 +379,7 @@ def command_lifecycle(binding, status):
         ("lease", "execute"): {"draft"},
         ("lease", "ended"): {"executed"},
         ("lease", "terminated"): {"executed"},
-        ("lease", "void"): {"executed"},
+        ("lease", "void"): {"draft", "executed"},
         ("lease", "add_renewal_option"): {"executed", "ended"},
         ("lease", "update_renewal_option"): {"executed", "ended"},
         ("lease", "decide_renewal_option"): {"executed", "ended"},

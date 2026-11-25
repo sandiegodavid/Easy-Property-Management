@@ -205,10 +205,36 @@ class PackagedWebMiddleware:
             response = self._asset(path, scope["method"])
         elif browser_route(path) or (self.entry_metadata is not None and path == "/sign-in"):
             response = self._entry(path, scope)
+        elif (
+            scope["method"] in {"GET", "HEAD"}
+            and accepts_html(scope["headers"])
+            and not path.startswith(("/api/", "/auth/", "/__/"))
+            and path not in {"/api", "/health", "/openapi.json", "/docs", "/redoc"}
+            and not path.startswith("/openapi.json/")
+        ):
+            response = self._not_found_html(scope["method"])
         else:
             await self.app(scope, receive, send)
             return
         await response(scope, receive, send)
+
+    def _not_found_html(self, method: str):
+        body = (
+            "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
+            "<title>Page unavailable · Easy Property Management</title></head>"
+            "<body><h1>Page unavailable</h1>"
+            "<p>This route or capability is not available in the current interface.</p>"
+            "<p><a href='/home'>Return Home</a></p></body></html>"
+        )
+        headers = {
+            **self._headers(),
+            "Content-Length": str(len(body.encode("utf-8"))),
+        }
+        return HTMLResponse(
+            "" if method == "HEAD" else body,
+            status_code=404,
+            headers=headers,
+        )
 
     def _entry(self, path, scope):
         if scope["method"] not in {"GET", "HEAD"}:

@@ -62,6 +62,16 @@ class TaskTransactionOperations(Protocol):
     def pending_reminders(self, connection: Any, task_id: str) -> list[TaskReminder]: ...
     def replace_reminder(self, connection: Any, reminder: TaskReminder) -> None: ...
     def latest_reminder_status(self, connection: Any, task_id: str) -> str | None: ...
+    def cancel_task_if_open(
+        self,
+        connection: Any,
+        task_id: str,
+        *,
+        committed_at: str,
+        reason: str,
+        correlation_id: str,
+        record_change: Callable[..., None],
+    ) -> None: ...
     def create_task(
         self,
         connection: Any,

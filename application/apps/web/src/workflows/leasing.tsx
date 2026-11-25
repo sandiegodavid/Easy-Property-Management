@@ -256,11 +256,20 @@ function LeaseRecord({ id }: { id: string }) {
           target={id}
           keys={
             item.status === "draft"
-              ? ["lease.patch", "lease.term.replace", "lease.participant.add", "lease.execute"]
+              ? [
+                  "lease.patch",
+                  "lease.term.replace",
+                  "lease.participant.add",
+                  "lease.execute",
+                  "lease.void",
+                ]
               : item.status === "executed"
                 ? [
                     "lease.end",
-                    ...(item.occupancyState === "scheduled" ? ["lease.void"] : []),
+                    ...(item.occupancyState === "scheduled" ||
+                    item.occupancyStartsOn >= new Date().toISOString().slice(0, 10)
+                      ? ["lease.void"]
+                      : []),
                     "lease.renewal.add",
                     "lease.termination.create",
                   ]
@@ -745,19 +754,28 @@ function LeaseCommand() {
         revision={lease?.leaseRevision ?? 0}
         initial={initial}
         checkSource={
-          source.data?.space
-            ? async (values) => {
-                const current = readResult(
-                  await api.GET("/api/spaces/{space_id}/status", {
-                    params: { path: { space_id: source.data.lease.spaceId } },
-                  }),
-                );
-                if (current.revision !== values.expectedRevision)
-                  throw new Error(
-                    "Space timeline changed. Review the current source before submitting; your input is retained.",
-                  );
+          definition.formKey === "lease.create"
+            ? (values) => {
+                const start =
+                  typeof values.contractStartsOn === "string" ? values.contractStartsOn : "";
+                const end = typeof values.contractEndsOn === "string" ? values.contractEndsOn : "";
+                if (start && end && end <= start)
+                  return Promise.reject(new Error("Contract end date must follow its start date."));
+                return Promise.resolve();
               }
-            : undefined
+            : source.data?.space
+              ? async (values) => {
+                  const current = readResult(
+                    await api.GET("/api/spaces/{space_id}/status", {
+                      params: { path: { space_id: source.data.lease.spaceId } },
+                    }),
+                  );
+                  if (current.revision !== values.expectedRevision)
+                    throw new Error(
+                      "Space timeline changed. Review the current source before submitting; your input is retained.",
+                    );
+                }
+              : undefined
         }
         choices={{
           proposalId:

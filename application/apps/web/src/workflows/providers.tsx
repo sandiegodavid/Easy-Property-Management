@@ -276,6 +276,8 @@ export function ProviderWorkspace({ catalogOnly = false }: { catalogOnly?: boole
               />
               {active && (
                 <CommandLinks
+                  asButtons={!!category.assignmentArchivedAt}
+                  collapsible={!category.assignmentArchivedAt}
                   target={target}
                   child={category.assignmentId}
                   keys={

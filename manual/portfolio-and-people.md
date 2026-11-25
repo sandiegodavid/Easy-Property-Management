@@ -29,7 +29,7 @@ Client owners use shared person/company identities. Create or select the identit
 
 Each owner card includes an optional **Ownership share (%)** for that property. Enter the confirmed percentage with up to two decimal places, or leave it blank as **Not recorded**. When every share is known, the total must be exactly 100%; known shares must leave room for any unknown owners. Never guess an equal split. Shares appear alongside owners in the property list, the property's **Owners** section and the owner's Relationships section. To change a share, use **Change ownership** and choose its effective date; prior shares remain in history. These percentages do not calculate or split money, distributions or entitlements.
 
-**Owners** lists client owners. Open one to review related Properties, Leases, Maintenance, Money and Conversations. Use current/former relationship filtering as available. To change actual property facts, follow its Property/source link. Owner money describes related whole-property activity; the app does not infer shares or distributable entitlement.
+**Owners** lists client owners. Open one to review related Properties, Leases, Maintenance, Money and Conversations, or use **Manage contact details** in the owner header to open their shared contact record (`/parties`). Use current/former relationship filtering as available. To change actual property facts, follow its Property/source link. Owner money describes related whole-property activity; the app does not infer shares or distributable entitlement.
 
 In a property's **Owners** cards, select a client owner's name to open their workspace; **You** identifies local-operator ownership and has no profile link. In an owner's Relationships cards, select the property name to open that property.
 

@@ -335,14 +335,24 @@ function ContextWorkspace({ kind }: { kind: "property" | "owner" }) {
               </p>
             )}
           </div>
-          <button
-            type="button"
-            onClick={() =>
-              void navigate(moneyHref, { state: sourceNavigationState(undefined, moneyHref) })
-            }
-          >
-            View in Money
-          </button>
+          <div className="directory-heading-actions">
+            {kind === "owner" && (
+              <Link
+                to={`/parties?identity=${encodeURIComponent(id)}`}
+                state={{ returnTo: `/owners/${id}/details` }}
+              >
+                Manage contact details
+              </Link>
+            )}
+            <button
+              type="button"
+              onClick={() =>
+                void navigate(moneyHref, { state: sourceNavigationState(undefined, moneyHref) })
+              }
+            >
+              View in Money
+            </button>
+          </div>
         </div>
         <nav className="page-tabs" aria-label={`${kind} sections`}>
           {sections.map((section) => (

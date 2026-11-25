@@ -100,6 +100,7 @@ class TemplateForm(InspectionForm):
     applicability: Literal["residential", "office", "any"] | None = None
     notes: str | None = Field(None, max_length=4000)
     areas: list[AreaForm] | None = Field(None, max_length=100)
+    archived: StrictBool | None = None
 
 
 INSPECTION_SCHEMAS = {

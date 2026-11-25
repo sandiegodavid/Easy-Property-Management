@@ -90,11 +90,12 @@ export function MoneyWorkspace() {
       </p>
       <nav className="page-tabs" aria-label="Money views">
         {tabs.map((item) => {
-          const next = new URLSearchParams(params);
+          const next = new URLSearchParams();
+          for (const shared of ["propertyId", "ownerId", "leaseId"]) {
+            const value = params.get(shared);
+            if (value) next.set(shared, value);
+          }
           next.set("tab", item);
-          next.delete("cursor");
-          next.delete("metric");
-          next.delete("sourceRevision");
           return (
             <Link key={item} to={`/money?${next}`} aria-current={tab === item ? "page" : undefined}>
               {tabLabels[item]}

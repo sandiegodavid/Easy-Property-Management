@@ -39,7 +39,7 @@ Home compares scheduled times in your browser's time zone. When a property's sch
 | Money | Recorded activity for the exact displayed inclusive dates, not bank balance, profit or owner entitlement. Open the metric's contributing records. |
 | Inventory | Vacant rental units and units with unknown occupancy in active properties. Unknown occupancy is not vacant. |
 
-Home includes unresolved obligations on archived properties. All-properties scope also includes Tasks without a property; a property filter excludes those unlinked Tasks. Current Home has a **Property ID** field rather than a name picker; prefer contextual links or use the identifier shown in the Property workspace. Home and directory filters apply automatically: choices update immediately, and typed values and dates update after a short pause. There is no Apply or Search button. Correct an invalid date range or incomplete record ID to apply those filters.
+Home includes unresolved obligations on archived properties. All-properties scope also includes Tasks without a property; a property filter excludes those unlinked Tasks. Home provides a **Property** dropdown alongside horizon and money date filters; contextual links also preserve the selected property. Home and directory filters apply automatically: choices update immediately, and typed values and dates update after a short pause. There is no Apply or Search button. Correct an invalid date range or incomplete record ID to apply those filters.
 
 The default money period is the full calendar month selected from server UTC time; it is not month-to-date. Property business dates use their stored time zones. Cross-zone appointments show their zone. Different sections may have different captured times.
 

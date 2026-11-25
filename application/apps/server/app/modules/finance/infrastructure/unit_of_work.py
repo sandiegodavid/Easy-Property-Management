@@ -766,6 +766,14 @@ class _Tx:
                 reason="prepaid_check_lifecycle_changed",
                 correlation_id=correlation_id,
             )
+        self.task_operations.cancel_task_if_open(
+            self.connection,
+            task_id,
+            committed_at=now,
+            reason="prepaid_check_lifecycle_changed",
+            correlation_id=correlation_id,
+            record_change=self.record_change,
+        )
 
     def prepaid_check_reminder_status(self, task_id):
         if self.task_operations is None:

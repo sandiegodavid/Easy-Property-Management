@@ -164,6 +164,9 @@ export function OwnerReportContext({
       {mode === "create" && (
         <ReceiptAllocationContext values={{ ...values, amountMinor: report.amountMinor }} />
       )}
+      {mode && ownerVerificationProblem(values, report, mode) && (
+        <p role="alert">{ownerVerificationProblem(values, report, mode)}</p>
+      )}
       {!!report.replacesReportId && (
         <p>
           Replacement of{" "}

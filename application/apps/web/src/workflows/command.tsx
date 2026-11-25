@@ -666,6 +666,12 @@ function CommandEditor({
           query.queryKey[2] !== "workflow-recovery" &&
           query.queryKey[2] !== "recovery",
       });
+      await scope.client.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === scope.workspaceId &&
+          scalar(query.queryKey[2]).endsWith("command-source"),
+        refetchType: "none",
+      });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Command failed.");
       setFeedbackAttempt((attempt) => attempt + 1);
@@ -765,7 +771,7 @@ function CommandEditor({
                 ? `/tenants?identity=${sourceId}`
                 : definition.sourceKind === "party"
                   ? `/parties?identity=${sourceId}`
-                  : `/${definition.formKey.startsWith("provider.") ? "providers" : definition.formKey.startsWith("lease.") || definition.formKey.startsWith("inspection.") ? "leasing" : "properties"}`));
+                  : `/${definition.formKey.startsWith("provider.") ? "providers" : definition.formKey.startsWith("tenant.") || definition.formKey.startsWith("party.") ? "tenants" : definition.formKey.startsWith("lease.") || definition.formKey.startsWith("inspection.") ? "leasing" : "properties"}`));
   const currentSourceAction =
     definition.sourceKind &&
     state.command !== "outcome_unknown" &&
@@ -1077,6 +1083,7 @@ function CommandEditor({
         </section>
       )}
       <form
+        noValidate
         hidden={state.command === "outcome_unknown" && !showSubmitted}
         onSubmit={(event) => {
           event.preventDefault();
@@ -1474,13 +1481,17 @@ function CommandEditor({
           <button
             onClick={() => {
               void action(async () => {
-                const response = await api.GET("/api/operator/recovery/{record_id}", {
-                  params: { path: { record_id: id } },
-                });
-                if (!response.data && response.response.status !== 404)
-                  throw new Error("Could not check the saved form.");
+                let savedRecord: Recovery | undefined;
+                if (state.record) {
+                  const response = await api.GET("/api/operator/recovery/{record_id}", {
+                    params: { path: { record_id: id } },
+                  });
+                  if (!response.data && response.response.status !== 404)
+                    throw new Error("Could not check the saved form.");
+                  savedRecord = response.data;
+                }
                 controller.reviewSource(
-                  response.data,
+                  savedRecord,
                   review.revision,
                   definition.formKey.startsWith("lease.") ? "expectedRevision" : revisionField,
                 );

@@ -17893,6 +17893,8 @@ export interface components {
         TemplatePatchRequest: {
             /** Applicability */
             applicability?: ("residential" | "office" | "any") | null;
+            /** Archived */
+            archived?: boolean | null;
             /** Areas */
             areas?: components["schemas"]["AreaRequest"][] | null;
             /** Displayname */

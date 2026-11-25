@@ -129,9 +129,7 @@ export function HomePropertyFilter({
   const items = choices.data ?? [];
   return (
     <div className="home-property-filter">
-      <label className="ui-sr-only" htmlFor={`${id}-property`}>
-        Property
-      </label>
+      <label htmlFor={`${id}-property`}>Property</label>
       <select
         id={`${id}-property`}
         name="propertyId"

@@ -45,7 +45,7 @@ EXPECTED = {
             "end_reasonisnullorend_reasonin('contract_completed','early_termination','mutual_termination','other')",
             "contract_ends_onisnullorcontract_ends_on>contract_starts_on",
             "occupancy_starts_on>=contract_starts_on",
-            "(status='draft'andexecuted_onisnullandactual_move_out_onisnullandend_reasonisnull)or(status='executed'andexecuted_onisnotnullandactual_move_out_onisnullandend_reasonisnull)or(status='ended'andexecuted_onisnotnullandactual_move_out_onisnotnullandend_reasonisnotnullandend_reason='contract_completed')or(status='terminated'andexecuted_onisnotnullandactual_move_out_onisnotnullandend_reasonisnotnullandend_reasonin('early_termination','mutual_termination','other'))or(status='void'andexecuted_onisnotnullandactual_move_out_onisnullandend_reasonisnull)",
+            "(status='draft'andexecuted_onisnullandactual_move_out_onisnullandend_reasonisnull)or(status='executed'andexecuted_onisnotnullandactual_move_out_onisnullandend_reasonisnull)or(status='ended'andexecuted_onisnotnullandactual_move_out_onisnotnullandend_reasonisnotnullandend_reason='contract_completed')or(status='terminated'andexecuted_onisnotnullandactual_move_out_onisnotnullandend_reasonisnotnullandend_reasonin('early_termination','mutual_termination','other'))or(status='void'andactual_move_out_onisnullandend_reasonisnull)",
         },
     },
     "lease_term_versions": {

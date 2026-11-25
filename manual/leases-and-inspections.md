@@ -24,7 +24,7 @@ Lease details group dates and occupancy beside rent terms, with named participan
 
 Add/edit a renewal option in the Lease, then use **Decide renewal option** to record the reviewed outcome. An exercised option is not automatically a new executed successor lease; verify the records and next steps shown.
 
-Use **Record lease end**, **Terminate lease** or **Void lease** only for the matching actual situation, with required dates/reasons/confirmation. Do not use Void as a shortcut for a tenant's physical move-out. Inspect both contractual history and occupancy milestones after saving.
+Use **Record lease end**, **Terminate lease** or **Void lease** only for the matching actual situation, with required dates/reasons/confirmation. **Void lease** is available for draft leases, future-occupancy signed leases, and same-day signed leases without settled payments or finalized inspections. Do not use Void as a shortcut for a tenant's physical move-out. Inspect both contractual history and occupancy milestones after saving.
 
 For negotiated termination:
 

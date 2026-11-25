@@ -429,20 +429,33 @@ export function AiGovernanceSettings() {
         </p>
         <fieldset disabled={!writable || busy || !!pendingKey}>
           <legend>Choose where new built-in requests may run</legend>
-          {(["off", "on_device", "cloud"] as const).map((option) => (
-            <label key={option}>
-              <input
-                type="radio"
-                name="ai-destination"
-                checked={mode === option}
-                onChange={() => {
-                  setModeChoice(option);
-                  setConnectionId("");
-                }}
-              />
-              {option === "off" ? "Off" : option === "cloud" ? "Cloud service" : "On this device"}
-            </label>
-          ))}
+          {(["off", "on_device", "cloud"] as const).map((option) => {
+            const optionAvailable =
+              option === "off" ||
+              activeMode === option ||
+              connectionRows.some((item) => item.executionLocation === option);
+            return (
+              <label key={option}>
+                <input
+                  type="radio"
+                  name="ai-destination"
+                  checked={mode === option}
+                  disabled={!optionAvailable}
+                  onChange={() => {
+                    setModeChoice(option);
+                    setConnectionId("");
+                  }}
+                />
+                {option === "off" ? "Off" : option === "cloud" ? "Cloud service" : "On this device"}
+              </label>
+            );
+          })}
+          {connectionRows.length === 0 && (
+            <p>
+              No configured model connections are available. Configure a registered connection
+              before enabling On this device or Cloud service.
+            </p>
+          )}
           {mode !== "off" && (
             <label>
               Configured connection

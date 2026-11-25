@@ -150,12 +150,21 @@ export function IdentityDetail({
   const location = useLocation();
   const tenantPage = location.pathname === "/tenants";
   const state = record(location.state);
+  const fallbackBack = tenantPage
+    ? "/tenants"
+    : party.activeRoles?.includes("tenant")
+      ? "/tenants"
+      : party.activeRoles?.includes("client_owner")
+        ? "/owners"
+        : party.activeRoles?.includes("provider")
+          ? "/providers"
+          : "/tenants";
   const back =
     typeof state.returnTo === "string" &&
     state.returnTo.startsWith("/") &&
     !state.returnTo.startsWith("//")
       ? state.returnTo
-      : "/tenants";
+      : fallbackBack;
   const roles = { client_owner: "Owner", tenant: "Tenant", provider: "Provider" };
   const preferred = party.contactMethods?.find(
     (contact) => contact.id === tenant?.profile.preferredContactMethodId,

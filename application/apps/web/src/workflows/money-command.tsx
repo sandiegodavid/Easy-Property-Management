@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { ParentBackLink } from "../shared/home-navigation";
 import { api } from "@epm/contracts";
 import type { components } from "@epm/contracts/generated";
@@ -663,31 +663,41 @@ export function MoneyCommand() {
             </>
           )}
           {verification && (
-            <fieldset disabled={!!selectedMode}>
-              <legend>Receipt verification choice</legend>
-              <label>
-                <input
-                  type="radio"
-                  name="verificationMode"
-                  checked={selectedMode === "existing"}
-                  onChange={() => setMode("existing")}
-                />
-                Adopt an existing compatible receipt
-              </label>
-              <label>
-                <input
-                  type="radio"
-                  name="verificationMode"
-                  checked={selectedMode === "create"}
-                  onChange={() => setMode("create")}
-                />
-                Create a receipt with explicit allocations
-              </label>
-              <p>
-                Creation cannot reuse another operation's receipt key. Pending claims are not
-                income.
-              </p>
-            </fieldset>
+            <>
+              {Number(state.value.evidenceCount) < 1 && (
+                <p role="alert">
+                  Attach available evidence before verification; a claim alone is not income.{" "}
+                  <Link to={`/money?record=report&id=${scalar(state.value.id)}`}>
+                    Open report to attach evidence
+                  </Link>
+                </p>
+              )}
+              <fieldset>
+                <legend>Receipt verification choice</legend>
+                <label>
+                  <input
+                    type="radio"
+                    name="verificationMode"
+                    checked={selectedMode === "existing"}
+                    onChange={() => setMode("existing")}
+                  />
+                  Adopt an existing compatible receipt
+                </label>
+                <label>
+                  <input
+                    type="radio"
+                    name="verificationMode"
+                    checked={selectedMode === "create"}
+                    onChange={() => setMode("create")}
+                  />
+                  Create a receipt with explicit allocations
+                </label>
+                <p>
+                  Creation cannot reuse another operation's receipt key. Pending claims are not
+                  income.
+                </p>
+              </fieldset>
+            </>
           )}
         </>
       )}

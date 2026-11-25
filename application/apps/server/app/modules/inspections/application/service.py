@@ -348,6 +348,7 @@ class InspectionService:
         notes=None,
         notes_provided=False,
         areas=None,
+        archived=None,
     ):
         correlation = str(uuid4())
 
@@ -363,13 +364,15 @@ class InspectionService:
             kind = template.applicability if applicability is None else applicability
             if kind not in {"residential", "office", "any"}:
                 raise InspectionError("Unsupported checklist applicability.")
+            now = _now()
             updated = replace(
                 template,
                 display_name=name,
                 normalized_name=name.casefold(),
                 applicability=kind,
                 notes=template.notes if not notes_provided else _text(notes, "Template notes"),
-                updated_at=_now(),
+                archived_at=now if archived is True else template.archived_at,
+                updated_at=now,
             )
             if tx.template_name_exists(updated.normalized_name, excluding_id=template.id):
                 raise InspectionConflictError("A checklist template already uses this name.")

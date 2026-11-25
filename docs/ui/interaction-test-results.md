@@ -1,6 +1,7 @@
 # UI Interaction Test Results — `http://127.0.0.1:8001`
 
 - **Plan**: [interaction-test-plan.md](interaction-test-plan.md)
+- **Remediation Plan & Fix Checkpoint**: [defect-remediation-plan.md](defect-remediation-plan.md#L120-L176)
 - **Date**: 2026-11-24
 - **Target**: `http://127.0.0.1:8001` (Local operator workspace)
 - **Status**: Completed

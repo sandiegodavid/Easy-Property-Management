@@ -112,6 +112,12 @@ export function Fields({
               ["partyId", "historicalSelectionConfirmed", "historicalSelectionReason"].includes(key)
             ) &&
             !(key === "otherPaymentMethodNote" && values.paymentMethodKind !== "other") &&
+            !(key === "sourceName" && values.sourceKind && values.sourceKind !== "other") &&
+            !(key === "categoryDetail" && values.category !== "other") &&
+            !(
+              ["followUpAt", "followUpAtUtc", "followUpTimezone"].includes(key) &&
+              values.clearFollowUp === true
+            ) &&
             !(key === "availableOn" && values.availabilityStatus !== "available_on") &&
             ![
               "expectedRevision",
@@ -158,9 +164,18 @@ export function Fields({
                 delete replacement.historicalSelectionReason;
               }
             }
-            if (key === "paymentMethodKind" && next !== values.paymentMethodKind) {
-              delete replacement.paymentMethodLabel;
-              delete replacement.maskedReference;
+            if (key === "category" && next !== "other") delete replacement.categoryDetail;
+            if (key === "sourceKind" && next !== "other") delete replacement.sourceName;
+            if (key === "clearFollowUp" && next === true) {
+              delete replacement.followUpAt;
+              delete replacement.followUpAtUtc;
+              delete replacement.followUpTimezone;
+            }
+            if (
+              key === "paymentMethodKind" &&
+              next !== values.paymentMethodKind &&
+              next !== "other"
+            ) {
               delete replacement.otherPaymentMethodNote;
             }
             if (key === "partyId" && next) delete replacement.inlineParty;
@@ -204,7 +219,20 @@ export function Fields({
               <fieldset key={key}>
                 <legend>{name}</legend>
                 {current === undefined ? (
-                  <button type="button" disabled={disabled} onClick={() => update(seed(child))}>
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() =>
+                      update(
+                        key === "occupancy" && childShape.properties?.effectiveOn
+                          ? {
+                              effectiveOn: new Date().toLocaleDateString("en-CA"),
+                              ...record(seed(child)),
+                            }
+                          : seed(child),
+                      )
+                    }
+                  >
                     Add {name.toLowerCase()}
                   </button>
                 ) : (

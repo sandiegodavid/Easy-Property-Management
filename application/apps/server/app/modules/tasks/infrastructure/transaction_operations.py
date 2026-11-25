@@ -38,6 +38,50 @@ class SQLiteTaskTransactionOperations:
             .limit(1)
         ).scalar_one_or_none()
 
+    def cancel_task_if_open(
+        self,
+        connection: Any,
+        task_id: str,
+        *,
+        committed_at: str,
+        reason: str,
+        correlation_id: str,
+        record_change: Any,
+    ) -> None:
+        row = (
+            connection.execute(TaskModel.__table__.select().where(TaskModel.id == task_id))
+            .mappings()
+            .first()
+        )
+        if row is None or row["status"] not in {"open", "in_progress"}:
+            return
+        before = dict(row)
+        updates = {
+            "status": "cancelled",
+            "cancelled_at_utc": committed_at,
+            "outcome_note": reason,
+            "updated_at_utc": committed_at,
+            "revision": row["revision"] + 1,
+            "waiting_for_kind": None,
+            "waiting_for_label": None,
+            "waiting_set_at_utc": None,
+            "waiting_cleared_at_utc": committed_at if row["waiting_for_kind"] else None,
+            "follow_up_at_utc": None,
+            "follow_up_timezone": None,
+        }
+        connection.execute(
+            TaskModel.__table__.update().where(TaskModel.id == task_id).values(**updates)
+        )
+        record_change(
+            entity_type="task",
+            entity_id=task_id,
+            action="cancelled",
+            before=before,
+            after={**before, **updates},
+            reason=reason,
+            correlation_id=correlation_id,
+        )
+
     def create_task(
         self, connection: Any, command: Any, *, correlation_id: str, record_change: Any
     ) -> Task:

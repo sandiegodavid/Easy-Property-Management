@@ -3,7 +3,7 @@
 - **Source Test Plan**: [interaction-test-plan.md](interaction-test-plan.md)
 - **Source Test Results**: [interaction-test-results.md](interaction-test-results.md)
 - **Date**: 2026-11-24
-- **Status**: Approved (all 3 Slice 4 recommendations adopted) — In progress
+- **Status**: Completed & Live-Verified (Slices 1–7 implemented, validated, and verified live on `http://127.0.0.1:8001`)
 - **Scope**: All 26 actionable defects and usability gaps discovered across Phase 1 (14 actionable; single-unit residential `P-02` confirmed intentional per `manual/portfolio-and-people.md`) and Phase 2 (11), plus 1 `manual/` documentation drift item.
 
 ---
@@ -113,3 +113,56 @@ Per project guidance, every slice will be validated with focused tests before ad
 | **Query-budget / N+1 constraints** | `L-03` eliminates the 2-hop client waterfall on `InspectionAcknowledgments`; `P2-OW-03` eliminates the wasted `GET /api/tenants/:id -> 404` request on Owner-only parties. |
 | **Static & lint gates** | Python: `ruff check` & `ruff format --check` (`application/pyproject.toml`) on all changed `.py` files. Frontend: `npm run lint`, `npm run format:check`, `npm run typecheck` from `application/`. |
 | **Live browser re-verification** | Re-run each affected Phase 1 & Phase 2 reproduction script against `http://127.0.0.1:8001` and update [interaction-test-results.md](interaction-test-results.md) to confirm every defect is resolved. |
+
+
+---
+
+## 4. Implementation Checkpoint (2026-11-24)
+
+All 7 slices have been implemented and validated against static checks, contracts, and focused backend tests.
+
+### Changed Files by Slice
+
+- **Slice 1 — Blockers, HTTP 500 & Silent Data Loss**
+  - `MT-02`: `application/apps/server/app/bootstrap/operator_recovery.py` (`_standalone_fingerprint` + `try/except` in `attempt_fingerprint`), `application/apps/web/src/workflows/fields.tsx` (hide/clear `categoryDetail` when `category !== "other"`).
+  - `G-06`: `application/apps/server/app/platform/web_delivery.py` (`PackagedWebMiddleware._not_found_html` static HTML `404` `"Page unavailable"` + `Return Home` link for unknown non-API/non-asset HTML requests).
+  - `P2-MN-05`: `application/apps/web/src/workflows/money-command.tsx` (removed `<fieldset disabled={!!selectedMode}>`, added inline evidence alert/link), `application/apps/web/src/workflows/owner-report-context.tsx` (rendered `ownerVerificationProblem` inline), `application/apps/web/src/workflows/fields.tsx` (preserved `maskedReference` and `paymentMethodLabel` when changing `paymentMethodKind`).
+- **Slice 2 — Operator Recovery & Stale Revision Engine**
+  - `L-02`: `application/apps/server/app/bootstrap/operator_recovery.py` (preserved domain `ValueError` validation messages), `application/apps/web/src/workflows/leasing.tsx` (client-side `contractEndsOn > contractStartsOn` check on `lease.create`).
+  - `P2-TK-02` / `P2-TK-03`: `application/apps/web/src/workflows/command.tsx` (invalidated `*command-source` queries with `refetchType: "none"` after command completion; skipped `GET /api/operator/recovery/{id}` when no recovery record was persisted).
+  - Autosave `422`: `application/apps/server/app/modules/operator/application/identity_forms.py` (`OfficialIdDraftForm`), `application/apps/server/app/modules/operator/application/provider_forms.py` (`ProviderOfficialIdDraftForm`).
+- **Slice 3 — Workflow State & Cross-View Consistency**
+  - `H-03` / `M-05`: `application/apps/server/app/modules/tasks/application/ports.py`, `application/apps/server/app/modules/tasks/infrastructure/transaction_operations.py` (`cancel_task_if_open`), `application/apps/server/app/modules/finance/infrastructure/unit_of_work.py` (`dismiss_prepaid_check_reminder` cancels the owning `"Deposit prepaid check"` task).
+  - `S-03`: `application/apps/server/app/modules/ai_governance/application/service.py` (rejects `built_in_enabled=True` when `default_connection_id is None`), `application/apps/web/src/workflows/ai-governance.tsx` (disables unavailable destination radios and shows helper text).
+  - `P2-TK-02`: `application/apps/web/src/workflows/fields.tsx` (auto-hides and clears `followUpAt`/`followUpAtUtc`/`followUpTimezone` when `clearFollowUp` is checked).
+  - `P2-FL-01`: `application/apps/web/src/workflows/workflow-result.ts` (handles `form.startsWith("file.")` on `/api/files/commands/by-key/{key}`), `application/apps/web/src/workflows/saved-command.tsx` (maps `file.link.archive` back to the owning record via `returnTo`).
+- **Slice 4 — Approved Escape Hatches & Policy Alignment**
+  - `L-02` & Phase 1 Step 6: `application/apps/server/app/modules/leases/application/service.py` (enabled `LeaseService.void` on `draft` leases and same-day executed leases without settled payments or finalized inspections), `application/apps/web/src/workflows/leasing.tsx` (exposed `lease.void` on draft and same-day executed leases).
+  - `L-04`: `application/apps/server/app/modules/inspections/api/router.py`, `application/apps/server/app/modules/inspections/application/service.py`, `application/apps/server/app/modules/operator/application/inspection_forms.py` (added `archived` support to `TemplatePatchRequest`, `patch_template`, and `TemplateForm`); regenerated `@epm/contracts` via `npm run contracts:generate`.
+  - `P2-TK-03`: `application/apps/web/src/workflows/work-records.tsx` (`TaskDeleteAction` hides `Delete task` with an inline explanation when `status !== "open"` or non-dismissed reminders exist).
+- **Slice 5 — Owner, Party & Provider Navigation / UX**
+  - `P2-OW-02`: `application/apps/web/src/app/shell.tsx` (added **Manage contact details** link to `/parties?identity=:id` in the Owner header).
+  - `P2-OW-03`: `application/apps/web/src/workflows/identity.tsx` (gated `GET /api/tenants/:id` on Tenant role or `/tenants` route), `application/apps/web/src/workflows/identity-detail.tsx` (role-aware fallback back link).
+  - `G-03`: `application/apps/web/src/workflows/command.tsx` (mapped `tenant.` / `party.` fallback back link to `/tenants`).
+  - `P2-PR-01`: `application/apps/web/src/workflows/providers.tsx` (rendered `Restore category assignment` directly visible as a button), `application/apps/web/src/workflows/fields.tsx` (hid/cleared `sourceName` when `sourceKind !== "other"`).
+- **Slice 6 & Slice 7 — Form Polish, A11y, CSS & Manual Sync**
+  - `M-06`: `application/apps/web/src/workflows/money.tsx` (cleared tab-specific query params on Money tab switch while preserving `propertyId`/`ownerId`/`leaseId`).
+  - `P2-OF-01`: `application/apps/web/src/workflows/fields.tsx` (seeded `occupancy.effectiveOn` with today's local date on `Add occupancy`).
+  - `P-02`: `application/apps/web/src/workflows/command.tsx` (added `noValidate` to `<form>`).
+  - `P-01` / `O-01`: `application/apps/web/src/shared/context-reads.tsx` (singular/plural matching count).
+  - `H-01`: `application/apps/web/src/shared/home-property-filter.tsx` (made `Property` `<label>` visible).
+  - `G-05`: `application/apps/web/src/style.css` (added `display: flex; max-width: 100%; min-width: 0; white-space: nowrap;` to `.property-status-tabs`).
+  - `manual/`: synced `manual/daily-operation.md`, `manual/portfolio-and-people.md`, and `manual/leases-and-inspections.md`.
+
+### Validation Results
+
+| Check | Command / Scope | Result |
+| --- | --- | --- |
+| Python lint | `ruff check --config pyproject.toml` on all 12 changed `.py` files | **PASS** |
+| Python format | `ruff format --check --config pyproject.toml` on all 12 changed `.py` files | **PASS** |
+| Focused backend tests | `pytest apps/server/app/platform/tests/test_web_delivery.py apps/server/app/modules/leases/tests/ apps/server/app/modules/inspections/tests/ -k "void or template or unknown_routes"` | **PASS** (16 passed) |
+| Frontend lint | `npm run lint` (`eslint . --max-warnings 0`) | **PASS** (0 errors, 0 warnings) |
+| Frontend typecheck | `npm run typecheck` | **PASS** (212 source files) |
+| Contracts check | `npm run contracts:check` | **PASS** |
+| Frontend formatting | `npx prettier --check` on all 17 changed frontend files | **PASS** |
+| Live browser re-verification | Verified live on rebuilt `http://127.0.0.1:8001` (`0` console errors, `0` failed network requests, `/settings/recovery` `0 forms`) | **16/16 RESOLVED** (`G-06`, `MT-02`, `S-03`, `P2-MN-05`, `M-06`, `H-01`, `P-01`/`O-01`, `P-02`, `G-05`, `G-03`, `P2-OW-02`/`03`, `L-04`, `L-02`, `P2-TK-02`, `P2-TK-03`, `P2-FL-01`) |

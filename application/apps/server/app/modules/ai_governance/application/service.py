@@ -1142,6 +1142,10 @@ class AiConfigurationService:
                     raise AiNotFoundError("AI model connection was not found.")
                 values["default_connection_id"] = default_connection_id
             after = {**before, **values}
+            if after["built_in_enabled"] and after["default_connection_id"] is None:
+                raise AiValidationError(
+                    "Select a configured AI model connection before enabling built-in AI."
+                )
             changed = after != before
             if changed:
                 values.update(revision=before["revision"] + 1, updated_at=stamp)

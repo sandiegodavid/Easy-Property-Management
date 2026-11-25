@@ -102,6 +102,17 @@ function destination(
   if (/^portfolio\.(occupancy|availability)\./.test(form) || form === "portfolio.space.classify")
     return { to: back, label: "Back to property" };
   if (form === "file.upload") return { to: `/money?file=${id}`, label: "Back to evidence" };
+  if (form === "file.link.archive")
+    return {
+      to: back,
+      label: back.startsWith("/maintenance")
+        ? "Back to maintenance issue"
+        : back.startsWith("/leases")
+          ? "Back to lease"
+          : back.startsWith("/inspections")
+            ? "Back to inspection"
+            : "Back to record",
+    };
   if (form.startsWith("portfolio."))
     return {
       to: `/properties/${scalar(item.propertyId, id)}/${/space\./.test(form) ? "units" : ["portfolio.property.create", "portfolio.ownerships.replace"].includes(form) ? "overview" : "setup"}`,

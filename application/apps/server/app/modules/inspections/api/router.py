@@ -74,6 +74,7 @@ class TemplatePatchRequest(CommandRequest):
     applicability: Literal["residential", "office", "any"] | None = None
     notes: str | None = Field(None, max_length=4000)
     areas: list[AreaRequest] | None = None
+    archived: StrictBool | None = None
 
 
 class ReplaceAreasRequest(CommandRequest):
@@ -465,6 +466,7 @@ def build_router(service: InspectionService, runtime: WorkspaceRuntime) -> APIRo
                 notes=request.notes,
                 notes_provided="notes" in request.model_fields_set,
                 areas=None if request.areas is None else areas(request.areas),
+                archived=request.archived,
                 **command(request),
             )
         )

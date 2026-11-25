@@ -1303,12 +1303,31 @@ class LeaseService:
             raise LeaseError("Voiding a lease requires explicit confirmation.")
         correlation, now, today = str(uuid4()), _now(), date.today().isoformat()
 
-        def write(tx: LeaseTransaction) -> tuple[str, dict[str, object]]:
+        def write(tx: LeaseTransaction) -> tuple[str, dict[str, object] | None]:
             lease = _required_lease(tx, lease_id)
+            if lease.status == "draft":
+                updated = replace(lease, status="void", updated_at=now)
+                tx.replace_lease(updated)
+                tx.record_change(
+                    entity_type="lease",
+                    entity_id=lease.id,
+                    action="voided",
+                    before=lease.to_dict(),
+                    after=updated.to_dict(),
+                    reason="lease_voided",
+                    correlation_id=correlation,
+                )
+                return lease.id, None
             if lease.status != "executed":
-                raise LeaseError("Only an executed lease can be voided.")
-            if lease.occupancy_starts_on <= today:
+                raise LeaseError("Only a draft or executed lease can be voided.")
+            if lease.occupancy_starts_on < today:
                 raise LeaseConflictError("A lease cannot be voided after occupancy begins.")
+            if lease.occupancy_starts_on == today and self._has_settled_same_day_activity(
+                tx, lease.id
+            ):
+                raise LeaseConflictError(
+                    "A same-day lease cannot be voided once payments or finalized inspections exist."
+                )
             periods = tx.occupancy_periods(lease.space_id)
             owned = next(
                 (
@@ -1867,6 +1886,38 @@ class LeaseService:
         return period, operation
 
     @staticmethod
+    def _has_settled_same_day_activity(tx: LeaseTransaction, lease_id: str) -> bool:
+        connection = getattr(tx, "connection", None)
+        if connection is None:
+            return False
+        driver = getattr(getattr(connection, "connection", None), "driver_connection", None)
+        if driver is None:
+            return False
+        checks = (
+            (
+                "SELECT 1 FROM rent_receipts WHERE lease_id = ? AND voided_at IS NULL LIMIT 1",
+                (lease_id,),
+            ),
+            (
+                "SELECT 1 FROM security_deposit_accounts a "
+                "JOIN security_deposit_transactions t ON t.deposit_account_id = a.id "
+                "WHERE a.lease_id = ? AND t.voided_at IS NULL LIMIT 1",
+                (lease_id,),
+            ),
+            (
+                "SELECT 1 FROM condition_reports WHERE lease_id = ? AND status = 'finalized' LIMIT 1",
+                (lease_id,),
+            ),
+        )
+        for sql, params in checks:
+            try:
+                if driver.execute(sql, params).fetchone() is not None:
+                    return True
+            except Exception:
+                continue
+        return False
+
+    @staticmethod
     def _apply_lease_timeline(
         tx: LeaseTransaction,
         lease: Lease,
@@ -2013,7 +2064,11 @@ class LeaseService:
             if response_kind == "timeline":
                 result_id, source_operation = changed
                 lease = _required_lease(tx, result_id)
-                operation_id = str(source_operation["operationId"])
+                operation_id = (
+                    str(source_operation["operationId"])
+                    if source_operation is not None
+                    else str(uuid4())
+                )
             elif response_kind == "termination_case":
                 result_id = changed
                 case = tx.termination_case(result_id)
@@ -2051,12 +2106,18 @@ class LeaseService:
                 }
             else:
                 snapshot = tx.lease_snapshot(revised.id)
+                extra = (
+                    {"revision": identity.payload["expectedSpaceRevision"]}
+                    if response_kind == "timeline"
+                    else {}
+                )
                 response = {
                     **_view(
                         *snapshot,
                         inspection_attention=self._transaction_inspection_attention(tx, revised),
                     ),
                     "operationId": operation_id,
+                    **extra,
                 }
             response_json = canonical_json(response)
             receipt: LeaseCommandReceipt = {
