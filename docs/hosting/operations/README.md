@@ -12,6 +12,7 @@ This directory is the single source of truth for provisioning, packaging, operat
 | [backup-restore-and-maintenance.md](backup-restore-and-maintenance.md) | Nightly schedulers, `recovery-status.sock` relay, Operator restore & Minimal Recovery Mode, Admin `repair_runtime`, whole-host control loss reconstruction, and 4-phase announced maintenance windows. |
 | [observability-and-budgets.md](observability-and-budgets.md) | Structured redacted JSON logging, negative secret-leak audit, GCP Ops Agent, 3 log-based metrics, 7 Cloud Monitoring alert policies, external uptime check, and `$250/mo` before-credit budget. |
 | [pilot0-admission-and-incidents.md](pilot0-admission-and-incidents.md) | End-to-end manual Pilot 0 Operator admission & capacity checks, safe retry/seed failure handling, alert triage matrix, runtime repair, audited break-glass policy, and 7-day retirement window. |
+| [pilot0-release-rollout.md](pilot0-release-rollout.md) | Cross-host macOS → VM offline packaging, immutable AMD64 OCI image builds, live Pilot 0 Operator rollout (including schema-change reinit), Admin (`epm-h03-identity.service`) rollout, and post-rollout health verification. |
 | [local-dev-and-qualification.md](local-dev-and-qualification.md) | Mac Docker Desktop lab, Lima native Linux qualification, Playwright UI verification gate, and native GCP qualification runners. |
 
 ---
@@ -39,7 +40,8 @@ export OWNER_NAME="DC Technology"
 | **Cloud KMS** | Keyring `epm-h05-recovery` (`us-west1`), keys `operator-workspace-kek` and `admin-control-kek` (90-day rotation) |
 | **Cloudflare R2 & Secrets** | Bucket `epm-hosted-recovery` (WNAM, account `af47b25f59f829ac1fea7ceee6b2a6e3`), token `epm-h05-backup-proxy`, GCP Secret `epm-h05-r2-credentials`; Tunnel secret `epm-tunnel-d87e220e-e2a9-48c5-a67b-318255777bce` |
 | **Monitoring & Budget IDs** | Email channel `10994584444383148615` · Uptime check `epm-pilot0-host-heartbeat-LjGDGoURNUM` · `$250/mo` Budget `7b2ec8a9-1f99-4e31-a74b-040623e8d33a` · 7 alert policies (see [observability-and-budgets.md](observability-and-budgets.md)) |
-| **Pinned Pilot 0 Artifacts** | `epm-pilot0-admin:h0610` (`sha256:22506437168079fc65f56a2a0d9dacad61749bd5ca46484fae1f1ebf492cc70f`) · `epm-pilot0-operator:h0610` (`sha256:7b0e6791a60ddf3faac7d7633e992fcbcb0fd557021aaf001b2f144a7427864e`) · `host-agent.tar.gz` (`sha256:61af280717f49de0577b0291d3a1e2716fc4c0990174a18bdbd7bffbf3c74314`) |
+| **Pinned Pilot 0 Artifacts (Baseline `h0610`)** | `epm-pilot0-admin:h0610` (`sha256:22506437168079fc65f56a2a0d9dacad61749bd5ca46484fae1f1ebf492cc70f`) · `epm-pilot0-operator:h0610` (`sha256:7b0e6791a60ddf3faac7d7633e992fcbcb0fd557021aaf001b2f144a7427864e`) · `host-agent.tar.gz` (`sha256:61af280717f49de0577b0291d3a1e2716fc4c0990174a18bdbd7bffbf3c74314`) |
+| **Current Live Pilot 0 Images (`2026-11-24`)** | `epm-pilot0-admin:pilot0-20261124-ui` (`sha256:816baaf8752d14c488b89efb3f21c8384bf0cad5ca2bf9f42d878cf6057c369f`) · `epm-pilot0-operator:pilot0-20261124-ui` (`sha256:c9f94fc3f5e112120c755f1a4c6f38b1338dc52f6991623c416751e66034c661`) · Qualified release `00000000-0000-4000-8000-000020261124` |
 | **Pinned Policy, Release & Seed** | Free v1 policy `05038762-822b-5aa1-8906-99c94decabbc` · Qualified release `00000000-0000-4000-8000-000000000610` · Synthetic demo seed `synthetic-demo-v1:2ad5ca6acec28823a2988c77e3c81e0bfc2bec61d43839db8e1324b73761aa5a` |
 
 ---
@@ -59,6 +61,8 @@ gcloud compute instances stop "$INSTANCE" --project="$PROJECT_ID" --zone="$ZONE"
 
 1. **Host Python Version:** Always use `/opt/epm/python/bin/python3` (Python 3.14) or `/opt/epm/host-agent/bin/python` on `epm-h02-host` — never Ubuntu's system `/usr/bin/python3` (3.12).
 2. **macOS Tarballs:** Always pass `COPYFILE_DISABLE=1 tar --no-xattrs --exclude='._*'` when packaging from macOS; AppleDouble `._*` files cause `schema_resources.py` and `hosted_package.py` to reject the tree.
-3. **macOS Temp Paths in Local Tests:** Resolve `tempfile.TemporaryDirectory` via `Path(td).resolve()` and `chmod(0o700)` before calling `initialize_store()`.
+3. **macOS Temp Paths:** On macOS, `/tmp` symlinks to `/private/tmp`. Pass `/private/tmp/...` to `hosted_package.py` and resolve `tempfile.TemporaryDirectory` via `Path(td).resolve()` (`chmod(0o700)`) before calling `initialize_store()`.
 4. **Caddy GET-Only & Cold JWKS:** `HEAD` (`curl -I`) returns `403` by design. Cold `POST /auth/complete` may hit Caddy's 5s upstream timeout once before JWKS warms in memory.
 5. **Atomic Writes & Service Ordering:** Always write `/run/epm/maintenance-notice.json`, `/etc/epm/h0312/provider.json`, and bearer files via temp file + `os.replace`. Service refresh order is `gateway -> egress -> tunnel`.
+6. **Operator Container Healthchecks:** Do not pass `--health-cmd` when recreating `epm-op-*` containers; inherit the exec-form `HEALTHCHECK` baked into `Dockerfile.operator` (`127.0.0.1:8081/health/live`).
+7. **Immutable `qualified_releases`:** `admin.sqlite` blocks `UPDATE` on `qualified_releases` (`immutable hosted record`); insert a new `release_id` row when registering a newer Operator image for future admissions.

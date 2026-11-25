@@ -15,6 +15,12 @@ This guide covers the nightly backup schedulers, async protection summary relay,
   sudo journalctl -u epm-h03-identity.service --grep="hosted_recovery" -n 50 --no-pager
   ```
 
+### Pilot 0 Limitation & Future Enhancement: Automatic In-Container Operator Backups
+- **Current Pilot 0 behavior:** `/opt/epm/pilot0/launch_operator.py` runs `epm-op-<slug>` containers as shared UID `65532:65532` and does **not** bind-mount `/run/epm-backup-proxy`. Meanwhile, `epm-backup-proxy.service` authenticates callers by `SO_PEERCRED` against per-operator `HOST_UID`s (`100001`, `100002`, …) in `/srv/epm/data/host/backup-proxy/inventory.sqlite`. As a result, once an operator workspace has uncommitted changes, the in-container `WorkspaceBackupScheduler` logs `backup_proxy_unavailable` and transitions `protection_state` to `overdue` (`Degraded` in Admin-lite) until a manual per-`HOST_UID` backup capture is run (see [pilot0-admission-and-incidents.md](pilot0-admission-and-incidents.md#step-3--launch-container-capture-initial-verified-backup--verify-ingress)).
+- **Planned long-term enhancement (choose one when moving past manual Pilot 0 ops / H07):**
+  1. **Per-operator `HOST_UID` containers (preferred for H07+ isolation):** Run each `epm-op-<slug>` container under its registered `HOST_UID:HOST_UID` (matching `inventory.sqlite` and `ext4` project quota ownership), bind-mount `/run/epm-backup-proxy` into the container, and grant a shared supplementary group (or per-operator socket directory ACLs) on `/run/epm-central-identity` and `/run/epm-operator-sockets/<operator_id>` so both the identity relay and `epm-backup-proxy` work natively from inside the container.
+  2. **Host-side nightly systemd timer (low-change alternative):** Keep `epm-op-<slug>` on UID `65532` without mounting `/run/epm-backup-proxy` into the web container, and install a host `systemd` timer (e.g., `epm-operator-backup.timer`) that iterates `inventory.sqlite` nightly, runs the short-lived `--user <HOST_UID>:<HOST_UID>` backup container against `/run/epm-backup-proxy`, and lets the operator container's `UnixSummaryPublisher` relay the updated `recovery.sqlite` state to Admin.
+
 ### Async Protection Summary Relay (`POST /internal/recovery-status`, H06 D7)
 - `shared_identity_entry.py` binds `<socket_directory>/recovery-status.sock` (`0600`) on startup and enforces `SO_PEERCRED` UID (`host_relay_uid`) + Ed25519 signature verification against `SourceRegistry` before upserting `workspace_recovery_status` in `admin.sqlite`.
 - Each Operator deployment JSON sets:
