@@ -19,6 +19,12 @@ On each turn, continue through checkpoints until complete. Save checkpoint and s
 - Move resolved findings to the end of their list, add the review date, and remove them after 30 days.
 - Do not perform a general re-review unless explicitly requested.
 
+### Live UI & Interaction Reviews
+
+- After completing a UI interaction review or live browser test pass (such as executing `docs/ui/interaction-test-plan.md`), always save:
+  1. a complete findings and test-results report in `docs/ui/` (e.g., `docs/ui/live-interaction-test-results-<YYYY-MM-DD>.md` or `docs/ui/interaction-test-results.md`) containing the full pass/fail matrix, every confirmed defect with numbered Steps to Reproduce, Expected Result, Actual Result, URLs, HTTP statuses/endpoints, console errors, and cleanup state; and
+  2. a structured, prioritized remediation plan in `docs/active/` (with batches, slices, acceptance criteria, a validation test matrix, and a link to the findings report) linked from `docs/active/README.md`.
+
 ## Implementation scope
 
 - Address only the named feature and findings.

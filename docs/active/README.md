@@ -10,6 +10,7 @@ The [agent triage design](agent-triage-design.md) is the accepted direction for 
 - [HOSTED-001 ordered slices](../hosting/design/mvp/delivery-plan.md#implementation-slices): Pilot 0 (`H01–H06`) is LIVE / GO; `H07–H12` remain planned pending the 4-week Pilot 0 repeat-use evaluation.
 - [Full Codebase Review Plan](FULL_CODEBASE_REVIEW_PLAN.md): completed end-to-end audit across all backend modules, frontend, database stores, deployment/infra, scripts, tests, and docs.
 - [Full Codebase Remediation Plan](FULL_CODEBASE_REMEDIATION_PLAN.md): 3-batch remediation plan for all 18 confirmed findings from `FULL_CODEBASE_3db88c2c_REVIEW_COMMENTS.txt`.
+- [Live UI Interaction Remediation Plan](LIVE_UI_INTERACTION_REMEDIATION_PLAN.md): 4-batch remediation plan for confirmed Phase 1 & Phase 2 findings from live testing `https://demo-a.epmdemo.xyz/` (`pilot0-20261124-review` / `5ed202f5`).
 - [PORTAL-001/002 and FIN-009 plan](PORTALS_IMPLEMENTATION_PLAN.md): tenant/owner workflows following hosting, shared late-fee source and cross-portal acceptance.
 - [PAY-001](PAY-001_DESIGN.md): qualified payment engine reused by the tenant portal; operator subscriptions are owned by HOSTED-001.
 
