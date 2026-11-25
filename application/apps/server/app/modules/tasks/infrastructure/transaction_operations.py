@@ -73,7 +73,7 @@ class SQLiteTaskTransactionOperations:
         )
         if row is None or row["status"] not in {"open", "in_progress"}:
             return
-        before = dict(row)
+        existing = Task(**dict(row))
         updates = {
             "status": "cancelled",
             "cancelled_at_utc": committed_at,
@@ -87,18 +87,29 @@ class SQLiteTaskTransactionOperations:
             "follow_up_at_utc": None,
             "follow_up_timezone": None,
         }
+        updated = Task(**{**dict(row), **updates})
         connection.execute(
             TaskModel.__table__.update().where(TaskModel.id == task_id).values(**updates)
         )
         record_change(
             entity_type="task",
             entity_id=task_id,
-            action="cancelled",
-            before=before,
-            after={**before, **updates},
+            action="status_changed",
+            before=existing.to_dict(),
+            after=updated.to_dict(),
             reason=reason,
             correlation_id=correlation_id,
         )
+        if existing.waiting_for_kind:
+            record_change(
+                entity_type="task",
+                entity_id=task_id,
+                action="task_waiting_cleared",
+                before=existing.to_dict(),
+                after=updated.to_dict(),
+                reason="task_cancelled",
+                correlation_id=correlation_id,
+            )
 
     def create_task(
         self, connection: Any, command: Any, *, correlation_id: str, record_change: Any
