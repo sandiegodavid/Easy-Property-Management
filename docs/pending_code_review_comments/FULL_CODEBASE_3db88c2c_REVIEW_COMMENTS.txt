@@ -1,0 +1,329 @@
+Code Review: Full Codebase Audit (hosted_mvp @ 3db88c2c)
+Date: 2026-11-24
+Plan: docs/active/FULL_CODEBASE_REVIEW_PLAN.md
+Scope: End-to-end review of the entire Easy Property Management codebase (~212k production LOC, ~110k test LOC) across local single-operator mode and hosted Pilot 0 mode, executed wave-by-wave with findings recorded as confirmed.
+
+Phase 0 Automated Baseline (3db88c2c):
+- ruff check (application/pyproject.toml): PASSED (0 errors)
+- ruff format --check: PASSED (999 files formatted)
+- npm run lint: PASSED (0 warnings)
+- npm run format:check: PASSED
+- npm run typecheck: PASSED (212 source files)
+- OpenAPI contract parity (export_openapi.py vs packages/contracts/openapi.json): PASSED (0 diff)
+- Security/hygiene pattern scan (secrets, eval, shell=True, innerHTML, pickle, unsafe YAML): PASSED (0 findings; 2 intentional private-key guard checks in scripts/hosted_package.py:142-143)
+- Cross-module infrastructure import scan: 42 occurrences flagged for wave-by-wave review (mostly hosted composition/entry modules plus 6 domain-module ORM/UoW imports in inspections, leases, portfolio, tasks, workspace)
+- Silent `except Exception: pass` scan: 5 occurrences in host_agent flagged for Wave 6 review
+
+Status: Complete (Phase 0 + Waves 1-9 + Phase 2 Cross-Boundary Synthesis)
+Summary: 18 confirmed actionable findings (P0: 0, P1: 3, P2: 10, P3: 5).
+
+================================================================================
+Wave 1: Platform, Bootstrap, Database DDL, Workspace, Audit & Files
+================================================================================
+
+[P2] 1. GET /health and GET /api/workspace run full 18-module schema+data validation and chmod syscalls on every request
+Files:
+- application/apps/server/app/modules/workspace/api/router.py:40-73
+- application/apps/server/app/modules/workspace/application/service.py:132-171
+- application/apps/server/app/platform/product_migrations.py:101-284
+Defect:
+Both health() (router.py:45) and workspace_status() (router.py:66) invoke service.open() on every HTTP request even when runtime.start() / runtime.refresh() has already opened and validated the workspace with integrity_check=True. Each service.open() creates and disposes a fresh SQLAlchemy engine, runs validate_latest_schema() across all 18 module schema and full-table data validators, and calls _secure_existing_workspace_paths() (chmod 0700/0600 on workspace directories and SQLite/WAL/SHM files).
+Impact:
+On a populated workspace, every health check or workspace status poll triggers full-table scans across 100+ tables and repeated filesystem permission mutations, degrading latency and adding SQLite read contention.
+Fix:
+When runtime is present and runtime.ready is True, serve /health and /api/workspace from the validated runtime manifest/state (or a lightweight manifest/DB presence check), reserving full validate_latest_schema() for startup, refresh(), backup, and restore.
+
+[P2] 2. FileStorageVerificationService.verify() re-hashes/re-downloads every workspace file on every S3 reconciliation continuation page
+Files:
+- application/apps/server/app/modules/files/application/verification.py:51-156
+Defect:
+verify(file_id=None, continuation=...) unconditionally loops over all candidates from files_for_verification() (lines 57-103), hashing every local file or downloading and hashing every S3 object and writing a storage_verified audit event on every paginated continuation request.
+Impact:
+When S3 inventory reconciliation spans N pages (>1,000 object versions), resuming verification via continuation re-downloads, re-hashes, and re-audits every file in the workspace N times (O(N * files)), multiplying S3 egress, disk I/O, audit-table growth, and request latency.
+Fix:
+Run the per-file content verification pass only on the initial call (continuation is None), carry content-problem counts in the continuation token, and advance only the paginated S3 reconciliation on subsequent continuation calls.
+
+[P2] 3. FileService.upload() double-rolls back and masks cleanup errors when content.rollback() fails after an idempotent replay
+Files:
+- application/apps/server/app/modules/files/application/service.py:249-274
+Defect:
+When an upload hits an existing idempotency key inside persist() (replayed = True), line 250 sets committed = False and line 252 calls content.rollback(). If that rollback() raises, execution enters except BaseException as error: (line 256) where not committed is True, calling content.rollback() a second time at line 260. If the second rollback() succeeds, line 274 re-raises the original cleanup error instead of returning the replayed result or recording PublicationCleanupIncomplete.
+Impact:
+Transient cleanup errors on idempotent upload replays issue duplicate delete_object/unlink calls and can turn an already-committed replayed upload into an unhandled 500 without recording cleanup attention.
+Fix:
+Wrap the replay-path content.rollback() in its own try/except block that records PublicationCleanupIncomplete on failure, and clear content = None before returning result so the outer handler never retries rollback on a replay path.
+
+[P2] 4. BackupService._audit() and _audit_restored_workspace() leak open sqlite3.Connection handles
+Files:
+- application/apps/server/app/modules/workspace/application/backup_service.py:425, 441, 467
+Defect:
+All three methods use `with sqlite3.connect(...) as connection:` without `contextlib.closing(...)`. Python's sqlite3 connection context manager only commits/rolls back transactions on exit and does not close the underlying connection or file descriptor.
+Impact:
+Every backup audit, retention audit, idempotent audit conflict check, and restore audit leaks an open SQLite file descriptor until garbage collection.
+Fix:
+Wrap each sqlite3.connect(...) in contextlib.closing(...) (matching SQLiteWorkspaceStore and SQLiteAuditRepository), e.g., `with closing(sqlite3.connect(...)) as connection, connection:`.
+
+[P3] 5. FilesystemContentStore.store() omits "file_too_large" error code on oversized files
+Files:
+- application/apps/server/app/modules/files/infrastructure/content_store.py:89-90
+Reference:
+- application/apps/server/app/modules/files/infrastructure/content_store.py:504-505
+- application/apps/server/app/modules/files/application/service.py:659-660
+- application/apps/server/app/modules/files/api/router.py:126
+Defect:
+FilesystemContentStore.store() raises FileError("File exceeds the 50 MiB local upload limit.") with the default code "file_error" instead of "file_too_large", unlike S3ContentStore (_hash_bounded) and _source_digest.
+Impact:
+Direct callers (such as FileService.add()) that exceed the 50 MiB limit on local storage receive "file_error" (HTTP 400) instead of "file_too_large" (HTTP 413).
+Fix:
+Pass "file_too_large" as the second argument to FileError(...) at content_store.py:90.
+
+
+================================================================================
+Wave 2: Portfolio, Parties, Tenants, Leases & Inspections
+================================================================================
+
+[P1] 6. LeaseService._has_settled_same_day_activity() queries nonexistent security_deposit_transactions table and swallows the error
+Files:
+- application/apps/server/app/modules/leases/application/service.py:1325-1330, 1889-1918
+Reference:
+- application/apps/server/app/modules/finance/infrastructure/sqlalchemy_models.py:405-425
+Defect:
+_has_settled_same_day_activity() executes:
+  SELECT 1 FROM security_deposit_accounts a
+  JOIN security_deposit_transactions t ON t.deposit_account_id = a.id
+  WHERE a.lease_id = ? AND t.voided_at IS NULL LIMIT 1
+Neither table security_deposit_transactions nor column deposit_account_id exists in the schema (the actual table is security_deposit_receipts with foreign key column account_id). The broad `except Exception: continue` at lines 1916-1917 silently swallows the resulting sqlite3.OperationalError.
+Impact:
+An executed lease starting today (occupancy_starts_on == today) that already has active, non-voided security deposit receipts bypasses the same-day settled-activity guard and can be voided, leaving active financial deposit records attached to a voided lease.
+Fix:
+Query security_deposit_receipts joined on account_id = a.id (via an owning Finance application port rather than raw SQL in leases), and remove the broad `except Exception: continue` so schema mismatches fail loudly.
+
+[P1] 7. Business-date rules across Leases, Portfolio, Tenants, and Inspections use host OS date.today() instead of stored Property timezones
+Files:
+- application/apps/server/app/modules/leases/application/service.py:798, 1037, 1219, 1304, 1626, 1986, 2232
+- application/apps/server/app/modules/inspections/application/service.py:232
+- application/apps/server/app/modules/portfolio/application/service.py:1175
+- application/apps/server/app/modules/portfolio/infrastructure/unit_of_work.py:64, 84
+- application/apps/server/app/modules/tenants/application/service.py:354
+Reference:
+- docs/ARCHITECTURE.md:76 ("Use stored Property zones for business dates, aware UTC instants for event time and explicit captured asOf for read classifications.")
+Defect:
+Twelve business-date checks and stamps—including lease execution historical-occupancy rejection (leases/service.py:798), move-out future-date validation (leases/service.py:1626), same-day void eligibility (leases/service.py:1304), termination decision dates (leases/service.py:1037, 1219), inspection attention (inspections/service.py:232), and party/tenant archive guards (portfolio/service.py:1175, portfolio/unit_of_work.py:64,84, tenants/service.py:354)—use host OS date.today().isoformat().
+Impact:
+On UTC-hosted deployments (including GCP Pilot 0), once UTC rolls past midnight (4-5 PM US Pacific), executing a lease starting "today" in US Pacific fails with "Lease execution cannot create historical occupancy.", same-day lease voiding is prematurely blocked, and move-out/ownership/termination dates are evaluated against the wrong calendar day.
+Fix:
+Compute the business date using datetime.now(ZoneInfo(property.time_zone)).date() for property/space/lease/inspection operations, and evaluate cross-property archive guards against each property's stored timezone.
+
+[P2] 8. SQLiteInspectionUnitOfWork._report_view() and report_views() execute 3-level nested N+1 queries
+Files:
+- application/apps/server/app/modules/inspections/infrastructure/unit_of_work.py:100-110, 129-147, 424-507
+Defect:
+report_views(lease_id) invokes _report_view() once per report. Inside _report_view(), it loads areas for the report, runs one query per area for observations (lines 441-445), and runs one 3-table join query per observation for file links/records/locations (lines 452-463). template_views() similarly executes _template_view() once per template (lines 140-147).
+Impact:
+Fetching condition reports for a lease with 3 reports x 8 areas x 6 observations executes ~175 SQL queries in one request and scales multiplicatively with report and observation count.
+Fix:
+Batch-load areas, observations, file attachments, and acknowledgments using IN (...) queries grouped in memory (4-5 queries total regardless of report/area/observation count).
+
+[P2] 9. SQLiteInspectionUnitOfWork.write() maps all OperationalError exceptions to InspectionConflictError (HTTP 409)
+Files:
+- application/apps/server/app/modules/inspections/infrastructure/unit_of_work.py:53-62
+Reference:
+- application/apps/server/app/modules/leases/infrastructure/unit_of_work.py:90-95
+- application/apps/server/app/modules/portfolio/infrastructure/unit_of_work.py:118-121
+Defect:
+SQLiteInspectionUnitOfWork.write() catches every OperationalError and raises InspectionConflictError (HTTP 409), unlike Lease and Portfolio UoWs which only map SQLite lock errors ("locked" in str(error).casefold()).
+Impact:
+Storage/infrastructure errors (disk full, read-only DB, I/O error, schema failure) are misreported as HTTP 409 concurrency conflicts instead of 500/503 server errors.
+Fix:
+Only convert OperationalError to InspectionConflictError when "locked" is in str(error).casefold(), re-raising all other OperationalError instances.
+
+[P3] 10. Five cross-module ORM/infrastructure imports violate the documented modular-monolith boundary
+Files:
+- application/apps/server/app/modules/inspections/infrastructure/unit_of_work.py:15-19, 38-42
+- application/apps/server/app/modules/inspections/infrastructure/recovery_reader.py:12
+- application/apps/server/app/modules/leases/infrastructure/context_reader.py:15
+- application/apps/server/app/modules/leases/infrastructure/unit_of_work.py:13-17
+- application/apps/server/app/modules/portfolio/infrastructure/unit_of_work.py:15, 18
+Reference:
+- docs/ARCHITECTURE.md:58 ("Cross-module policy goes through small application protocols; a consumer must not import another domain's ORM model/repository.")
+Defect:
+These five infrastructure files directly import another module's SQLAlchemy ORM models (File*, Lease*, SpaceModel, PartyModel) or concrete UoW class (SQLitePartyOperations).
+Impact:
+Creates tight schema coupling across module boundaries, making schema refactors in files, leases, portfolio, or parties fragile.
+Fix:
+Route cross-module reads through small owning-module reader/operation protocols wired in app/bootstrap/api.py.
+
+================================================================================
+Wave 3: Finance, Owner Accounting & Owner Management
+================================================================================
+
+[P2] 11. PrepaidCheckService.list() executes 4-5 SQL queries per scanned check (N+1) without batching
+Files:
+- application/apps/server/app/modules/finance/application/prepaid_check_service.py:225-256, 749-760
+Reference:
+- application/apps/server/app/modules/finance/application/service.py:164-169 (batched expectation_projection + historical_term_snapshots)
+- application/apps/server/app/modules/finance/application/expense_service.py:710 (batched expense_projection)
+Defect:
+PrepaidCheckService.list() calls self._view(tx, record) inside the scan loop for every row returned by tx.prepaid_check_page() (up to page_size=500 per chunk, or across multiple chunks when filtering by property_id, space_id, or eligibility). Each _view() issues 4-5 individual queries (tx.expectation, tx.lease_time_zone, tx.historical_term_snapshot, tx.receipt).
+Impact:
+Listing 100-500 prepaid checks (or filtering by property/space/eligibility across a multi-property workspace) issues hundreds to thousands of individual SQLite queries in a single request.
+Fix:
+Batch-load expectations, lease/term snapshots (including property time_zone), and linked receipts for each chunk of prepaid checks before calling _view() (matching FinanceService.list_expectations() and ExpenseService.list_expenses()).
+
+================================================================================
+Wave 4: Maintenance, Vendors, Tasks, Communications, Intake & AI Governance
+================================================================================
+
+[P1] 12. SQLiteMaintenanceUnitOfWork uses raw create_engine() instead of create_sqlite_engine(), bypassing FK enforcement, BEGIN IMMEDIATE, and attempt-fence error mapping
+Files:
+- application/apps/server/app/modules/maintenance/infrastructure/unit_of_work.py:13, 1226-1268
+Reference:
+- application/apps/server/app/platform/sqlite_engine.py:15-47, 71-91
+Defect:
+SQLiteMaintenanceUnitOfWork.write() (line 1227) and read() (line 1249) construct a fresh engine via `create_engine(f"sqlite:///{self.database}")` instead of holding a shared `create_sqlite_engine(database)`. As a result, none of the engine listeners installed by create_sqlite_engine() are attached:
+1. `PRAGMA foreign_keys = ON` is never executed on maintenance connections, leaving all maintenance foreign keys unenforced at write time.
+2. The `begin` event listener is absent, so `immediate_transaction(engine)` sets `connection.info["sqlite_immediate"] = True` with no listener to emit `BEGIN IMMEDIATE` (writes run as deferred transactions).
+3. The `handle_error` (`raise_closed_attempt`) listener is absent, so closed-command attempt fences and hosted prepared-edit guards raise raw `IntegrityError` (HTTP 500) instead of `ClosedCommandError` (HTTP 409 `submission_closed`) or `PreparedEditRequired`.
+4. String interpolation `f"sqlite:///{self.database}"` breaks if the workspace path contains `#` or `?` and fails `engine.url == scope[0]` in `workspace_mutation_scope` if `self.database` is non-canonical, silently bypassing hosted mutation admission guards.
+Impact:
+Maintenance mutations lose SQLite foreign-key integrity, immediate write-lock reservation, attempt-fence/prepared-edit error handling, and potentially hosted mutation admission gating.
+Fix:
+Initialize `self.engine = create_sqlite_engine(database)` once in `SQLiteMaintenanceUnitOfWork.__init__()` and reuse it in `write()` and `read()` (matching every other SQLite unit of work).
+
+[P2] 13. Provider reputation link lastCheckedOn validation uses host OS date.today()
+Files:
+- application/apps/server/app/modules/vendors/api/router.py:184-189
+- application/apps/server/app/modules/vendors/application/service.py:1720-1726
+Defect:
+Both the Pydantic model validator (`router.py:187`) and `_reputation_date()` (`service.py:1724`) reject `lastCheckedOn > date.today()`, which uses the server host's OS timezone (UTC on hosted deployments).
+Impact:
+Operators in UTC+ timezones (or local/hosted timezone mismatches) entering today's local date when UTC is still the prior calendar day are rejected with "Last-checked date cannot be in the future.", while US operators on UTC hosts can record tomorrow's date after 4-5 PM Pacific.
+Fix:
+Validate against an explicit client/workspace timezone or allow a UTC+14 calendar-date boundary for non-property-scoped provider metadata (or pass an explicit `asOf` date).
+
+================================================================================
+Wave 5: Operator Composition Layer
+================================================================================
+
+No actionable findings. Verified clean across:
+- Source-adapter boundaries (0 cross-module ORM imports; all reads via owning protocols)
+- Snapshot consistency and cursor validation (Home, Search, Directory, Overviews, Coverage)
+- Incomplete-form recovery lifecycle (attempt preparation, closure fences, receipt replay, never dispatches business commands)
+- Timezone/clock handling (aware UTC instants and explicit property ZoneInfo conversions throughout)
+- SQLite engine setup and error mapping (create_sqlite_engine, lock/busy -> OperatorUnavailable)
+
+================================================================================
+Wave 6: Hosted Control Plane, Identity, Recovery & Host Agent
+================================================================================
+
+[P3] 14. BackupProxyServer silently swallows unexpected connection-handler exceptions without logging
+Files:
+- application/apps/server/app/modules/host_agent/infrastructure/backup_proxy.py:520-522
+Defect:
+The worker thread wraps `handle_proxy_connection(conn, self._handler)` in `except Exception: pass` with no structured warning/error log.
+Impact:
+Unexpected transport, framing, or handler failures inside `epm-backup-proxy.service` leave no diagnostic trace in journald, complicating Pilot 0 backup incident triage.
+Fix:
+Log a privacy-safe warning (exception class and peer UID, without payload or secret fields) before releasing the queue slot and closing the socket.
+
+Verified clean in Wave 6:
+- Post-27e9025d fixes in operator_entry.py (current_binding access_epoch tracking via access_receipts, SourceLifecycle wiring) and admin_recovery.py (terminal state sets for login_handoffs, login_attempts, email_continuations, identity_commands).
+- HostedTransportMiddleware and operator_recovery.py origin/host/cookie/CSRF/rate-limit/forbidden-prefix enforcement.
+- ChunkedAeadBackupEngine AES-256-GCM framing, KMS AAD binding, and restore path traversal defenses.
+- AdminControlBackupScheduler and WorkspaceBackupScheduler revision advancement on failure and deterministic UTC jitter slots.
+
+================================================================================
+Wave 7: Frontend Application, Shared UI & Contracts
+================================================================================
+
+[P2] 15. Lease detail hides the lease.void action for same-day executed leases after 00:00 UTC
+Files:
+- application/apps/web/src/workflows/leasing.tsx:266-276
+Defect:
+Line 270 determines whether to show the `lease.void` action for an executed lease using `item.occupancyStartsOn >= new Date().toISOString().slice(0, 10)`, which compares the property-local ISO date against the current **UTC** date rather than the property's stored timezone (or a backend-computed eligibility flag).
+Impact:
+For US operators after 4-5 PM Pacific (7-8 PM Eastern), `new Date().toISOString().slice(0, 10)` advances to the next calendar day, hiding the "Void lease" action on a lease whose occupancy started today.
+Fix:
+Expose same-day void eligibility from the lease API (computed in the property's stored timezone alongside Finding 7) or format today's date in the property's `timeZone` via `Intl.DateTimeFormat("en-CA", { timeZone })`.
+
+[P3] 16. HostedSettings fetch does not invoke checkHostedResponse() on 401/403/503 responses
+Files:
+- application/apps/web/src/app/hosted-settings.tsx:171-182
+Reference:
+- application/apps/web/src/app/hosted-session-state.ts:37-64
+- application/apps/web/src/shared/file-download.tsx:37-38
+Defect:
+`fetchHostedSettings()` uses raw `fetch("/api/hosted/settings")` and throws a generic unavailable message on `!response.ok` without calling `await checkHostedResponse(response)`.
+Impact:
+If the operator's hosted session expires or is revoked before clicking Refresh in Hosted Settings, the UI shows a generic unavailable error instead of pausing the session and prompting re-authentication.
+Fix:
+Call `await checkHostedResponse(response)` before checking `response.ok` in `fetchHostedSettings()`.
+
+Verified clean in Wave 7:
+- Zero `@ts-ignore`/`@ts-expect-error`, zero `eslint-disable`, zero `as any`, zero `dangerouslySetInnerHTML`/`innerHTML`, zero ESLint/Prettier/tsc errors across 212 source files.
+- All `localStorage`/`sessionStorage` accesses wrapped in `try/catch` fallbacks.
+- OpenAPI client (`@epm/contracts`) enforces `credentials: "same-origin"` and automatic `X-EPM-CSRF` injection in hosted mode; `WorkspaceGate` preserves mounted form state across background refetches.
+
+================================================================================
+Wave 8: Deployment, GCP Infra, Gateway, Packaging & Scripts
+================================================================================
+
+[P3] 17. hosted_package.py audit_wheel() only checks PKCS#8/RSA PEM headers and main() leaves --output un-resolved
+Files:
+- application/scripts/hosted_package.py:135-146, 246-248
+Defect:
+1. `audit_wheel()` rejects `-----BEGIN PRIVATE KEY-----` and `-----BEGIN RSA PRIVATE KEY-----` but omits `-----BEGIN EC PRIVATE KEY-----` and `-----BEGIN OPENSSH PRIVATE KEY-----`.
+2. `main()` calls `.resolve()` on `--lock` and `--wheelhouse` but passes `args.output.absolute()` (leaving `/tmp` unresolved vs `/private/tmp` on macOS, unlike the rest of the hosted toolchain's canonical-path checks).
+Impact:
+An accidentally staged EC or OpenSSH private key would bypass the wheel audit guard, and macOS invocations using `/tmp/...` can trigger canonical-path mismatches downstream.
+Fix:
+Check for EC/OpenSSH/DSA private key headers (e.g., `re.search(rb"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----", data)`) and resolve `args.output.parent.resolve() / args.output.name`.
+
+Verified clean in Wave 8:
+- Dockerfile.operator and Dockerfile.admin: digest-pinned base image, offline --require-hashes installs, verify_build_inputs.py + verify_installation.py, non-root USER 65532:65532, exec-form HEALTHCHECK.
+- GCP startup.sh / install_runtime.sh / install_services.py: strict set -euo pipefail, umask 077, Secret Manager fetch without leaking credentials to args/env/logs, ext4 prjquota/noexec verification.
+- Systemd units: NoNewPrivileges, ProtectSystem=strict, CapabilityBoundingSet=, PrivateTmp, UMask=0077.
+- build_wheel.sh and release wizards: strict argument/path validation, no overwrite of existing release directories.
+
+================================================================================
+Wave 9: Test Suite Audit & Documentation Alignment
+================================================================================
+
+[P2] 18. Missing regression tests for same-day lease voiding with active deposits, non-UTC business dates, and Maintenance FK/attempt-fence enforcement
+Files:
+- application/apps/server/app/modules/leases/tests/ (0 tests exercising `_has_settled_same_day_activity` against real `security_deposit_receipts`)
+- application/apps/server/app/modules/maintenance/tests/ (0 tests verifying FK enforcement or `ClosedCommandError` / `PreparedEditRequired` through `SQLiteMaintenanceUnitOfWork`)
+- Cross-module date-boundary tests (no UTC-host vs. US Pacific/Eastern midnight boundary coverage)
+Defect:
+The three P1 defects discovered in Waves 2 and 4 (nonexistent `security_deposit_transactions` table in Finding 6, host OS `date.today()` in Finding 7, and raw `create_engine()` bypassing `create_sqlite_engine()` in Finding 12) all slipped past existing unit/integration tests because those specific boundaries were untested.
+Impact:
+High-severity schema, transaction, and timezone regressions can be introduced without failing CI/focused test runs.
+Fix:
+Add focused tests covering:
+1. Same-day `void_lease` on a real migrated SQLite workspace with active `security_deposit_receipts`, `rent_receipts`, and finalized `condition_reports`.
+2. `SQLiteMaintenanceUnitOfWork` rejecting FK violations and mapping closed-command fence triggers to `ClosedCommandError` (HTTP 409 `submission_closed`).
+3. Property-timezone business-date evaluation across the 00:00 UTC boundary (e.g., 2026-11-25T02:00:00Z for `America/Los_Angeles`, still 2026-11-24 locally) in Leases, Portfolio, Tenants, Inspections, and Web `leasing.tsx`.
+
+Verified clean in Wave 9:
+- Zero unconditional test skips or xfails across ~110k test LOC (only 2 OS-specific `skipif` guards for Linux ext4 and macOS tar).
+- 100% DDL-to-doc table parity across all 5 hosted stores in `docs/database/` (0 missing tables across 48 hosted tables).
+
+================================================================================
+Phase 2: Cross-Boundary Synthesis & Recommended Remediation Sequence
+================================================================================
+
+Cross-boundary patterns observed across Waves 1-9:
+1. Business-date timezone consistency (Findings 7, 13, 15):
+   Finance, Owner Accounting, Owner Management, and Operator consistently use stored Property `ZoneInfo` or explicit `asOf`, whereas Leases, Portfolio, Tenants, Inspections, Vendors, and Web `leasing.tsx` still fall back to host OS `date.today()` or browser UTC `new Date().toISOString().slice(0, 10)`. On UTC-hosted Pilot 0, this breaks same-day lease execution/voiding after 4-5 PM US Pacific.
+2. SQLite engine/connection discipline (Findings 4, 9, 12):
+   Almost all modules use `create_sqlite_engine()` and `closing(sqlite3.connect(...))`, except `SQLiteMaintenanceUnitOfWork` (raw `create_engine()`), `BackupService._audit*` (missing `closing()`), and `SQLiteInspectionUnitOfWork.write()` (over-broad `OperationalError -> 409`).
+3. Read/verification query budgets (Findings 1, 2, 8, 11):
+   `GET /health` and `GET /api/workspace` re-run full 18-module schema+data validation per request; `FileStorageVerificationService.verify()` re-verifies all files on every S3 continuation page; `SQLiteInspectionUnitOfWork._report_view()` has 3-level nested N+1; `PrepaidCheckService.list()` runs 4-5 queries per check.
+
+Recommended remediation order:
+- Batch 1 (P1 correctness & data integrity — fix first):
+  Findings 6 (same-day deposit void guard), 12 (Maintenance `create_sqlite_engine`), 7 + 13 + 15 (Property-timezone business dates across backend & `leasing.tsx`), plus Finding 18 regression tests.
+- Batch 2 (P2 reliability & query budgets):
+  Findings 1 (`/health` & `/api/workspace`), 2 (S3 verify continuation), 3 (`FileService.upload` replay rollback), 4 (`BackupService` `closing()`), 8 (Inspection N+1), 9 (Inspection `OperationalError`), 11 (PrepaidCheck N+1).
+- Batch 3 (P3 hygiene & polish):
+  Findings 5 (`file_too_large` code), 10 (5 cross-module ORM imports), 14 (`BackupProxyServer` exception log), 16 (`HostedSettings` `checkHostedResponse`), 17 (`hosted_package.py` PEM check & `--output` resolve).
