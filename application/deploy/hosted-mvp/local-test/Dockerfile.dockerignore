@@ -1,0 +1,13 @@
+node_modules
+.venv
+.pytest_cache
+.ruff_cache
+test-results
+dist
+.DS_Store
+**/__pycache__
+**/*.pyc
+apps/web/src
+apps/web/tests
+apps/web/node_modules
+packages

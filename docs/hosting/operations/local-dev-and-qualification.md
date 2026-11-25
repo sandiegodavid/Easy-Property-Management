@@ -47,6 +47,18 @@ docker compose -p epm-h02-dev -f deploy/hosted-mvp/lab/compose.yaml up -d
 docker compose -p epm-h02-dev -f deploy/hosted-mvp/lab/compose.yaml down
 ```
 
+### Interactive Local Hosting Test Containers (Admin + Operator Only)
+
+For local browser and API testing of the real compiled Admin-lite and Operator UIs without Caddy, Cloudflare Tunnel, Firebase, `epm-backup-proxy`, `epm-egress-proxy`, or `epm-host-guardian`, see [deploy/hosted-mvp/local-test/README.md](../../../application/deploy/hosted-mvp/local-test/README.md):
+
+```bash
+# From application/ (rebuild frontend bundles first if UI changed)
+docker compose -f deploy/hosted-mvp/local-test/compose.yaml up -d --build
+# Admin UI:    http://localhost:18801
+# Operator UI: http://localhost:18802
+docker compose -f deploy/hosted-mvp/local-test/compose.yaml down
+```
+
 ---
 
 ## 3. Native Linux Qualification (Lima Clones)
