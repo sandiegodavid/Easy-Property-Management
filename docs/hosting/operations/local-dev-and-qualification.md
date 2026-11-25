@@ -104,3 +104,4 @@ Always upload clean macOS-safe tarballs (`COPYFILE_DISABLE=1 tar --no-xattrs --e
 2. Open Operator **Settings → Workspace plan and storage** — confirm real support contact, Pilot 0 disclosure, and zero billing/upgrade buttons.
 3. Sign in to Admin-lite with Google + TOTP MFA — confirm Cohort Health/Headroom/Maintenance overview matches live counts and capacity profile.
 4. Rehearse `announced` → `in_progress` → cleared `/run/epm/maintenance-notice.json` and confirm unfinished form drafts remain intact.
+5. For automated post-deployment Operator workflow smoke coverage (`SMOKE-01`..`SMOKE-05`), see [HOSTED_OPERATOR_POST_DEPLOY_SMOKE_DESIGN.md](../../active/HOSTED_OPERATOR_POST_DEPLOY_SMOKE_DESIGN.md).
