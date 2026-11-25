@@ -19,17 +19,37 @@
 
 ---
 
+### Refresh or revise host capacity
+
+If Add operator reports an unavailable or stale capacity observation, check the snapshot revision, observation time, completeness, and referenced profile in Admin’s database. Compare the observation time with the profile’s maximum age. A fresh observation can still be unavailable if shared usage exceeds a pinned reserve.
+
+1. On the GCP host, measure CPU affinity, available RAM, process use, and free bytes and inodes on both boot and data mounts. Verify that the data mount is the expected project-quota filesystem. Match live Operator containers and workspace, control, and scratch trees to the Admin commitments. Measure attributable usage from cgroups, allocated filesystem blocks and inodes, and identifiable container logs. Charge unattributed usage to shared consumption. Keep all existing reservations in the calculation.
+2. Build a new observation using the resource accounting in `application/deploy/hosted-mvp/gcp/capacity_observer.py`. In one Admin transaction, recheck the profile, snapshot and commitment revisions, save the per-Operator observations, and publish a strictly newer snapshot with `record_capacity_snapshot`. Read the result back. If measurement or reconciliation fails, leave admission closed and diagnose the failure. Do not extend the old timestamp without new measurements.
+3. If measured use requires a reserve change, review and register a new immutable profile revision, preserve the recovery reserve and per-Operator budget unless separately approved, and publish a fresh snapshot referencing that revision. Pilot 0 enabled revision 2 with snapshot 4 on November 25, 2026. [Live reserves](README.md)
+4. Run the existing admission planner with a proposed pending commitment using the pinned Free budget. A preview does not reserve capacity. Submit in Admin only after confirming the result and reload the form to pick up the latest snapshot. Admission rechecks the profile and commitments in its own transaction. Demo C passed the preview and used the last CPU reservation under the current profile.
+
+Periodic refresh remains manual today. See the [automation proposal](../design/pilot0-capacity-refresh.md).
+
 ## 2. Standard Manual Pilot 0 Admission Flow
 
 Record start time, actor, and elapsed Admin minutes in [PILOT_0_COST_AND_OPS_WORKSHEET.md](../qualification/reports/PILOT_0_COST_AND_OPS_WORKSHEET.md).
 
 ### Step 1 — Create Assignment in Admin-lite
 1. Sign in to `https://admin.epmdemo.xyz/` with Google + TOTP MFA.
-2. Create the operator assignment with exact email, canonical `workspace_slug`, pinned Free 50 MB allowance, qualified release (`epm-pilot0-operator:h0610`), and **Empty workspace (default)** (recommended for real operators) or **Synthetic sample portfolio** (demo/sample only, using pinned seed `synthetic-demo-v1:2ad5ca6acec28823a2988c77e3c81e0bfc2bec61d43839db8e1324b73761aa5a`).
+2. Create the operator assignment with exact email, canonical `workspace_slug`, pinned Free 50 MB allowance, and the latest qualified Operator release shown in Admin-lite. As of 2026-11-25, use `epm-pilot0-operator:pilot0-20261125-tasks` (release ID `00000000-0000-4000-8000-000020261125`). Choose **Empty workspace (default)** for real operators or **Synthetic sample portfolio** for demos (pinned seed `synthetic-demo-v1:2ad5ca6acec28823a2988c77e3c81e0bfc2bec61d43839db8e1324b73761aa5a`).
 3. Confirm the operator appears in Admin-lite as **Pending**.
 
 ### Step 2 — Provision Workspace, Initialize `recovery.sqlite` & Register Backup Principal
-SSH into `epm-h02-host` via IAP (`--tunnel-through-iap`) and look up the pending IDs:
+Connect to `epm-h02-host` via IAP, then look up the pending IDs:
+
+```bash
+gcloud compute ssh epm-h02-host \
+  --project=project-47b72bb7-ba90-42c9-910 \
+  --zone=us-west1-b \
+  --tunnel-through-iap
+```
+
+Run this query in the SSH session:
 
 ```bash
 sudo /opt/epm/python/bin/python3 -c '
@@ -46,7 +66,7 @@ for row in conn.execute(
 
 *(One-time, only for **Synthetic sample portfolio**)* Upload `application/demo/{dataset.json,seed.py}` to `/opt/epm/demo/` (`0644`, verify `sha256sum /opt/epm/demo/dataset.json` = `2ad5ca6acec28823a2988c77e3c81e0bfc2bec61d43839db8e1324b73761aa5a`).
 
-Run `ManualProvisioner` inside `epm-pilot0-operator:h0610` (use `workspace_root=/data/workspace/active` so `.workspace.server.lock` sits inside the writable bind mount):
+Resolve the assignment's image before provisioning. The launcher checks the local Docker image against its assigned release and returns the immutable image ID. If resolution fails, stop and check the assignment and local image. Use this same image for provisioning, recovery initialization, and the initial backup. Use `workspace_root=/data/workspace/active` so `.workspace.server.lock` sits inside the writable bind mount.
 
 ```bash
 export OPERATION_ID="<operation_id>"
@@ -54,6 +74,14 @@ export OPERATOR_ID="<operator_id>"
 export WORKSPACE_ID="<workspace_id>"
 export WORKSPACE_SLUG="<workspace_slug>"
 
+OPERATOR_IMAGE="$(sudo /opt/epm/host-agent/bin/python -B /opt/epm/pilot0/launch_operator.py --resolve-image "$OPERATOR_ID")" &&
+  export OPERATOR_IMAGE &&
+  printf 'Assigned Docker image: %s\n' "$OPERATOR_IMAGE"
+```
+
+After the command prints the assigned image ID, run:
+
+```bash
 sudo mkdir -p "/srv/epm/data/workspace/$OPERATOR_ID" "/srv/epm/data/control/$OPERATOR_ID" "/srv/epm/data/scratch/$OPERATOR_ID"
 sudo chown -R 65532:65532 "/srv/epm/data/workspace/$OPERATOR_ID" "/srv/epm/data/control/$OPERATOR_ID" "/srv/epm/data/scratch/$OPERATOR_ID"
 sudo chmod 0700 "/srv/epm/data/workspace/$OPERATOR_ID" "/srv/epm/data/control/$OPERATOR_ID" "/srv/epm/data/scratch/$OPERATOR_ID"
@@ -66,7 +94,7 @@ sudo docker run --rm --network none --read-only --cap-drop ALL --security-opt no
   --mount "type=bind,source=/srv/epm/data/scratch/$OPERATOR_ID,target=/data/scratch" \
   --mount type=bind,source=/opt/epm/demo,target=/demo,readonly \
   -e "OPERATION_ID=$OPERATION_ID" \
-  --entrypoint /opt/epm/venv/bin/python epm-pilot0-operator:h0610 -B -c '
+  --pull never --entrypoint /opt/epm/venv/bin/python "${OPERATOR_IMAGE:?Resolve the assigned image first}" -B -c '
 import os, time
 from pathlib import Path
 from app.modules.host_agent.infrastructure.manual_provision import ManualProvisionConfig, ManualProvisioner, ProvisionPaths
@@ -104,7 +132,7 @@ sudo docker run --rm --network none --read-only --cap-drop ALL --security-opt no
   --user 65532:65532 \
   --mount "type=bind,source=/srv/epm/data/control/$OPERATOR_ID,target=/data/control" \
   -e "OPERATOR_ID=$OPERATOR_ID" -e "WORKSPACE_ID=$WORKSPACE_ID" \
-  --entrypoint /opt/epm/venv/bin/python epm-pilot0-operator:h0610 -B -c '
+  --pull never --entrypoint /opt/epm/venv/bin/python "${OPERATOR_IMAGE:?Resolve the assigned image first}" -B -c '
 import os, sqlite3
 from pathlib import Path
 from app.modules.workspace.infrastructure.hosted_recovery import kms_ref_to_db_ref
@@ -156,6 +184,8 @@ sudo chown -R 65532:65532 "/srv/epm/data/workspace/$OPERATOR_ID" "/srv/epm/data/
 ```
 
 ### Step 3 — Launch Container, Capture Initial Verified Backup & Verify Ingress
+Run in the same SSH session as Step 2, or restore its variables and resolve `OPERATOR_IMAGE` again before stopping the container. The launcher uses the assigned image and refuses to replace a container running a different image. For an existing Operator release change, follow [the rollout runbook](pilot0-release-rollout.md#3-roll-live-pilot-0-operator-containers-epm-op-slug).
+
 ```bash
 sudo /opt/epm/host-agent/bin/python -B /opt/epm/pilot0/launch_operator.py "$OPERATOR_ID"
 sudo systemctl restart epm-h03-identity.service && sleep 20
@@ -171,7 +201,7 @@ sudo docker run --rm --network none --read-only --cap-drop ALL --security-opt no
   --mount "type=bind,source=/srv/epm/data/control/$OPERATOR_ID,target=/data/control" \
   --mount "type=bind,source=/srv/epm/data/scratch/$OPERATOR_ID,target=/data/scratch" \
   --mount type=bind,source=/run/epm-backup-proxy,target=/run/epm-backup-proxy \
-  --entrypoint /opt/epm/venv/bin/python epm-pilot0-operator:h0610 -B -c '
+  --pull never --entrypoint /opt/epm/venv/bin/python "${OPERATOR_IMAGE:?Resolve the assigned image first}" -B -c '
 import time
 from pathlib import Path
 from app.modules.host_agent.infrastructure.backup_proxy import UnixBackupProxyClient
@@ -199,11 +229,60 @@ sudo chown -R 65532:65532 "/srv/epm/data/workspace/$OPERATOR_ID" "/srv/epm/data/
 sudo docker start "epm-op-$WORKSPACE_SLUG" && sleep 12
 ```
 
-Confirm `/health/live` and `/health/ready` return `200`, `workspace_recovery_status` reports `healthy`, and public HTTPS redirects cleanly (`HTTP/2 303` → `https://login.epmdemo.xyz/auth/start?...`):
+Verify the running Operator, its Admin recovery-status projection, and public ingress separately. Run these commands in the VM SSH session. A new SSH session does not inherit shell variables, so set the slug from the Step 2 query if it is not already set:
 
 ```bash
-curl -sS -D - -o /dev/null "https://$WORKSPACE_SLUG.epmdemo.xyz/auth/start" | grep -i -E 'HTTP/|location:'
+export WORKSPACE_SLUG="<workspace_slug>"
 ```
+
+1. **Probe container health endpoints.** Docker's `(healthy)` status checks `/health/live`; this command also checks readiness explicitly. Both should return `200`:
+
+   ```bash
+   sudo docker exec "epm-op-$WORKSPACE_SLUG" /opt/epm/venv/bin/python -c '
+   import urllib.request
+   for name in ("live", "ready"):
+       with urllib.request.urlopen(f"http://127.0.0.1:8081/health/{name}", timeout=3) as response:
+           print(name, response.status, response.read().decode())
+   '
+   ```
+
+2. **Check Admin's latest recovery-status report.** This is an asynchronous monitoring projection, separate from the one-shot backup result printed in Step 3. The row should show `healthy` and a non-null `verified_at`:
+
+   ```bash
+   sudo /opt/epm/python/bin/python3 -c '
+   import sqlite3, sys
+   slug = sys.argv[1]
+   if not slug:
+       raise SystemExit("Set WORKSPACE_SLUG before running this query")
+   conn = sqlite3.connect("/srv/epm/data/host/h0312-identity/admin.sqlite")
+   row = conn.execute(
+       "SELECT o.operator_id, o.workspace_id, r.protection_state, "
+       "r.latest_point_ref, r.captured_at, r.verified_at, r.observed_at "
+       "FROM operators o LEFT JOIN workspace_recovery_status r "
+       "ON r.operator_id = o.operator_id WHERE o.workspace_slug = ?",
+       (slug,),
+   ).fetchone()
+   print(row)
+   conn.close()
+   ' "$WORKSPACE_SLUG"
+   ```
+
+   If the row is absent or not `healthy`, do not treat the local `RUN_ONCE: True` snapshot as proof that Admin received the report. Check for `Best-effort protection summary relay unavailable` or `backup_proxy_unavailable` in the Operator logs; the relay warning means Admin's projection may be stale.
+
+3. **Check public HTTPS ingress.** Expect `HTTP/2 303` and a `location` beginning `https://login.epmdemo.xyz/auth/start`:
+
+   ```bash
+   curl -sS -D - -o /dev/null "https://$WORKSPACE_SLUG.epmdemo.xyz/auth/start" | grep -i -E 'HTTP/|location:'
+   ```
+
+A `502` is a failed ingress check. Inspect the newest gateway error and Operator logs:
+
+```bash
+sudo journalctl -u epm-gateway.service --since "5 minutes ago" --no-pager
+sudo docker logs --since 10m "epm-op-$WORKSPACE_SLUG"
+```
+
+For example, Caddy's `connect: connection refused` to the Operator address on port `8000` means the upstream was not accepting connections at that time, even if Docker's separate `/health/live` check passes. Retry the public check after the Operator is ready and confirm the latest gateway log has no new 502 for this hostname.
 
 ### Step 4 — Issue Invitation, Sync `assignment_revision` & Complete Claim
 1. In Admin-lite, open the operator detail page, click **Issue / reissue invitation** (requires recent MFA sign-in), email the single-use claim URL from `dctech92130@gmail.com` with the Pilot 0 disclosure, and click **Mark delivered**.
