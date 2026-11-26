@@ -32,6 +32,8 @@ Periodic refresh remains manual today. See the [automation proposal](../design/p
 
 ## 2. Standard Manual Pilot 0 Admission Flow
 
+> **Interactive Wizard:** Run `bash application/scripts/epm-pilot0-add-operator.sh` from your workstation to walk through Sections 1 and 2 step by step (IAP SSH queries, image resolution, `ManualProvisioner`, `recovery.sqlite`, backup principal registration, initial verified backup, health/projection/ingress checks, and claim binding) with resumable saved state.
+
 Record start time, actor, and elapsed Admin minutes in [PILOT_0_COST_AND_OPS_WORKSHEET.md](../qualification/reports/PILOT_0_COST_AND_OPS_WORKSHEET.md).
 
 ### Step 1 — Create Assignment in Admin-lite
