@@ -14,6 +14,7 @@ The [agent triage design](agent-triage-design.md) is the accepted direction for 
 - [Hosted Operator Post-Deployment Smoke Tests Design](HOSTED_OPERATOR_POST_DEPLOY_SMOKE_DESIGN.md): 5 fast, self-cleaning end-to-end Operator workflow smoke tests (`SMOKE-01`..`SMOKE-05`) to assess app health after each deployment.
 - [Demo A smoke remediation plan](DEMO_A_SMOKE_REMEDIATION_PLAN.md): blockers from the November 25 live canary run.
 - [PORTAL-001/002 and FIN-009 plan](PORTALS_IMPLEMENTATION_PLAN.md): tenant/owner workflows following hosting, shared late-fee source and cross-portal acceptance.
+- [FIN-009](FIN-009_DESIGN.md): accepted late-fee policy, deterministic preview, explicit assessment/waiver/correction, separate receipt/reporting, portal read contracts, and `PAY-001` integration design (`D1–D15`, accepted November 26, 2026; ready for Slice 1 implementation).
 - [PAY-001](PAY-001_DESIGN.md): qualified payment engine reused by the tenant portal; operator subscriptions are owned by HOSTED-001.
 
 ## Operator interface delivery
