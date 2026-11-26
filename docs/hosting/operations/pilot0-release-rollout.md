@@ -233,3 +233,19 @@ gcloud compute ssh "$INSTANCE" --project="$PROJECT_ID" --zone="$ZONE" --tunnel-t
 # Optionally clean up local macOS build staging
 rm -rf /private/tmp/epm-build /private/tmp/epm-contexts.tar.gz
 ```
+
+## 6. Reclaim Disk Space from Old, Unused Releases
+
+When old Pilot 0 OCI images, exited containers, Docker build cache, or legacy qualification directories under `/opt/epm` accumulate on `epm-h02-host`, run the interactive release cleanup wizard from your workstation:
+
+```bash
+# Read-only inventory of disk usage and KEEP vs. REMOVABLE items
+bash application/scripts/epm-pilot0-release-cleanup.sh inspect
+
+# Interactive 6-stage cleanup wizard (stopped containers, unused images, build cache, /tmp, unreferenced /opt/epm dirs)
+bash application/scripts/epm-pilot0-release-cleanup.sh cleanup
+```
+
+The wizard streams `application/scripts/pilot0_release_cleanup.py` over IAP SSH (no extra files installed on the VM) and enforces automatic protections before every deletion:
+- **Never removes** running containers or their images, the active Admin `MANIFEST` image (`/opt/epm/h0312/run_identity.py`), the latest or operator-referenced `qualified_releases` catalog entries in `admin.sqlite`, the offline-build `python:*` base image, core `/opt/epm` runtime directories or anything referenced by `systemd`, `/etc/epm`, symlinks, or running processes, or any `/srv/epm/data` workspace/control/backup data.
+- Supports explicit `--keep` rollback image retention and requires typed `DELETE` confirmation for bulk image or `/opt/epm` directory removal.

@@ -56,6 +56,9 @@ Run from the repository root (or `application/` for `npm`):
 # Guided Pilot 0 live release rollout (build, canary roll, SMOKE-01..05, fleet roll, Admin, cleanup)
 bash application/scripts/epm-pilot0-rollout.sh [rollout|inspect|smoke|rollback|cleanup]
 
+# Guided Pilot 0 old-release & disk-space cleanup (stopped containers, unused images, build cache, /tmp, unreferenced /opt/epm dirs)
+bash application/scripts/epm-pilot0-release-cleanup.sh [cleanup|inspect]
+
 # Guided Pilot 0 manual operator admission (Steps 1–4 with resumable state)
 bash application/scripts/epm-pilot0-add-operator.sh
 
