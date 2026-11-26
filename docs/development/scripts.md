@@ -70,6 +70,23 @@ Use this for [checkout-based serving](../../manual/installation.md), not release
 
 ## Installation and workspace selection
 
+### Pilot 0 GCP live rollout wizard
+
+[Source](../../application/scripts/epm-pilot0-rollout.sh). Guided macOS wizard implementing
+[pilot0-release-rollout.md](../hosting/operations/pilot0-release-rollout.md) for `epm-h02-host`
+(`epmdemo.xyz`) over IAP. Supports `rollout` (Sections 1–5 with pre-rollout rollback snapshots,
+optional schema-change workspace reinitialization + R2/KMS recovery point capture, canary-first
+Operator rollout, mandatory `SMOKE-01`..`SMOKE-05` live canary gate, Admin `MANIFEST` rollout,
+and artifact cleanup), `inspect` (read-only host check), `smoke`, `rollback`, and `cleanup`.
+
+```bash
+bash application/scripts/epm-pilot0-rollout.sh [rollout|inspect|smoke|rollback|cleanup]
+bash application/scripts/epm-pilot0-rollout.sh --help
+```
+
+Persists non-secret defaults and pre-rollout snapshots under
+`~/Library/Application Support/EPM/pilot0-rollout/`. Run interactively on macOS.
+
 ### Google Cloud ongoing-release wizards
 
 From the repository root on the Mac, run

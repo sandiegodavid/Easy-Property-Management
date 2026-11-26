@@ -4,6 +4,37 @@ This guide covers building updated Operator and Admin OCI images from a local ma
 
 See [README.md](README.md) for environment variables (`$PROJECT_ID`, `$ZONE`, `$INSTANCE`) and current live digests, and [host-provisioning-and-packaging.md](host-provisioning-and-packaging.md) for initial host provisioning and dependency resolution.
 
+## Interactive Rollout Wizard (macOS)
+
+You can run the guided interactive wizard from the repository root on macOS instead of executing each section manually:
+
+```bash
+bash application/scripts/epm-pilot0-rollout.sh          # interactive menu (defaults to rollout)
+bash application/scripts/epm-pilot0-rollout.sh rollout  # full Sections 1–5 rollout + live canary smoke gate
+bash application/scripts/epm-pilot0-rollout.sh inspect  # read-only check of services, containers, /health/ready, MANIFEST
+bash application/scripts/epm-pilot0-rollout.sh smoke    # standalone SMOKE-01..SMOKE-05 canary run
+bash application/scripts/epm-pilot0-rollout.sh rollback # restore Operator containers and/or Admin MANIFEST from snapshot
+bash application/scripts/epm-pilot0-rollout.sh cleanup  # Section 5 remote + optional local staging cleanup
+```
+
+The wizard persists non-secret defaults and pre-rollout rollback snapshots under `~/Library/Application Support/EPM/pilot0-rollout/`, enforces `/private/tmp/...` paths and AppleDouble-free tarballs, rolls the designated canary (`demo-a`) first, halts rollout if any check in `SMOKE-01`..`SMOKE-05` fails, and never passes `--health-cmd` when recreating Operator containers.
+
+### The 9 Rollout Stages (`rollout` action)
+
+| Stage | Name | Runbook Section | What It Does & Safety Gate |
+| --- | --- | --- | --- |
+| **1/9** | Select GCP destination, release tag, and review source | Pre-flight | Validates local tools (`git`, `gcloud`, `npm`, `tar`, `uv`, `shasum`), captures `$PROJECT_ID`/`$ZONE`/`$INSTANCE`, validates `pilot0-YYYYMMDD-<label>`, canary slug (`demo-a`), and domain (`epmdemo.xyz`), checks `git status`, and optionally runs the local Docker smoke gate (`http://localhost:18802`). |
+| **2/9** | Fetch pinned dependency lockfile & wheelhouse | Section 1.1 | Reuses cached `/private/tmp/epm-agent-bundle` or fetches `/opt/epm/agent-bundle/{dependencies.lock,wheelhouse}` from `epm-h02-host` via IAP into a clean `/private/tmp/...` directory. |
+| **3/9** | Build frontend bundles, package OCI contexts & upload | Sections 1.2–1.3 | Runs `npm run build && npm run build:admin && npm run build:central`, packages `operator` and `admin --identity` AMD64 contexts with `scripts/hosted_package.py` into `/private/tmp/epm-build`, archives without macOS AppleDouble files (`COPYFILE_DISABLE=1 tar --no-xattrs --exclude='._*'`), verifies archive integrity locally, and uploads `/private/tmp/epm-contexts.tar.gz` via IAP `scp`. |
+| **4/9** | Build immutable AMD64 OCI images on `epm-h02-host` | Section 2 | Extracts `/tmp/epm-contexts.tar.gz` on the VM, builds `epm-pilot0-operator:<RELEASE_TAG>` and `epm-pilot0-admin:<RELEASE_TAG>` offline (`--platform linux/amd64 --network=none --provenance=false --load`), and records both `sha256:...` image IDs. |
+| **5/9** | Snapshot live state & optional SQLite schema reinit | Section 3.1 | Captures a `0600` pre-rollout rollback snapshot (every operator's current image ID + Admin's current `MANIFEST`) under `~/Library/Application Support/EPM/pilot0-rollout/snapshots/`. If `0001_initial_schema.py` changed, prompts per operator (`demo` synthetic seed vs `empty`), backs up `active` to `active.bak-<YYYYMMDD>`, reinitializes inside the new image, preserves `workspaceId` in `workspace.json` and `workspace_metadata`, and restores `65532:65532` ownership. |
+| **6/9** | Roll canary Operator & run live smoke gate | Section 3.2 + Smoke Gate | Recreates only the canary container (`epm-op-demo-a`) on the new image without `--health-cmd`, waits for Docker `(healthy)` + `GET http://127.0.0.1:8081/health/ready` (`200 {"status":"ready"}`), captures a verified R2 + Cloud KMS recovery point under `HOST_UID` if reinitialized, and runs `SMOKE-01`..`SMOKE-05` against `https://demo-a.epmdemo.xyz` (`EPM_SMOKE_STORAGE_STATE`). **Any failure halts rollout immediately.** |
+| **7/9** | Roll remaining Pilot 0 Operator containers | Section 3.2 | Only reached after Stage 6 passes. Recreates all remaining containers in `/etc/epm/pilot0-operators/registry.json` on the new Operator image without `--health-cmd`, verifies `(healthy)` + `/health/ready` on every container, and captures post-reinit R2/KMS recovery points for any reinitialized workspaces. |
+| **8/9** | Roll live Pilot 0 Admin (`epm-h03-identity.service`) & verify | Section 4 | Backs up `/opt/epm/h0312/run_identity.py`, atomically updates `MANIFEST` to the new 64-hex Admin image ID, restarts `epm-h03-identity.service`, verifies all 6 host systemd services are `active`, confirms the new Admin container image prefix and `journalctl` (`identitytoolkit bearer refreshed (600s)`, no `verify-shared` failure), and requires manual browser confirmation (**Refresh source** on Demo A in Admin + Operator UI check). |
+| **9/9** | Clean up temporary build artifacts | Section 5 | Only reached after live browser verification is confirmed. Removes `/tmp/epm-contexts.tar.gz`, `/tmp/build`, and `/tmp/epm-*` on `epm-h02-host`, optionally removes local `/private/tmp/epm-build` and `/private/tmp/epm-contexts.tar.gz` (retaining `/private/tmp/epm-agent-bundle`), and prints the final release digests and rollback snapshot path. |
+
+The sections below remain the authoritative command-by-command reference.
+
 ---
 
 ## 1. Package Operator & Admin Contexts Locally (macOS → Linux AMD64 VM)
