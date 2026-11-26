@@ -1,9 +1,9 @@
 # Hosted Operator Post-Deployment Workflow Smoke Tests — Design
 
-**Status:** Approved & In Implementation (2026-11-25)  
-**Date:** 2026-11-25  
+**Status:** Implemented & Verified (2026-11-26)  
+**Date:** 2026-11-25 (verified 2026-11-26)  
 **Applies To:** Hosted Operator (`epm-pilot0-operator` on `https://demo-a.epmdemo.xyz` and local Docker test container `http://localhost:18802`)  
-**Related Docs:** [Hosted Live Architecture](../hosting/ARCHITECTURE.md) · [Pilot 0 Release Rollout](../hosting/operations/pilot0-release-rollout.md) · [Local Dev & Qualification](../hosting/operations/local-dev-and-qualification.md) · [UI Interaction Test Plan](../ui/interaction-test-plan.md) · [Live UI Interaction Remediation Plan](LIVE_UI_INTERACTION_REMEDIATION_PLAN.md)
+**Related Docs:** [Hosted Live Architecture](../hosting/ARCHITECTURE.md) · [Pilot 0 Release Rollout](../hosting/operations/pilot0-release-rollout.md) · [Local Dev & Qualification](../hosting/operations/local-dev-and-qualification.md) · [UI Interaction Test Plan](../ui/interaction-test-plan.md)
 
 ---
 
@@ -118,7 +118,7 @@ Every smoke test inherits these mandatory invariants:
 
 ---
 
-Local Docker validation on November 25, 2026 passed all five checks after aligning Finance and Maintenance with the current app contracts. See the [local results and checkpoint](../ui/local-docker-smoke-results-2026-11-25.md). Live qualification remains a separate gate.
+**Verification Status (2026-11-26):** Passed 5/5 checks with full cleanup on local Docker (`http://localhost:18802`, `npm run test:smoke`) and on the live Pilot 0 canary (`https://demo-a.epmdemo.xyz` running `epm-pilot0-operator:pilot0-20261126-canary`, `sha256:bbbbc05c88fc6c5ac623fdbbda82d26f9829a8d54032a883964f7be451997fc8`).
 
 ## 4. Test & Validation Matrix
 

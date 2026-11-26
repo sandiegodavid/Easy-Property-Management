@@ -196,8 +196,8 @@ docker run --rm --platform linux/amd64 --read-only \
 3. **Provision `epm-backup-proxy.service`:**
    - Create system user `epm-backup-proxy` (`uid=940`), fetch `/etc/epm/secrets/r2.json` (`0600`) via `install_services.r2_credential("project-47b72bb7-ba90-42c9-910")`, write `/etc/epm/backup-proxy.json` (`0640 root:epm-backup-proxy`), add `/run/epm-backup-proxy` (`0711`) to `/etc/tmpfiles.d/epm-host.conf`, and `systemctl enable --now epm-backup-proxy.service`.
 4. **Initialize `admin-recovery.sqlite` & seed Pilot 0 metadata in `admin.sqlite`:**
-   - Create `/srv/epm/data/host/{admin-recovery,admin-control,admin-scratch}` (`0700 65532:65532`) and run `initialize_store(HostedStore.ADMIN_RECOVERY, ...)` inside `epm-pilot0-admin:h0610`.
-   - Seed `admin.sqlite` with `bootstrap_free_v1_policy` (`05038762-822b-5aa1-8906-99c94decabbc`), `qualified_releases` (`00000000-0000-4000-8000-000000000610` → `epm-pilot0-operator:h0610` digest), `capacity_profiles` (`pilot0-free-v1`), and `capacity_snapshots` (`complete=True`).
+   - Create `/srv/epm/data/host/{admin-recovery,admin-control,admin-scratch}` (`0700 65532:65532`) and run `initialize_store(HostedStore.ADMIN_RECOVERY, ...)` inside the built `epm-pilot0-admin:<tag>` image.
+   - Seed `admin.sqlite` with `bootstrap_free_v1_policy` (`05038762-822b-5aa1-8906-99c94decabbc`), an initial `qualified_releases` row pointing to the built `epm-pilot0-operator:<tag>` digest, `capacity_profiles` (`pilot0-free-v1`), and `capacity_snapshots` (`complete=True`).
 5. **Wire Admin mounts & `v3` route policy in `/opt/epm/h0312/run_identity.py`:**
    > **Gotcha 1 (Mount Allowlist):** `verify_runtime_mounts` in `shared_identity_registration.py` only allows bind mounts under `/control`, `/run/epm-identity-relay`, and `/run/epm-central-identity`, and `/control` is mounted read-only. Create stub dirs `admin-recovery`, `admin-control`, `admin-scratch`, and `backup-proxy` inside `/run/epm-h0312-identity/control` (`0700 65532:65532`), bind `/run/epm-backup-proxy` at `/control/backup-proxy`, and set `"backup_proxy_socket": "/control/backup-proxy/backup-proxy.sock"` in `admin.json`.
    >

@@ -11,9 +11,9 @@ This directory is the single source of truth for provisioning, packaging, operat
 | [identity-and-admin-recovery.md](identity-and-admin-recovery.md) | Managed identity (`selection.json` re-pinning, Google OAuth Testing allowlist, mail quotas, 5-min provider outage handling), offline `admin_bootstrap` CLI, and Admin control-plane recovery. |
 | [backup-restore-and-maintenance.md](backup-restore-and-maintenance.md) | Nightly schedulers, `recovery-status.sock` relay, Operator restore & Minimal Recovery Mode, Admin `repair_runtime`, whole-host control loss reconstruction, and 4-phase announced maintenance windows. |
 | [observability-and-budgets.md](observability-and-budgets.md) | Structured redacted JSON logging, negative secret-leak audit, GCP Ops Agent, 3 log-based metrics, 7 Cloud Monitoring alert policies, external uptime check, and `$250/mo` before-credit budget. |
-| [pilot0-admission-and-incidents.md](pilot0-admission-and-incidents.md) | End-to-end manual Pilot 0 Operator admission & capacity checks, safe retry/seed failure handling, alert triage matrix, runtime repair, audited break-glass policy, and 7-day retirement window. |
-| [pilot0-release-rollout.md](pilot0-release-rollout.md) | Cross-host macOS → VM offline packaging, immutable AMD64 OCI image builds, live Pilot 0 Operator rollout (including schema-change reinit), Admin (`epm-h03-identity.service`) rollout, and post-rollout health verification. |
-| [local-dev-and-qualification.md](local-dev-and-qualification.md) | Mac Docker Desktop lab, Lima native Linux qualification, Playwright UI verification gate, and native GCP qualification runners. |
+| [pilot0-admission-and-incidents.md](pilot0-admission-and-incidents.md) | Interactive add-operator wizard & manual admission flow, capacity snapshot refresh, safe retry/seed failure handling, alert triage matrix, runtime repair, audited break-glass policy, and 7-day retirement window. |
+| [pilot0-release-rollout.md](pilot0-release-rollout.md) | Interactive rollout wizard & command-by-command cross-host macOS → VM offline packaging, immutable AMD64 OCI image builds, live Pilot 0 Operator rollout (canary-first + `SMOKE-01`..`05` gate + optional schema-change reinit), Admin (`epm-h03-identity.service`) rollout, and cleanup. |
+| [local-dev-and-qualification.md](local-dev-and-qualification.md) | Local pre-release gates, Mac Docker Desktop lab & interactive local test stack, Lima native Linux qualification, native GCP qualification runners, and post-deploy smoke gate ([HOSTED_OPERATOR_POST_DEPLOY_SMOKE_DESIGN.md](../../active/HOSTED_OPERATOR_POST_DEPLOY_SMOKE_DESIGN.md)). |
 
 ---
 
@@ -40,12 +40,28 @@ export OWNER_NAME="DC Technology"
 | **Cloud KMS** | Keyring `epm-h05-recovery` (`us-west1`), keys `operator-workspace-kek` and `admin-control-kek` (90-day rotation) |
 | **Cloudflare R2 & Secrets** | Bucket `epm-hosted-recovery` (WNAM, account `af47b25f59f829ac1fea7ceee6b2a6e3`), token `epm-h05-backup-proxy`, GCP Secret `epm-h05-r2-credentials`; Tunnel secret `epm-tunnel-d87e220e-e2a9-48c5-a67b-318255777bce` |
 | **Monitoring & Budget IDs** | Email channel `10994584444383148615` · Uptime check `epm-pilot0-host-heartbeat-LjGDGoURNUM` · `$250/mo` Budget `7b2ec8a9-1f99-4e31-a74b-040623e8d33a` · 7 alert policies (see [observability-and-budgets.md](observability-and-budgets.md)) |
-| **Pinned Pilot 0 Artifacts (Baseline `h0610`)** | `epm-pilot0-admin:h0610` (`sha256:22506437168079fc65f56a2a0d9dacad61749bd5ca46484fae1f1ebf492cc70f`) · `epm-pilot0-operator:h0610` (`sha256:7b0e6791a60ddf3faac7d7633e992fcbcb0fd557021aaf001b2f144a7427864e`) · `host-agent.tar.gz` (`sha256:61af280717f49de0577b0291d3a1e2716fc4c0990174a18bdbd7bffbf3c74314`) |
-| **Latest Qualified Operator Release for Admissions (2026-11-25)** | `epm-pilot0-operator:pilot0-20261125-tasks` (`sha256:7ffcc9c01986883c7b741f5a1a7ba4d75335313ecf08a5309e31cf0baaad2a18`) · Release ID `00000000-0000-4000-8000-000020261125` · [Admission procedure](pilot0-admission-and-incidents.md#2-standard-manual-pilot-0-admission-flow) |
-| **Current Live Pilot 0 Operator Image (2026-11-26)** | `epm-pilot0-operator:pilot0-20261126-canary` (`sha256:bbbbc05c88fc6c5ac623fdbbda82d26f9829a8d54032a883964f7be451997fc8`) running on `epm-op-demo-a`, `epm-op-wwjdf`, and `epm-op-demo-c` (all 5 canary smoke checks passed on `demo-a`) |
-| **Live Pilot 0 Runtime Checkpoint** | [Source inspector rollout and Demo C admission update](pilot0-source-inspection-checkpoint.md) |
+| **Current Live Operator Image (2026-11-26)** | `epm-pilot0-operator:pilot0-20261126-canary` (`sha256:bbbbc05c88fc6c5ac623fdbbda82d26f9829a8d54032a883964f7be451997fc8`) running on `epm-op-demo-a`, `epm-op-wwjdf`, and `epm-op-demo-c` (5/5 live canary smoke checks passed on `demo-a`) |
+| **Current Live Admin Image** | `epm-pilot0-admin` (`sha256:55ea7220e69d03c16223d5c646551682f55f855b6cced83342b48e6b0e64e19c`) with source-inspection identity relay (`/opt/epm/host-agent-source-inspector-20261125`) |
+| **Latest Registered Catalog Release** | `epm-pilot0-operator:pilot0-20261125-tasks` (`sha256:7ffcc9c01986883c7b741f5a1a7ba4d75335313ecf08a5309e31cf0baaad2a18`) · Release ID `00000000-0000-4000-8000-000020261125` (insert a new immutable `qualified_releases` row before admitting new operators on `pilot0-20261126-canary` or newer) |
 | **Pinned Policy & Seed** | Free v1 policy `05038762-822b-5aa1-8906-99c94decabbc` · Synthetic demo seed `synthetic-demo-v1:2ad5ca6acec28823a2988c77e3c81e0bfc2bec61d43839db8e1324b73761aa5a` |
-| **Pilot 0 capacity (2026-11-25)** | `pilot0-free-v1` revision 2, activated by snapshot 4. Shared reserves are 3 GiB RAM, 500 millicores, 1,000 processes, 20 GiB data and 15 GiB boot disk, with 32,768 data inodes and 524,288 boot inodes. Demo C’s admission filled the configured 2,000 millicore reservation budget. Recheck the live ledger before the next admission. [Capacity runbook](pilot0-admission-and-incidents.md#refresh-or-revise-host-capacity) |
+| **Pilot 0 Capacity (`pilot0-free-v1` rev 2)** | Snapshot 4 reserves: 3 GiB RAM, 500 millicores, 1,000 processes, 20 GiB data / 15 GiB boot disk, 32,768 data / 524,288 boot inodes. Three active operators (`demo-a`, `wwjdf`, `demo-c`) currently fill the 2,000 millicore reservation budget; recheck the live ledger before admitting another operator ([capacity runbook](pilot0-admission-and-incidents.md#11-refresh-or-revise-host-capacity)). |
+
+---
+
+## Interactive Wizards & Post-Deploy Smoke Gate
+
+Run from the repository root (or `application/` for `npm`):
+
+```bash
+# Guided Pilot 0 live release rollout (build, canary roll, SMOKE-01..05, fleet roll, Admin, cleanup)
+bash application/scripts/epm-pilot0-rollout.sh [rollout|inspect|smoke|rollback|cleanup]
+
+# Guided Pilot 0 manual operator admission (Steps 1–4 with resumable state)
+bash application/scripts/epm-pilot0-add-operator.sh
+
+# Standalone Operator post-deploy workflow smoke suite (local Docker or live canary)
+cd application && npm run test:smoke
+```
 
 ---
 

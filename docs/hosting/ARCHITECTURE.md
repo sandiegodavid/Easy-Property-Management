@@ -9,14 +9,15 @@ This document is the single authoritative architectural reference for the live P
 ```text
 Internet -> Cloudflare Edge -> Cloudflare Tunnel (epm-tunnel.service, LoadCredential)
               -> Caddy Gateway (epm-gateway.service, Unix admin socket, exact-host/method allowlists)
-                  ├── admin.epmdemo.xyz   -> Shared Admin/Central container (epm-pilot0-admin:h0610)
+                  ├── admin.epmdemo.xyz   -> Shared Admin/Central container (epm-pilot0-admin:<release>)
                   │                            ├── Admin-lite UI & API (Google + TOTP MFA)
                   │                            ├── AdminControlBackupScheduler (24h jittered + hourly watchdog)
                   │                            ├── Admin Recovery Mode (D5 fallback via /run/epm/admin-recovery-authority.json)
+                  │                            ├── Source inspection via UID-authenticated Host Agent identity relay
                   │                            ├── POST /internal/recovery-status (SO_PEERCRED + Ed25519)
                   │                            └── Loopback /health/live & /health/ready (:8081)
                   ├── login.epmdemo.xyz   -> Shared Admin/Central container (central login + Firebase helpers)
-                  └── <slug>.epmdemo.xyz  -> Isolated Operator container (epm-pilot0-operator:h0610)
+                  └── <slug>.epmdemo.xyz  -> Isolated Operator container (epm-pilot0-operator:<release>)
                                                ├── Private bridge (10.248.<slot>.0/30), dedicated UID/GID
                                                ├── ext4 prjquota trees (workspace / control / scratch)
                                                ├── WorkspaceBackupScheduler (24h jittered + hourly watchdog)
@@ -48,7 +49,7 @@ Executable DDL and table-level dictionaries live in [../database/overview.md](..
 | `hosted-access` | Operator (`epm-pilot0-operator`) | `/srv/epm/data/control/<operator_id>/access.sqlite` | `access_meta` (`effective_access`, `access_epoch`, `effective_policy_id`, `subject`), operator browser sessions, CSRF, and revocation freshness cache. |
 | `recovery` | Operator (`epm-pilot0-operator`) | `/srv/epm/data/control/<operator_id>/recovery.sqlite` | `recovery_meta` (`source_generation`, `restore_generation`, `active_business_ref`, KMS key ref, R2 namespace prefix) and `backup_state` (`protection_state`, `last_point_id`, failure tracking). |
 
-**Post-Pilot 0 Schema Evolution Rule:** Once live operator workspaces exist, schema changes must evolve existing stores safely via forward-only Alembic migrations without recreating stores or losing data (see [design/mvp/implementation-contracts.md](design/mvp/implementation-contracts.md)).
+**Post-Pilot 0 Schema Evolution Rule:** Once live operator workspaces exist, schema changes must evolve existing stores safely via forward-only Alembic migrations without recreating stores or losing data (see [design/mvp/implementation-contracts.md](design/mvp/implementation-contracts.md) and [research/SQLITE_SCHEMA_UPGRADE_WORKFLOW_2026-10-31.md](research/SQLITE_SCHEMA_UPGRADE_WORKFLOW_2026-10-31.md)).
 
 ---
 
@@ -59,6 +60,7 @@ Executable DDL and table-level dictionaries live in [../database/overview.md](..
 - **Single Lifecycle Owner:** All containers run with `docker restart=no` under systemd supervision (`epm-host-guardian.service`, `epm-h03-identity.service`). On policy drift, firewall loss, or quota/inventory uncertainty, guardian stops containers (`StopRegistry`) and fails closed.
 - **Sandbox & Storage Isolation:** Each operator runs with a dedicated non-root UID/GID, read-only rootfs, dropped capabilities, `no-new-privileges`, pinned AppArmor/seccomp profiles, a dedicated private Docker bridge (`10.248.<slot>.0/30`), and three `ext4 prjquota` trees (`workspace`, `control`, `scratch`) mounted `rw,prjquota,nodev,nosuid,noexec` under `/srv/epm/data`. Stable `writer.lock` files prevent concurrent writers.
 - **External Containment:** Business ingress requires both Admin `desired_access = 'enabled'` (`setup_state IN ('ready_for_claim', 'active')`, exact `access_epoch`, verified `protection_state IN ('healthy', 'unchanged')`) and independent gateway/host projection (`WorkspaceRouteManifest`, `desired_state = 'eligible'`). Caddy enforces exact host/method allowlists (`separate_exact_host_method_allowlists_v3`), denies WebSocket `Upgrade` and `/admin`, `/__/auth`, `/internal`, `/debug`, `/metrics` on operator origins, and refuses `HEAD` (`403`).
+- **Admin Source Inspection:** Admin reads live effective access and logical storage usage from a bound Operator through the UID-authenticated Host Agent identity relay. Admin verifies workspace ID and `access_epoch` before dispatch, the Operator verifies its active binding before responding, and unreachable or mismatched readings surface as unavailable without blocking normal workspace traffic.
 
 ### Managed Identity & Session Security (`H03`, updated in `H06.1`)
 - **Origins & Providers:** `admin.epmdemo.xyz` (Admin-lite: Google + TOTP MFA required), `login.epmdemo.xyz` (Central sign-in & one-use handoff), and `<slug>.epmdemo.xyz` (Operator origin). Opaque realm alias (`identity-epmdemo-v1`); Google OAuth runs in **Testing** mode (allowlist up to 100 test users) for Pilot 0.

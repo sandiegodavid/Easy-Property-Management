@@ -87,6 +87,20 @@ bash application/scripts/epm-pilot0-rollout.sh --help
 Persists non-secret defaults and pre-rollout snapshots under
 `~/Library/Application Support/EPM/pilot0-rollout/`. Run interactively on macOS.
 
+### Pilot 0 GCP add-operator wizard
+
+[Source](../../application/scripts/epm-pilot0-add-operator.sh). Guided macOS wizard implementing
+[pilot0-admission-and-incidents.md](../hosting/operations/pilot0-admission-and-incidents.md#2-standard-manual-pilot-0-admission-flow)
+for manual Pilot 0 Operator admission on `epm-h02-host` over IAP. Walks through IAP SSH assignment
+lookup, assigned-image resolution (`launch_operator.py --resolve-image`), `ManualProvisioner`,
+`recovery.sqlite` initialization, backup principal registration, initial verified R2 + Cloud KMS
+backup capture, health/projection/ingress verification, and claim binding with resumable saved state.
+
+```bash
+bash application/scripts/epm-pilot0-add-operator.sh
+bash application/scripts/epm-pilot0-add-operator.sh --help
+```
+
 ### Google Cloud ongoing-release wizards
 
 From the repository root on the Mac, run

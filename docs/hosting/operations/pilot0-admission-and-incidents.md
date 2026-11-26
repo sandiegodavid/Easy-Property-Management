@@ -17,18 +17,18 @@
 3. **Pilot 0 Disclosure (Zero Paid Claims):**
    - Confirm the operator understands Pilot 0 is Free, invitation-only, best-effort support, 24h nightly backup objective with platform-managed encryption keys (not zero-knowledge), shared announced maintenance window, and no contractual SLA.
 
----
+### 1.1 Refresh or Revise Host Capacity
 
-### Refresh or revise host capacity
-
-If Add operator reports an unavailable or stale capacity observation, check the snapshot revision, observation time, completeness, and referenced profile in Admin’s database. Compare the observation time with the profile’s maximum age. A fresh observation can still be unavailable if shared usage exceeds a pinned reserve.
+If **Add operator** reports an unavailable or stale capacity observation, check the snapshot revision, observation time, completeness, and referenced profile in Admin’s database. Compare the observation time with the profile’s maximum age. A fresh observation can still be unavailable if shared usage exceeds a pinned reserve.
 
 1. On the GCP host, measure CPU affinity, available RAM, process use, and free bytes and inodes on both boot and data mounts. Verify that the data mount is the expected project-quota filesystem. Match live Operator containers and workspace, control, and scratch trees to the Admin commitments. Measure attributable usage from cgroups, allocated filesystem blocks and inodes, and identifiable container logs. Charge unattributed usage to shared consumption. Keep all existing reservations in the calculation.
 2. Build a new observation using the resource accounting in `application/deploy/hosted-mvp/gcp/capacity_observer.py`. In one Admin transaction, recheck the profile, snapshot and commitment revisions, save the per-Operator observations, and publish a strictly newer snapshot with `record_capacity_snapshot`. Read the result back. If measurement or reconciliation fails, leave admission closed and diagnose the failure. Do not extend the old timestamp without new measurements.
-3. If measured use requires a reserve change, review and register a new immutable profile revision, preserve the recovery reserve and per-Operator budget unless separately approved, and publish a fresh snapshot referencing that revision. Pilot 0 enabled revision 2 with snapshot 4 on November 25, 2026. [Live reserves](README.md)
-4. Run the existing admission planner with a proposed pending commitment using the pinned Free budget. A preview does not reserve capacity. Submit in Admin only after confirming the result and reload the form to pick up the latest snapshot. Admission rechecks the profile and commitments in its own transaction. Demo C passed the preview and used the last CPU reservation under the current profile.
+3. If measured use requires a reserve change, review and register a new immutable profile revision, preserve the recovery reserve and per-Operator budget unless separately approved, and publish a fresh snapshot referencing that revision (see [README.md](README.md#live-pilot-0-host-inventory--constants) for current live reserves and active headroom).
+4. Run the existing admission planner with a proposed pending commitment using the pinned Free budget. A preview does not reserve capacity. Submit in Admin only after confirming the result and reload the form to pick up the latest snapshot. Admission rechecks the profile and commitments in its own transaction.
 
 Periodic refresh remains manual today. See the [automation proposal](../design/pilot0-capacity-refresh.md).
+
+---
 
 ## 2. Standard Manual Pilot 0 Admission Flow
 
@@ -38,7 +38,7 @@ Record start time, actor, and elapsed Admin minutes in [PILOT_0_COST_AND_OPS_WOR
 
 ### Step 1 — Create Assignment in Admin-lite
 1. Sign in to `https://admin.epmdemo.xyz/` with Google + TOTP MFA.
-2. Create the operator assignment with exact email, canonical `workspace_slug`, pinned Free 50 MB allowance, and the latest qualified Operator release shown in Admin-lite. As of 2026-11-25, use `epm-pilot0-operator:pilot0-20261125-tasks` (release ID `00000000-0000-4000-8000-000020261125`). Choose **Empty workspace (default)** for real operators or **Synthetic sample portfolio** for demos (pinned seed `synthetic-demo-v1:2ad5ca6acec28823a2988c77e3c81e0bfc2bec61d43839db8e1324b73761aa5a`).
+2. Create the operator assignment with exact email, canonical `workspace_slug`, pinned Free 50 MB allowance, and the latest registered qualified Operator release shown in Admin-lite (see [README.md](README.md#live-pilot-0-host-inventory--constants) for the current catalog release ID). Choose **Empty workspace (default)** for real operators or **Synthetic sample portfolio** for demos (pinned seed `synthetic-demo-v1:2ad5ca6acec28823a2988c77e3c81e0bfc2bec61d43839db8e1324b73761aa5a`).
 3. Confirm the operator appears in Admin-lite as **Pending**.
 
 ### Step 2 — Provision Workspace, Initialize `recovery.sqlite` & Register Backup Principal

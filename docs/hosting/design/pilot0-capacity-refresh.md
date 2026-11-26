@@ -14,4 +14,4 @@ The publisher should use the Admin capacity store through a narrowly scoped host
 | --- | --- |
 | 1. One-shot collection | Dry run on GCP agrees with manual cgroup, disk/inode and quota readings. Test missing mounts, missing metrics, retained allocations, unknown containers, and usage above a commitment. |
 | 2. Atomic publication | Tests prove monotonic revisions, rejection of a stale sample after admission or profile switch, rollback on partial failure, and unchanged reserve limits. |
-| 3. Timer and observability | Verify boot and periodic runs, no overlap, and alerting for repeated failures or a stale snapshot. Prove a failing refresh cannot reopen admission. Disable the timer to return to the [manual workflow](../operations/pilot0-admission-and-incidents.md#refresh-or-revise-host-capacity). |
+| 3. Timer and observability | Verify boot and periodic runs, no overlap, and alerting for repeated failures or a stale snapshot. Prove a failing refresh cannot reopen admission. Disable the timer to return to the [manual workflow](../operations/pilot0-admission-and-incidents.md#11-refresh-or-revise-host-capacity). |

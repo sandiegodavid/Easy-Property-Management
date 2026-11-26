@@ -14,7 +14,7 @@ All host daemons run under dedicated unprivileged OS identities with dropped cap
 | `epm-tunnel.service` | `cloudflared` `2026.10.7`; receives exact 3-field Tunnel JSON via `LoadCredential` at `/run/credentials/epm-tunnel.service/tunnel.json`; exact routing + deny catch-all. |
 | `epm-backup-proxy.service` | Dedicated user `epm-backup-proxy` (`uid=940`); receives R2 creds via `LoadCredential=r2.json:/etc/epm/secrets/r2.json`; listens on `/run/epm-backup-proxy/backup-proxy.sock`; resolves caller R2 prefix strictly via kernel `SO_PEERCRED` UID → `/srv/epm/data/host/backup-proxy/inventory.sqlite`. Zero dependency on Admin or ingress. |
 | `epm-host-guardian.service` | Live `HostAgent` supervision (`--registry /srv/epm/data/host/stops --config /etc/epm/host-services.json`); verifies containers against `inventory.sqlite`, Caddy `Gateway`, and `ext4 prjquota`; stops containers on drift/uncertainty. |
-| `epm-h03-identity.service` | Runs the shared `epm-pilot0-admin:h0610` container (`admin.epmdemo.xyz` + `login.epmdemo.xyz`) and projects `v3` Admin/Central/Operator routes. |
+| `epm-h03-identity.service` | Runs the shared `epm-pilot0-admin:<release>` container (`admin.epmdemo.xyz` + `login.epmdemo.xyz`; see [README.md](README.md) for current digest), projects `v3` Admin/Central/Operator routes, and relays UID-authenticated Admin source-inspection reads. |
 | `epm-ingress-projection.service` | Prerequisite unit that regenerates protected Caddy/Tunnel/egress projections atomically (`ProjectionPublisher`, root `0640`, fsynced) after network setup. |
 | `google-cloud-ops-agent.service` | Ships host metrics and redacted structured JSON logs to GCP Cloud Monitoring & Cloud Logging. |
 

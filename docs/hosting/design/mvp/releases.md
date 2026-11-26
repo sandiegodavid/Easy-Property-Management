@@ -146,7 +146,7 @@ and post-reopen data-preservation rules.
 
 ### Post-Pilot 0 SQLite schema upgrade principles (H10 input)
 
-Once Pilot 0 holds real customer records, future releases must evolve existing SQLite stores forward without recreating them:
+Once Pilot 0 holds real customer records, future releases must evolve existing SQLite stores forward without recreating them (see the accepted [Per-Operator SQLite Schema Upgrade Workflow](../../research/SQLITE_SCHEMA_UPGRADE_WORKFLOW_2026-10-31.md) for full qualification criteria):
 - **Append-only Alembic migrations with CI hash-freeze** on released migration files.
 - **Automatic pre-migration verified backup/snapshot** before applying DDL to any live store.
 - **Per-step transactional DDL** and **per-version schema validation** (reject unsupported versions rather than booting blindly).
