@@ -14,7 +14,7 @@ class FinancialForm(Contract):
 
 
 class MoneyForm(FinancialForm):
-    amount: str | None = Field(None, pattern=r"^(?:0|[1-9][0-9]{0,7})\.[0-9]{2}$", strict=True)
+    amount: str | None = Field(None, max_length=32, strict=True)
     currencyCode: Literal["USD"] | None = None
     notes: str | None = Field(None, max_length=4000)
 

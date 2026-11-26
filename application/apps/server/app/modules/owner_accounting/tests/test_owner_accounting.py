@@ -485,7 +485,7 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
         recorder = AuditRecorder(SQLiteAuditRepository(database))
         parties = SQLitePartyOperations(database)
         portfolio = PortfolioService(
-            SQLitePortfolioUnitOfWork(database, recorder),
+            SQLitePortfolioUnitOfWork(database, recorder, party_operations=parties),
             time_zone_resolver=BundledAddressTimeZoneResolver(),
         )
         owner = portfolio.create_party(PartyCreateCommand("individual", "Client owner"))

@@ -82,10 +82,10 @@ Every smoke test inherits these mandatory invariants:
 
 | Step | Action | Verification / Pass Criteria |
 | --- | --- | --- |
-| 3.1 | Open `/tenants`, click **Create tenant**, type partial name `[SMOKE-<id>] Jordan Avery` (leaving required contact/email empty), and navigate away to `/settings/recovery` | Partial draft is saved and listed under **Unfinished forms** (`Continue editing`). |
+| 3.1 | Open `/tenants`, click **Create tenant**, type partial name `[SMOKE-<id>] Jordan Avery` (contacts are optional by design), and navigate away to `/settings/recovery` | Partial draft is saved and listed under **Unfinished forms** (`Continue editing`). |
 | 3.2 | Click **Continue editing** from `/settings/recovery` in the same browser tab | Draft resumes with entered values preserved and **zero** `HTTP 409` / `"Take over editing"` prompt (regression guard for `G-03` same-tab lease reuse). |
-| 3.3 | Submit with invalid/missing required field (e.g., malformed email) | Inline validation blocks commit (`400`/`422`) without crashing or wiping typed form values. |
-| 3.4 | Fill valid contact info (`smoke-<id>@example.invalid`) and submit **Create tenant** | `POST /api/parties` / tenant creation returns `200`/`201` with valid `x-epm-csrf`, `x-epm-draft-lease`, and `x-epm-prepared-form` headers; redirects to tenant detail view. |
+| 3.3 | Test a genuinely invalid submission (clear `Display name`, or add a contact row with a malformed email such as `not-an-email`) and submit | Inline validation blocks commit (`400`/`422`) without crashing or wiping typed form values. |
+| 3.4 | Restore `[SMOKE-<id>] Jordan Avery` (and valid optional contact `smoke-<id>@example.invalid` if added) and submit **Create tenant** | `POST /api/tenants` returns `200`/`201` with valid `x-epm-csrf`, `x-epm-draft-lease`, and `x-epm-prepared-form` headers; shows committed tenant confirmation with link to tenant detail view. |
 | 3.5 | Hard-reload the tenant detail page, edit display name to `[SMOKE-<id>] Jordan Avery Updated`, save, create and immediately **Void** a `Draft` lease linked to that tenant (proving Leasing write + clean draft-void lifecycle without triggering the same-day executed-lease guard), then **Archive** the tenant | Reload proves durable SQLite write; edit persists; `Draft` lease creates and voids cleanly; archived tenant disappears from default `/tenants?browse=true` list and appears only when `Include archived tenants` is checked; `/settings/recovery` returns to `0` unfinished forms. |
 
 ---

@@ -460,9 +460,21 @@ test.describe.serial("Hosted Operator post-deployment workflow smoke suite", () 
 
     await page.goto("/settings/recovery", { waitUntil: "networkidle" });
     const leftoverSmokeDrafts = page.getByRole("listitem").filter({ hasText: "[SMOKE-" });
-    while ((await leftoverSmokeDrafts.count()) > 0) {
+    const initialLeftovers = await leftoverSmokeDrafts.count();
+    for (let i = 0; i < initialLeftovers; i += 1) {
+      const remaining = await leftoverSmokeDrafts.count();
+      if (remaining === 0) break;
+      const discardResponse = page.waitForResponse(
+        (resp) => resp.url().includes("/discard") && resp.request().method() === "POST",
+        { timeout: 10_000 },
+      );
+      page.once("dialog", (dialog) => {
+        void dialog.accept();
+      });
       await leftoverSmokeDrafts.first().getByRole("button", { name: "Discard" }).click();
-      await page.waitForTimeout(300);
+      const resp = await discardResponse;
+      expect(resp.ok(), `Discard leftover smoke draft failed (${resp.status()})`).toBe(true);
+      await expect(leftoverSmokeDrafts).toHaveCount(remaining - 1, { timeout: 10_000 });
     }
     await expect(page.getByRole("listitem").filter({ hasText: tenantName })).toHaveCount(0);
 
