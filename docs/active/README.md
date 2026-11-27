@@ -13,7 +13,7 @@ The [agent triage design](agent-triage-design.md) is the accepted direction for 
 - [Live UI Interaction Remediation Plan](LIVE_UI_INTERACTION_REMEDIATION_PLAN.md): 4-batch remediation plan for confirmed Phase 1 & Phase 2 findings from live testing `https://demo-a.epmdemo.xyz/` (`pilot0-20261124-review` / `5ed202f5`).
 - [Hosted Operator Post-Deployment Smoke Tests Design](HOSTED_OPERATOR_POST_DEPLOY_SMOKE_DESIGN.md): implemented & verified 5-check, self-cleaning Operator workflow smoke gate (`SMOKE-01`..`SMOKE-05`) run after every hosted deployment.
 - [PORTAL-001/002 and FIN-009 plan](PORTALS_IMPLEMENTATION_PLAN.md): tenant/owner workflows following hosting, shared late-fee source and cross-portal acceptance.
-- [FIN-009](FIN-009_DESIGN.md): accepted late-fee policy, deterministic preview, explicit assessment/waiver/correction, separate receipt/reporting, portal read contracts, and `PAY-001` integration design (`D1–D15`, accepted November 26, 2026; ready for Slice 1 implementation).
+- [FIN-009](FIN-009_DESIGN.md): implemented late-fee policy, deterministic preview, explicit assessment/waiver/correction, separate receipt/reporting, portal read contracts, `PAY-001` integration contracts, and operator UI (`D1–D15`; Slices 1–6 complete).
 - [PAY-001](PAY-001_DESIGN.md): qualified payment engine reused by the tenant portal; operator subscriptions are owned by HOSTED-001.
 
 ## Operator interface delivery

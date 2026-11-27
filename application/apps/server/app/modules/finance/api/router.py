@@ -21,6 +21,12 @@ from app.platform.api_errors import domain_problem, workspace_unavailable
 
 from app.modules.finance.application.service import FinanceService
 from app.modules.finance.api.expense_router import ExpenseMutationResponse, RefundMutationResponse
+from app.modules.finance.api.late_fee_router import (
+    CombinedReceiptMutationResponse,
+    LateFeeAssessmentMutationResponse,
+    LateFeePolicyMutationResponse,
+    LateFeeReceiptMutationResponse,
+)
 from app.modules.finance.api.prepaid_check_router import PrepaidCheckMutationResponse
 from app.modules.finance.api.deposit_router import (
     DepositMutationResponse,
@@ -283,6 +289,14 @@ class CommandRecoveryResponse(Contract):
         "return_prepaid_check",
         "void_prepaid_check",
         "replace_prepaid_check",
+        "create_late_fee_policy",
+        "void_late_fee_policy",
+        "assess_late_fee",
+        "waive_late_fee",
+        "void_late_fee_assessment",
+        "record_late_fee_receipt",
+        "record_combined_receipt",
+        "void_late_fee_receipt",
         "record_expense",
         "patch_expense",
         "void_expense",
@@ -312,6 +326,10 @@ class CommandRecoveryResponse(Contract):
         | ExpenseMutationResponse
         | RefundMutationResponse
         | PrepaidCheckMutationResponse
+        | LateFeePolicyMutationResponse
+        | LateFeeAssessmentMutationResponse
+        | LateFeeReceiptMutationResponse
+        | CombinedReceiptMutationResponse
         | DepositMutationResponse
         | DepositReceiptMutationResponse
         | SettlementMutationResponse

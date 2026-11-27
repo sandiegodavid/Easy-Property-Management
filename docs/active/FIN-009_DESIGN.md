@@ -1,6 +1,6 @@
 # FIN-009 — Late fees
 
-Status: **Design accepted — November 26, 2026 (ready for Slice 1 implementation)** (aligned with [FEATURE_BACKLOG.md](../FEATURE_BACKLOG.md#now--hosted-mvp-then-tenant-and-owner-portals), [PORTALS_IMPLEMENTATION_PLAN.md](PORTALS_IMPLEMENTATION_PLAN.md#fin-009--shared-late-fee-prerequisite), [PAY-001_DESIGN.md](PAY-001_DESIGN.md#late-fee-integration-for-portal-acceptance), [Finance module guide](../modules/finance.md), [Operator experience](../ui/operator-experience.md), and [Frontend architecture](../ui/frontend-architecture.md)). Design approval does not establish implementation completion.
+Status: **Complete — Slices 1–6 implemented and validated (November 27, 2026)** (aligned with [FEATURE_BACKLOG.md](../FEATURE_BACKLOG.md#now--hosted-mvp-then-tenant-and-owner-portals), [PORTALS_IMPLEMENTATION_PLAN.md](PORTALS_IMPLEMENTATION_PLAN.md#fin-009--shared-late-fee-prerequisite), [PAY-001_DESIGN.md](PAY-001_DESIGN.md#late-fee-integration-for-portal-acceptance), [Finance module guide](../modules/finance.md), [Operator experience](../ui/operator-experience.md), and [Frontend architecture](../ui/frontend-architecture.md)).
 
 Hard dependencies: `AUDIT-001`, `LEASE-001`, `FIN-001`, `FIN-006` (all `✅ Done`).
 Downstream consumers: `PORTAL-001` (Tenant portal), `PORTAL-002` (Owner portal), and `PAY-001` (Hosted tenant payments late-fee integration).
@@ -340,15 +340,15 @@ All reads execute under one deferred SQLite snapshot and one captured UTC `asOf`
 
 ---
 
-## 10. Implementation status and checkpoints
+## 10. Implementation status and checkpoint
 
-All design decisions (`D1–D15`) were accepted on November 26, 2026. Implementation has not started yet; update slice status and checkpoint links below as each slice completes.
+All design decisions (`D1–D15`) and implementation slices (`1–6`) are complete. Consolidated delivery summary and validation results: [FIN-009_CHECKPOINT.md](FIN-009_CHECKPOINT.md).
 
-| Slice | Status | Checkpoint |
-| --- | --- | --- |
-| Slice 1 — Schema & policy versioning | Pending | — |
-| Slice 2 — Deterministic preview engine | Pending | — |
-| Slice 3 — Assessment, waiver & correction lifecycle | Pending | — |
-| Slice 4 — Late-fee receipts & `FIN-003` reporting | Pending | — |
-| Slice 5 — Shared portal read port & `PAY-001` contracts | Pending | — |
-| Slice 6 — Operator UI & end-to-end acceptance | Pending | — |
+| Slice | Status |
+| --- | --- |
+| Slice 1 — Schema & policy versioning | ✅ Done |
+| Slice 2 — Deterministic preview engine | ✅ Done |
+| Slice 3 — Assessment, waiver & correction lifecycle | ✅ Done |
+| Slice 4 — Late-fee receipts & `FIN-003` reporting | ✅ Done |
+| Slice 5 — Shared portal read port & `PAY-001` contracts | ✅ Done |
+| Slice 6 — Operator UI & end-to-end acceptance | ✅ Done |

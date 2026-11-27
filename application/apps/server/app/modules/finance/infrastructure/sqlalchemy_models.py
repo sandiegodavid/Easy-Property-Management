@@ -65,6 +65,7 @@ class RentReceiptModel(LocalBase):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     lease_id: Mapped[str] = mapped_column(ForeignKey("leases.id"), nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    payment_batch_id: Mapped[str | None] = mapped_column(String)
     received_on: Mapped[str] = mapped_column(String, nullable=False)
     amount_minor: Mapped[int] = mapped_column(Integer, nullable=False)
     currency_code: Mapped[str] = mapped_column(String, nullable=False)
@@ -98,6 +99,7 @@ class RentReceiptModel(LocalBase):
         CheckConstraint(
             "(voided_at IS NULL AND void_reason IS NULL) OR (voided_at IS NOT NULL AND void_reason IS NOT NULL AND length(trim(void_reason)) > 0)"
         ),
+        CheckConstraint(f"payment_batch_id IS NULL OR ({_uuid_check('payment_batch_id')})"),
         Index("rent_receipts_lease_received", "lease_id", "received_on"),
         Index("rent_receipts_lifecycle_received", "voided_at", "received_on", "lease_id", "id"),
     )
@@ -673,3 +675,391 @@ class SecurityDepositRefundModel(LocalBase):
             "security_deposit_refunds_lifecycle_paid", "voided_at", "paid_on", "account_id", "id"
         ),
     )
+
+
+def _iso_date_check(column: str, *, nullable: bool = False) -> str:
+    check = (
+        f"{column} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' "
+        f"AND {column} >= '1900-01-01' AND date({column}, '+0 days') = {column}"
+    )
+    return f"{column} IS NULL OR ({check})" if nullable else check
+
+
+# FIN-009. Late-fee policies, immutable assessments, append-only waivers, and
+# separate late-fee receipts/allocations.
+class LateFeePolicyVersionModel(LocalBase):
+    __tablename__ = "late_fee_policy_versions"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    lease_id: Mapped[str] = mapped_column(ForeignKey("leases.id"), nullable=False)
+    lease_term_id: Mapped[str | None] = mapped_column(ForeignKey("lease_term_versions.id"))
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    effective_on: Mapped[str] = mapped_column(String, nullable=False)
+    ends_on: Mapped[str | None] = mapped_column(String)
+    rule_basis: Mapped[str] = mapped_column(String, nullable=False)
+    grace_period_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    calculation_basis: Mapped[str] = mapped_column(String, nullable=False)
+    formula_kind: Mapped[str] = mapped_column(String, nullable=False)
+    flat_amount_minor: Mapped[int | None] = mapped_column(Integer)
+    percentage_bps: Mapped[int | None] = mapped_column(Integer)
+    daily_amount_minor: Mapped[int | None] = mapped_column(Integer)
+    max_accrual_days: Mapped[int | None] = mapped_column(Integer)
+    per_period_cap_minor: Mapped[int | None] = mapped_column(Integer)
+    per_period_min_minor: Mapped[int | None] = mapped_column(Integer)
+    minimum_unpaid_threshold_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    rounding_mode: Mapped[str] = mapped_column(String, nullable=False)
+    applies_to_prorated_periods: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False)
+    supersedes_policy_version_id: Mapped[str | None] = mapped_column(
+        ForeignKey("late_fee_policy_versions.id"), unique=True
+    )
+    notes: Mapped[str | None] = mapped_column(String)
+    operator_confirmed_at: Mapped[str] = mapped_column(String, nullable=False)
+    operator_confirmed_by_actor: Mapped[str] = mapped_column(String, nullable=False)
+    voided_at: Mapped[str | None] = mapped_column(String)
+    void_reason: Mapped[str | None] = mapped_column(String)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    __table_args__ = (
+        CheckConstraint(_uuid_check("id")),
+        CheckConstraint(_uuid_check("lease_id")),
+        CheckConstraint(f"lease_term_id IS NULL OR ({_uuid_check('lease_term_id')})"),
+        CheckConstraint(
+            f"supersedes_policy_version_id IS NULL OR ({_uuid_check('supersedes_policy_version_id')} AND supersedes_policy_version_id != id)"
+        ),
+        CheckConstraint("typeof(version_number) = 'integer' AND version_number >= 1"),
+        CheckConstraint(_iso_date_check("effective_on")),
+        CheckConstraint(_iso_date_check("ends_on", nullable=True)),
+        CheckConstraint("ends_on IS NULL OR ends_on > effective_on"),
+        CheckConstraint("length(trim(rule_basis)) BETWEEN 1 AND 500"),
+        CheckConstraint(
+            "typeof(grace_period_days) = 'integer' AND grace_period_days BETWEEN 0 AND 60"
+        ),
+        CheckConstraint(
+            "calculation_basis IN ('unpaid_rent_at_grace_end', 'current_unpaid_rent', 'scheduled_rent')"
+        ),
+        CheckConstraint(
+            "formula_kind IN ('fixed_flat', 'percentage_once', 'daily_flat', 'fixed_plus_daily_flat')"
+        ),
+        CheckConstraint(
+            "flat_amount_minor IS NULL OR (typeof(flat_amount_minor) = 'integer' AND flat_amount_minor BETWEEN 1 AND 9999999999)"
+        ),
+        CheckConstraint(
+            "percentage_bps IS NULL OR (typeof(percentage_bps) = 'integer' AND percentage_bps BETWEEN 1 AND 10000)"
+        ),
+        CheckConstraint(
+            "daily_amount_minor IS NULL OR (typeof(daily_amount_minor) = 'integer' AND daily_amount_minor BETWEEN 1 AND 9999999999)"
+        ),
+        CheckConstraint(
+            "max_accrual_days IS NULL OR (typeof(max_accrual_days) = 'integer' AND max_accrual_days BETWEEN 1 AND 365)"
+        ),
+        CheckConstraint(
+            "per_period_cap_minor IS NULL OR (typeof(per_period_cap_minor) = 'integer' AND per_period_cap_minor BETWEEN 1 AND 9999999999)"
+        ),
+        CheckConstraint(
+            "per_period_min_minor IS NULL OR (typeof(per_period_min_minor) = 'integer' AND per_period_min_minor BETWEEN 1 AND 9999999999)"
+        ),
+        CheckConstraint(
+            "typeof(minimum_unpaid_threshold_minor) = 'integer' AND minimum_unpaid_threshold_minor BETWEEN 0 AND 9999999999"
+        ),
+        CheckConstraint("rounding_mode IN ('half_up', 'floor')"),
+        CheckConstraint("applies_to_prorated_periods IN (0, 1)"),
+        CheckConstraint("status IN ('active', 'superseded', 'voided')"),
+        CheckConstraint(
+            "(formula_kind = 'fixed_flat' AND flat_amount_minor IS NOT NULL AND percentage_bps IS NULL AND daily_amount_minor IS NULL AND max_accrual_days IS NULL) OR "
+            "(formula_kind = 'percentage_once' AND flat_amount_minor IS NULL AND percentage_bps IS NOT NULL AND daily_amount_minor IS NULL AND max_accrual_days IS NULL) OR "
+            "(formula_kind = 'daily_flat' AND flat_amount_minor IS NULL AND percentage_bps IS NULL AND daily_amount_minor IS NOT NULL AND (per_period_cap_minor IS NOT NULL OR max_accrual_days IS NOT NULL)) OR "
+            "(formula_kind = 'fixed_plus_daily_flat' AND flat_amount_minor IS NOT NULL AND percentage_bps IS NULL AND daily_amount_minor IS NOT NULL AND (per_period_cap_minor IS NOT NULL OR max_accrual_days IS NOT NULL))"
+        ),
+        CheckConstraint(
+            "per_period_min_minor IS NULL OR per_period_cap_minor IS NULL OR per_period_min_minor <= per_period_cap_minor"
+        ),
+        CheckConstraint("notes IS NULL OR length(trim(notes)) BETWEEN 1 AND 1000"),
+        CheckConstraint("length(trim(operator_confirmed_by_actor)) BETWEEN 1 AND 200"),
+        CheckConstraint(
+            "(status = 'voided' AND voided_at IS NOT NULL AND void_reason IS NOT NULL AND length(trim(void_reason)) BETWEEN 1 AND 1000) OR "
+            "(status IN ('active', 'superseded') AND voided_at IS NULL AND void_reason IS NULL)"
+        ),
+        UniqueConstraint("lease_id", "version_number"),
+        Index("late_fee_policies_lease_effective", "lease_id", "status", "effective_on", "ends_on"),
+    )
+
+
+class LateFeeAssessmentModel(LocalBase):
+    __tablename__ = "late_fee_assessments"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    lease_id: Mapped[str] = mapped_column(ForeignKey("leases.id"), nullable=False)
+    rent_expectation_id: Mapped[str] = mapped_column(
+        ForeignKey("rent_expectations.id"), nullable=False
+    )
+    policy_version_id: Mapped[str] = mapped_column(
+        ForeignKey("late_fee_policy_versions.id"), nullable=False
+    )
+    occurrence_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    as_of_date: Mapped[str] = mapped_column(String, nullable=False)
+    accrual_starts_on: Mapped[str] = mapped_column(String, nullable=False)
+    accrual_ends_on: Mapped[str] = mapped_column(String, nullable=False)
+    accrual_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    assessed_amount_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    currency_code: Mapped[str] = mapped_column(String, nullable=False)
+    time_zone: Mapped[str] = mapped_column(String, nullable=False)
+    rule_basis_snapshot: Mapped[str] = mapped_column(String, nullable=False)
+    calculation_snapshot_json: Mapped[str] = mapped_column(String, nullable=False)
+    calculation_snapshot_hash: Mapped[str] = mapped_column(String, nullable=False)
+    processing_acknowledged: Mapped[int] = mapped_column(Integer, nullable=False)
+    processing_acknowledgment_reason: Mapped[str | None] = mapped_column(String)
+    internal_notes: Mapped[str | None] = mapped_column(String)
+    replaces_assessment_id: Mapped[str | None] = mapped_column(
+        ForeignKey("late_fee_assessments.id"), unique=True
+    )
+    voided_at: Mapped[str | None] = mapped_column(String)
+    void_reason: Mapped[str | None] = mapped_column(String)
+    assessed_at: Mapped[str] = mapped_column(String, nullable=False)
+    assessed_by_actor: Mapped[str] = mapped_column(String, nullable=False)
+    __table_args__ = (
+        CheckConstraint(_uuid_check("id")),
+        CheckConstraint(_uuid_check("lease_id")),
+        CheckConstraint(_uuid_check("rent_expectation_id")),
+        CheckConstraint(_uuid_check("policy_version_id")),
+        CheckConstraint(
+            f"replaces_assessment_id IS NULL OR ({_uuid_check('replaces_assessment_id')} AND replaces_assessment_id != id)"
+        ),
+        CheckConstraint("typeof(occurrence_number) = 'integer' AND occurrence_number >= 1"),
+        CheckConstraint(_iso_date_check("as_of_date")),
+        CheckConstraint(_iso_date_check("accrual_starts_on")),
+        CheckConstraint(_iso_date_check("accrual_ends_on")),
+        CheckConstraint("accrual_ends_on >= accrual_starts_on"),
+        CheckConstraint("typeof(accrual_days) = 'integer' AND accrual_days >= 1"),
+        CheckConstraint(
+            "typeof(assessed_amount_minor) = 'integer' AND assessed_amount_minor BETWEEN 1 AND 9999999999"
+        ),
+        CheckConstraint("currency_code = 'USD'"),
+        CheckConstraint("length(trim(time_zone)) BETWEEN 1 AND 100"),
+        CheckConstraint("length(trim(rule_basis_snapshot)) BETWEEN 1 AND 500"),
+        CheckConstraint(
+            "json_valid(calculation_snapshot_json) AND json_type(calculation_snapshot_json) = 'object' AND length(calculation_snapshot_json) <= 16384"
+        ),
+        CheckConstraint(
+            "length(calculation_snapshot_hash) = 64 AND calculation_snapshot_hash NOT GLOB '*[^0-9a-f]*'"
+        ),
+        CheckConstraint("processing_acknowledged IN (0, 1)"),
+        CheckConstraint(
+            "(processing_acknowledged = 0 AND processing_acknowledgment_reason IS NULL) OR "
+            "(processing_acknowledged = 1 AND processing_acknowledgment_reason IS NOT NULL AND length(trim(processing_acknowledgment_reason)) BETWEEN 1 AND 1000)"
+        ),
+        CheckConstraint(
+            "internal_notes IS NULL OR length(trim(internal_notes)) BETWEEN 1 AND 1000"
+        ),
+        CheckConstraint(
+            "(voided_at IS NULL AND void_reason IS NULL) OR "
+            "(voided_at IS NOT NULL AND void_reason IS NOT NULL AND length(trim(void_reason)) BETWEEN 1 AND 1000)"
+        ),
+        CheckConstraint("length(trim(assessed_by_actor)) BETWEEN 1 AND 200"),
+        Index(
+            "late_fee_assessments_one_active_occurrence",
+            "rent_expectation_id",
+            "occurrence_number",
+            unique=True,
+            sqlite_where=text("voided_at IS NULL"),
+        ),
+        Index("late_fee_assessments_lease_date", "lease_id", "voided_at", "as_of_date", "id"),
+        Index(
+            "late_fee_assessments_expectation",
+            "rent_expectation_id",
+            "voided_at",
+            "occurrence_number",
+        ),
+    )
+
+
+class LateFeeWaiverModel(LocalBase):
+    __tablename__ = "late_fee_waivers"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    assessment_id: Mapped[str] = mapped_column(
+        ForeignKey("late_fee_assessments.id"), nullable=False
+    )
+    lease_id: Mapped[str] = mapped_column(ForeignKey("leases.id"), nullable=False)
+    waived_amount_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    currency_code: Mapped[str] = mapped_column(String, nullable=False)
+    reason: Mapped[str] = mapped_column(String, nullable=False)
+    internal_notes: Mapped[str | None] = mapped_column(String)
+    waived_on: Mapped[str] = mapped_column(String, nullable=False)
+    waived_at: Mapped[str] = mapped_column(String, nullable=False)
+    waived_by_actor: Mapped[str] = mapped_column(String, nullable=False)
+    __table_args__ = (
+        CheckConstraint(_uuid_check("id")),
+        CheckConstraint(_uuid_check("assessment_id")),
+        CheckConstraint(_uuid_check("lease_id")),
+        CheckConstraint(
+            "typeof(waived_amount_minor) = 'integer' AND waived_amount_minor BETWEEN 1 AND 9999999999"
+        ),
+        CheckConstraint("currency_code = 'USD'"),
+        CheckConstraint("length(trim(reason)) BETWEEN 1 AND 1000"),
+        CheckConstraint(
+            "internal_notes IS NULL OR length(trim(internal_notes)) BETWEEN 1 AND 1000"
+        ),
+        CheckConstraint(_iso_date_check("waived_on")),
+        CheckConstraint("length(trim(waived_by_actor)) BETWEEN 1 AND 200"),
+        Index("late_fee_waivers_assessment", "assessment_id", "waived_at", "id"),
+    )
+
+
+class LateFeeReceiptModel(LocalBase):
+    __tablename__ = "late_fee_receipts"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    lease_id: Mapped[str] = mapped_column(ForeignKey("leases.id"), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    payment_batch_id: Mapped[str | None] = mapped_column(String)
+    received_on: Mapped[str] = mapped_column(String, nullable=False)
+    amount_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    currency_code: Mapped[str] = mapped_column(String, nullable=False)
+    payment_method_kind: Mapped[str] = mapped_column(String, nullable=False)
+    payment_method_label: Mapped[str | None] = mapped_column(String)
+    masked_reference: Mapped[str | None] = mapped_column(String)
+    other_payment_method_note: Mapped[str | None] = mapped_column(String)
+    received_by_party_id: Mapped[str | None] = mapped_column(ForeignKey("parties.id"))
+    replaces_receipt_id: Mapped[str | None] = mapped_column(
+        ForeignKey("late_fee_receipts.id"), unique=True
+    )
+    notes: Mapped[str | None] = mapped_column(String)
+    voided_at: Mapped[str | None] = mapped_column(String)
+    void_reason: Mapped[str | None] = mapped_column(String)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    __table_args__ = (
+        CheckConstraint(_uuid_check("id")),
+        CheckConstraint(_uuid_check("lease_id")),
+        CheckConstraint(_uuid_check("idempotency_key")),
+        CheckConstraint(f"payment_batch_id IS NULL OR ({_uuid_check('payment_batch_id')})"),
+        CheckConstraint(
+            f"replaces_receipt_id IS NULL OR ({_uuid_check('replaces_receipt_id')} AND replaces_receipt_id != id)"
+        ),
+        CheckConstraint(_iso_date_check("received_on")),
+        CheckConstraint(
+            "typeof(amount_minor) = 'integer' AND amount_minor BETWEEN 1 AND 9999999999"
+        ),
+        CheckConstraint("currency_code = 'USD'"),
+        CheckConstraint(
+            "payment_method_kind IN ('automatic_bank_payment', 'bank_transfer', 'check', 'cash', 'online_payment', 'other')"
+        ),
+        CheckConstraint(
+            "payment_method_label IS NULL OR length(trim(payment_method_label)) BETWEEN 1 AND 100"
+        ),
+        CheckConstraint(
+            "masked_reference IS NULL OR length(trim(masked_reference)) BETWEEN 1 AND 80"
+        ),
+        CheckConstraint(
+            "(payment_method_kind = 'other' AND other_payment_method_note IS NOT NULL AND length(trim(other_payment_method_note)) BETWEEN 1 AND 200) OR "
+            "(payment_method_kind != 'other' AND other_payment_method_note IS NULL)"
+        ),
+        CheckConstraint("notes IS NULL OR length(trim(notes)) BETWEEN 1 AND 4000"),
+        CheckConstraint(
+            "(voided_at IS NULL AND void_reason IS NULL) OR "
+            "(voided_at IS NOT NULL AND void_reason IS NOT NULL AND length(trim(void_reason)) BETWEEN 1 AND 1000)"
+        ),
+        Index("late_fee_receipts_lease_received", "lease_id", "received_on"),
+        Index("late_fee_receipts_lifecycle_received", "voided_at", "received_on", "lease_id", "id"),
+    )
+
+
+class LateFeeReceiptAllocationModel(LocalBase):
+    __tablename__ = "late_fee_receipt_allocations"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    receipt_id: Mapped[str] = mapped_column(ForeignKey("late_fee_receipts.id"), nullable=False)
+    assessment_id: Mapped[str] = mapped_column(
+        ForeignKey("late_fee_assessments.id"), nullable=False
+    )
+    amount_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    __table_args__ = (
+        CheckConstraint(_uuid_check("id")),
+        CheckConstraint(_uuid_check("receipt_id")),
+        CheckConstraint(_uuid_check("assessment_id")),
+        CheckConstraint(
+            "typeof(amount_minor) = 'integer' AND amount_minor BETWEEN 1 AND 9999999999"
+        ),
+        UniqueConstraint("receipt_id", "assessment_id"),
+        Index("late_fee_receipt_allocations_assessment", "assessment_id"),
+    )
+
+
+_POLICY_IMMUTABLE_COLUMNS = (
+    "id",
+    "lease_id",
+    "lease_term_id",
+    "version_number",
+    "effective_on",
+    "rule_basis",
+    "grace_period_days",
+    "calculation_basis",
+    "formula_kind",
+    "flat_amount_minor",
+    "percentage_bps",
+    "daily_amount_minor",
+    "max_accrual_days",
+    "per_period_cap_minor",
+    "per_period_min_minor",
+    "minimum_unpaid_threshold_minor",
+    "rounding_mode",
+    "applies_to_prorated_periods",
+    "supersedes_policy_version_id",
+    "notes",
+    "operator_confirmed_at",
+    "operator_confirmed_by_actor",
+    "created_at",
+)
+_ASSESSMENT_IMMUTABLE_COLUMNS = (
+    "id",
+    "lease_id",
+    "rent_expectation_id",
+    "policy_version_id",
+    "occurrence_number",
+    "as_of_date",
+    "accrual_starts_on",
+    "accrual_ends_on",
+    "accrual_days",
+    "assessed_amount_minor",
+    "currency_code",
+    "time_zone",
+    "rule_basis_snapshot",
+    "calculation_snapshot_json",
+    "calculation_snapshot_hash",
+    "processing_acknowledged",
+    "processing_acknowledgment_reason",
+    "internal_notes",
+    "replaces_assessment_id",
+    "assessed_at",
+    "assessed_by_actor",
+)
+
+LATE_FEE_TRIGGERS = {
+    "late_fee_policy_versions_no_delete": (
+        "CREATE TRIGGER late_fee_policy_versions_no_delete BEFORE DELETE "
+        "ON late_fee_policy_versions BEGIN SELECT RAISE(ABORT, 'late fee policy versions are immutable'); END"
+    ),
+    "late_fee_policy_versions_immutable": (
+        "CREATE TRIGGER late_fee_policy_versions_immutable BEFORE UPDATE "
+        "ON late_fee_policy_versions WHEN "
+        + " OR ".join(f"OLD.{col} IS NOT NEW.{col}" for col in _POLICY_IMMUTABLE_COLUMNS)
+        + " OR NOT ("
+        "(OLD.status = 'active' AND NEW.status = 'superseded' AND NEW.voided_at IS NULL AND NEW.void_reason IS NULL) OR "
+        "(OLD.status IN ('active', 'superseded') AND NEW.status = 'voided' AND OLD.ends_on IS NEW.ends_on AND NEW.voided_at IS NOT NULL AND NEW.void_reason IS NOT NULL)"
+        ") BEGIN SELECT RAISE(ABORT, 'late fee policy versions are immutable'); END"
+    ),
+    "late_fee_assessments_no_delete": (
+        "CREATE TRIGGER late_fee_assessments_no_delete BEFORE DELETE "
+        "ON late_fee_assessments BEGIN SELECT RAISE(ABORT, 'late fee assessments are immutable'); END"
+    ),
+    "late_fee_assessments_immutable": (
+        "CREATE TRIGGER late_fee_assessments_immutable BEFORE UPDATE "
+        "ON late_fee_assessments WHEN "
+        "OLD.voided_at IS NOT NULL OR NEW.voided_at IS NULL OR NEW.void_reason IS NULL OR "
+        + " OR ".join(f"OLD.{col} IS NOT NEW.{col}" for col in _ASSESSMENT_IMMUTABLE_COLUMNS)
+        + " BEGIN SELECT RAISE(ABORT, 'late fee assessments are immutable'); END"
+    ),
+    "late_fee_waivers_no_update": (
+        "CREATE TRIGGER late_fee_waivers_no_update BEFORE UPDATE "
+        "ON late_fee_waivers BEGIN SELECT RAISE(ABORT, 'late fee waivers are append-only'); END"
+    ),
+    "late_fee_waivers_no_delete": (
+        "CREATE TRIGGER late_fee_waivers_no_delete BEFORE DELETE "
+        "ON late_fee_waivers BEGIN SELECT RAISE(ABORT, 'late fee waivers are append-only'); END"
+    ),
+}

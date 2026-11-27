@@ -84,7 +84,7 @@ configurable dashboards remain RPT-005, avoiding a circular dependency.
 
 ## FIN-009 — shared late-fee prerequisite
 
-Detailed design: [FIN-009_DESIGN.md](FIN-009_DESIGN.md) (`D1–D15` accepted November 26, 2026; ready for implementation). Implement before accepting late-fee functionality in any portal:
+Detailed design: [FIN-009_DESIGN.md](FIN-009_DESIGN.md) (`D1–D15` accepted November 26, 2026; Slices 1–6 complete November 27, 2026). Implement before accepting late-fee functionality in any portal:
 
 1. Define a versioned source contract linked to the lease: operator-confirmed policy,
    applicability/effective dates, grace boundary, calculation basis, supported fixed or

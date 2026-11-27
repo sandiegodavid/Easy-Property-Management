@@ -13,11 +13,14 @@ import { RentExpectationDetail } from "./rent-expectation-detail";
 import { RentReceiptDetail } from "./rent-receipt-detail";
 import { ExpenseDetail, ExpenseCategoryDetail } from "./expense-detail";
 import { EvidenceItem } from "./evidence-item";
+import { LateFeeReceiptActions } from "./late-fees";
 import { moneyDetailFields, moneyChildFields } from "./money-detail-fields";
 
 export type MoneyKind =
   | "expectation"
   | "receipt"
+  | "late_fee_receipt"
+  | "late_fee_assessment"
   | "expense"
   | "check"
   | "report"
@@ -55,6 +58,24 @@ export async function loadMoneyRecord(
           await api.GET("/api/rent-receipts/{receipt_id}", {
             signal,
             params: { path: { receipt_id: id } },
+          }),
+        ),
+      );
+    case "late_fee_receipt":
+      return record(
+        readResult(
+          await api.GET("/api/late-fee-receipts/{receipt_id}", {
+            signal,
+            params: { path: { receipt_id: id } },
+          }),
+        ),
+      );
+    case "late_fee_assessment":
+      return record(
+        readResult(
+          await api.GET("/api/late-fee-assessments/{assessment_id}", {
+            signal,
+            params: { path: { assessment_id: id } },
           }),
         ),
       );
@@ -181,12 +202,16 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
               ? "Paid expense"
               : kind === "receipt"
                 ? "Rent payment"
-                : ({
-                    check: "Scheduled check",
-                    report: "Owner report",
-                    deposit: "Deposit account",
-                    settlement: "Settlement",
-                  }[kind] ?? label(kind))}
+                : kind === "late_fee_receipt"
+                  ? "Late-fee payment"
+                  : kind === "late_fee_assessment"
+                    ? "Late-fee assessment"
+                    : ({
+                        check: "Scheduled check",
+                        report: "Owner report",
+                        deposit: "Deposit account",
+                        settlement: "Settlement",
+                      }[kind] ?? label(kind))}
       </h2>
       {kind === "expectation" ? (
         <RentExpectationDetail item={item} />
@@ -213,16 +238,18 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
         />
       )}
       {kind === "check" && <CheckContext check={item} />}
-      {(kind === "check" || kind === "settlement") && (
+      {(kind === "check" || kind === "settlement" || kind === "late_fee_assessment") && (
         <nav aria-label="Correction history">
           {(kind === "check"
             ? ["replacesPrepaidCheckId", "replacedByPrepaidCheckId"]
-            : ["replacesSettlementId", "replacedBySettlementId"]
+            : kind === "settlement"
+              ? ["replacesSettlementId", "replacedBySettlementId"]
+              : ["replacesAssessmentId", "replacedByAssessmentId"]
           ).map((key, index) =>
             item[key] ? (
               <Link key={key} to={moneyRecordUrl(kind, scalar(item[key]))}>
                 {index === 0 ? "Previous" : "Replacement"}{" "}
-                {kind === "check" ? "check" : "settlement"}
+                {kind === "check" ? "check" : kind === "settlement" ? "settlement" : "assessment"}
               </Link>
             ) : null,
           )}
@@ -277,6 +304,14 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
         <Link to={`${workflowUrl("finance.rent_receipt.create", leaseId)}&replacesReceiptId=${id}`}>
           Record replacement rent receipt
         </Link>
+      )}
+      {kind === "late_fee_receipt" && (
+        <LateFeeReceiptActions
+          receipt={item}
+          onMutated={() => {
+            void query.refetch();
+          }}
+        />
       )}
       {kind === "category" && (
         <CommandLinks
@@ -595,6 +630,8 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
           {
             expectation: "rent_expectation",
             receipt: "rent_receipt",
+            late_fee_receipt: "late_fee_receipt",
+            late_fee_assessment: "late_fee_assessment",
             expense: "expense",
             check: "prepaid_check",
             report: "owner_rent_report",

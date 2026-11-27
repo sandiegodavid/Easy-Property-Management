@@ -1273,6 +1273,92 @@
         "title": "AreaRequest",
         "type": "object"
       },
+      "AssessLateFeeInput": {
+        "additionalProperties": false,
+        "properties": {
+          "acknowledgeProcessingPayments": {
+            "default": false,
+            "title": "Acknowledgeprocessingpayments",
+            "type": "boolean"
+          },
+          "asOfDate": {
+            "format": "date",
+            "title": "Asofdate",
+            "type": "string"
+          },
+          "expectedRevision": {
+            "minimum": 0.0,
+            "title": "Expectedrevision",
+            "type": "integer"
+          },
+          "idempotencyKey": {
+            "format": "uuid",
+            "title": "Idempotencykey",
+            "type": "string"
+          },
+          "internalNotes": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Internalnotes"
+          },
+          "operatorConfirmed": {
+            "title": "Operatorconfirmed",
+            "type": "boolean"
+          },
+          "previewFingerprint": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Previewfingerprint",
+            "type": "string"
+          },
+          "processingAcknowledgmentReason": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processingacknowledgmentreason"
+          },
+          "rentExpectationId": {
+            "format": "uuid",
+            "title": "Rentexpectationid",
+            "type": "string"
+          },
+          "replacesAssessmentId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacesassessmentid"
+          }
+        },
+        "required": [
+          "expectedRevision",
+          "idempotencyKey",
+          "rentExpectationId",
+          "asOfDate",
+          "previewFingerprint",
+          "operatorConfirmed"
+        ],
+        "title": "AssessLateFeeInput",
+        "type": "object"
+      },
       "AssignmentArchiveInput": {
         "additionalProperties": false,
         "properties": {
@@ -2652,6 +2738,48 @@
         "title": "BootstrapResponse",
         "type": "object"
       },
+      "CalculationStepResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "expression": {
+            "title": "Expression",
+            "type": "string"
+          },
+          "inputs": {
+            "additionalProperties": true,
+            "title": "Inputs",
+            "type": "object"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "resultMinor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resultminor"
+          },
+          "stepCode": {
+            "title": "Stepcode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stepCode",
+          "label",
+          "inputs",
+          "resultMinor",
+          "expression"
+        ],
+        "title": "CalculationStepResponse",
+        "type": "object"
+      },
       "Capture": {
         "additionalProperties": false,
         "properties": {
@@ -3173,6 +3301,316 @@
           "scope"
         ],
         "title": "CollectionTarget",
+        "type": "object"
+      },
+      "CombinedReceiptMutationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "currencyCode": {
+            "const": "USD",
+            "title": "Currencycode",
+            "type": "string"
+          },
+          "lateFeeAmountMinor": {
+            "minimum": 1.0,
+            "title": "Latefeeamountminor",
+            "type": "integer"
+          },
+          "lateFeeReceipt": {
+            "$ref": "#/components/schemas/LateFeeReceiptResponse"
+          },
+          "leaseId": {
+            "format": "uuid",
+            "title": "Leaseid",
+            "type": "string"
+          },
+          "operationId": {
+            "format": "uuid",
+            "title": "Operationid",
+            "type": "string"
+          },
+          "paymentBatchId": {
+            "format": "uuid",
+            "title": "Paymentbatchid",
+            "type": "string"
+          },
+          "receivedOn": {
+            "format": "date",
+            "title": "Receivedon",
+            "type": "string"
+          },
+          "rentAmountMinor": {
+            "minimum": 1.0,
+            "title": "Rentamountminor",
+            "type": "integer"
+          },
+          "rentLedgerRevision": {
+            "minimum": 0.0,
+            "title": "Rentledgerrevision",
+            "type": "integer"
+          },
+          "rentReceipt": {
+            "$ref": "#/components/schemas/CombinedRentReceiptResponse"
+          },
+          "totalAmountMinor": {
+            "minimum": 2.0,
+            "title": "Totalamountminor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "paymentBatchId",
+          "leaseId",
+          "receivedOn",
+          "rentAmountMinor",
+          "lateFeeAmountMinor",
+          "totalAmountMinor",
+          "currencyCode",
+          "rentReceipt",
+          "lateFeeReceipt",
+          "rentLedgerRevision",
+          "operationId"
+        ],
+        "title": "CombinedReceiptMutationResponse",
+        "type": "object"
+      },
+      "CombinedRentAllocationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "amountMinor": {
+            "minimum": 1.0,
+            "title": "Amountminor",
+            "type": "integer"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "expectationId": {
+            "format": "uuid",
+            "title": "Expectationid",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "receiptId": {
+            "format": "uuid",
+            "title": "Receiptid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "receiptId",
+          "expectationId",
+          "amountMinor",
+          "createdAt"
+        ],
+        "title": "CombinedRentAllocationResponse",
+        "type": "object"
+      },
+      "CombinedRentReceiptResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "allocations": {
+            "items": {
+              "$ref": "#/components/schemas/CombinedRentAllocationResponse"
+            },
+            "title": "Allocations",
+            "type": "array"
+          },
+          "amountMinor": {
+            "minimum": 1.0,
+            "title": "Amountminor",
+            "type": "integer"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "currencyCode": {
+            "const": "USD",
+            "title": "Currencycode",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "idempotencyKey": {
+            "format": "uuid",
+            "title": "Idempotencykey",
+            "type": "string"
+          },
+          "leaseId": {
+            "format": "uuid",
+            "title": "Leaseid",
+            "type": "string"
+          },
+          "maskedReference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maskedreference"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "otherPaymentMethodNote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Otherpaymentmethodnote"
+          },
+          "paymentBatchId": {
+            "format": "uuid",
+            "title": "Paymentbatchid",
+            "type": "string"
+          },
+          "paymentMethodKind": {
+            "enum": [
+              "automatic_bank_payment",
+              "bank_transfer",
+              "check",
+              "cash",
+              "online_payment",
+              "other"
+            ],
+            "title": "Paymentmethodkind",
+            "type": "string"
+          },
+          "paymentMethodLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paymentmethodlabel"
+          },
+          "receivedByPartyId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receivedbypartyid"
+          },
+          "receivedOn": {
+            "format": "date",
+            "title": "Receivedon",
+            "type": "string"
+          },
+          "rentLedgerRevision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rentledgerrevision"
+          },
+          "replacedByReceiptId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacedbyreceiptid"
+          },
+          "replacesReceiptId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacesreceiptid"
+          },
+          "voidReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voidreason"
+          },
+          "voidedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voidedat"
+          }
+        },
+        "required": [
+          "id",
+          "leaseId",
+          "idempotencyKey",
+          "paymentBatchId",
+          "receivedOn",
+          "amountMinor",
+          "currencyCode",
+          "paymentMethodKind",
+          "paymentMethodLabel",
+          "maskedReference",
+          "otherPaymentMethodNote",
+          "receivedByPartyId",
+          "replacesReceiptId",
+          "notes",
+          "voidedAt",
+          "voidReason",
+          "createdAt",
+          "allocations"
+        ],
+        "title": "CombinedRentReceiptResponse",
         "type": "object"
       },
       "CommandConflictDetail": {
@@ -8511,6 +8949,220 @@
         "title": "CreateInput",
         "type": "object"
       },
+      "CreateLateFeePolicyInput": {
+        "additionalProperties": false,
+        "properties": {
+          "appliesToProratedPeriods": {
+            "title": "Appliestoproratedperiods",
+            "type": "boolean"
+          },
+          "calculationBasis": {
+            "enum": [
+              "unpaid_rent_at_grace_end",
+              "current_unpaid_rent",
+              "scheduled_rent"
+            ],
+            "title": "Calculationbasis",
+            "type": "string"
+          },
+          "dailyAmountMinor": {
+            "anyOf": [
+              {
+                "maximum": 9999999999.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dailyamountminor"
+          },
+          "effectiveOn": {
+            "format": "date",
+            "title": "Effectiveon",
+            "type": "string"
+          },
+          "endsOn": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endson"
+          },
+          "expectedRevision": {
+            "minimum": 0.0,
+            "title": "Expectedrevision",
+            "type": "integer"
+          },
+          "flatAmountMinor": {
+            "anyOf": [
+              {
+                "maximum": 9999999999.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flatamountminor"
+          },
+          "formulaKind": {
+            "enum": [
+              "fixed_flat",
+              "percentage_once",
+              "daily_flat",
+              "fixed_plus_daily_flat"
+            ],
+            "title": "Formulakind",
+            "type": "string"
+          },
+          "gracePeriodDays": {
+            "maximum": 60.0,
+            "minimum": 0.0,
+            "title": "Graceperioddays",
+            "type": "integer"
+          },
+          "idempotencyKey": {
+            "format": "uuid",
+            "title": "Idempotencykey",
+            "type": "string"
+          },
+          "leaseTermId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Leasetermid"
+          },
+          "maxAccrualDays": {
+            "anyOf": [
+              {
+                "maximum": 365.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maxaccrualdays"
+          },
+          "minimumUnpaidThresholdMinor": {
+            "default": 0,
+            "maximum": 9999999999.0,
+            "minimum": 0.0,
+            "title": "Minimumunpaidthresholdminor",
+            "type": "integer"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "operatorConfirmed": {
+            "title": "Operatorconfirmed",
+            "type": "boolean"
+          },
+          "perPeriodCapMinor": {
+            "anyOf": [
+              {
+                "maximum": 9999999999.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Perperiodcapminor"
+          },
+          "perPeriodMinMinor": {
+            "anyOf": [
+              {
+                "maximum": 9999999999.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Perperiodminminor"
+          },
+          "percentageBps": {
+            "anyOf": [
+              {
+                "maximum": 10000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percentagebps"
+          },
+          "roundingMode": {
+            "enum": [
+              "half_up",
+              "floor"
+            ],
+            "title": "Roundingmode",
+            "type": "string"
+          },
+          "ruleBasis": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Rulebasis",
+            "type": "string"
+          },
+          "supersedesPolicyVersionId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedespolicyversionid"
+          }
+        },
+        "required": [
+          "expectedRevision",
+          "idempotencyKey",
+          "effectiveOn",
+          "ruleBasis",
+          "gracePeriodDays",
+          "calculationBasis",
+          "formulaKind",
+          "roundingMode",
+          "appliesToProratedPeriods",
+          "operatorConfirmed"
+        ],
+        "title": "CreateLateFeePolicyInput",
+        "type": "object"
+      },
       "CreateProviderInput": {
         "additionalProperties": false,
         "properties": {
@@ -9880,7 +10532,6 @@
         "type": "object"
       },
       "DepositActivity": {
-        "additionalProperties": false,
         "properties": {
           "approved_settlement_count": {
             "title": "Approved Settlement Count",
@@ -10273,7 +10924,6 @@
         "type": "object"
       },
       "DepositObligations": {
-        "additionalProperties": false,
         "properties": {
           "account_count": {
             "title": "Account Count",
@@ -15361,7 +16011,6 @@
         "type": "object"
       },
       "Filters": {
-        "additionalProperties": false,
         "properties": {
           "from_on": {
             "title": "From On",
@@ -18265,6 +18914,2351 @@
         "type": "object"
       },
       "JsonValue": {},
+      "LateFeeAllocationSummaryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "allocationId": {
+            "format": "uuid",
+            "title": "Allocationid",
+            "type": "string"
+          },
+          "amountMinor": {
+            "minimum": 1.0,
+            "title": "Amountminor",
+            "type": "integer"
+          },
+          "receiptId": {
+            "format": "uuid",
+            "title": "Receiptid",
+            "type": "string"
+          },
+          "receiptLifecycleStatus": {
+            "enum": [
+              "active",
+              "voided"
+            ],
+            "title": "Receiptlifecyclestatus",
+            "type": "string"
+          },
+          "receivedOn": {
+            "format": "date",
+            "title": "Receivedon",
+            "type": "string"
+          }
+        },
+        "required": [
+          "allocationId",
+          "receiptId",
+          "receivedOn",
+          "amountMinor",
+          "receiptLifecycleStatus"
+        ],
+        "title": "LateFeeAllocationSummaryResponse",
+        "type": "object"
+      },
+      "LateFeeAssessmentDetailResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "accrualDays": {
+            "minimum": 1.0,
+            "title": "Accrualdays",
+            "type": "integer"
+          },
+          "accrualEndsOn": {
+            "format": "date",
+            "title": "Accrualendson",
+            "type": "string"
+          },
+          "accrualStartsOn": {
+            "format": "date",
+            "title": "Accrualstartson",
+            "type": "string"
+          },
+          "allocations": {
+            "items": {
+              "$ref": "#/components/schemas/LateFeeAllocationSummaryResponse"
+            },
+            "title": "Allocations",
+            "type": "array"
+          },
+          "asOfDate": {
+            "format": "date",
+            "title": "Asofdate",
+            "type": "string"
+          },
+          "assessedAmountMinor": {
+            "minimum": 1.0,
+            "title": "Assessedamountminor",
+            "type": "integer"
+          },
+          "assessedAt": {
+            "format": "date-time",
+            "title": "Assessedat",
+            "type": "string"
+          },
+          "assessedByActor": {
+            "title": "Assessedbyactor",
+            "type": "string"
+          },
+          "calculationSnapshot": {
+            "additionalProperties": true,
+            "title": "Calculationsnapshot",
+            "type": "object"
+          },
+          "calculationSnapshotHash": {
+            "title": "Calculationsnapshothash",
+            "type": "string"
+          },
+          "calculationSteps": {
+            "items": {
+              "$ref": "#/components/schemas/CalculationStepResponse"
+            },
+            "title": "Calculationsteps",
+            "type": "array"
+          },
+          "currencyCode": {
+            "const": "USD",
+            "title": "Currencycode",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "internalNotes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Internalnotes"
+          },
+          "leaseId": {
+            "format": "uuid",
+            "title": "Leaseid",
+            "type": "string"
+          },
+          "occurrenceNumber": {
+            "minimum": 1.0,
+            "title": "Occurrencenumber",
+            "type": "integer"
+          },
+          "paidAmountMinor": {
+            "minimum": 0.0,
+            "title": "Paidamountminor",
+            "type": "integer"
+          },
+          "policyVersionId": {
+            "format": "uuid",
+            "title": "Policyversionid",
+            "type": "string"
+          },
+          "processingAcknowledged": {
+            "title": "Processingacknowledged",
+            "type": "boolean"
+          },
+          "processingAcknowledgmentReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processingacknowledgmentreason"
+          },
+          "remainingBalanceMinor": {
+            "minimum": 0.0,
+            "title": "Remainingbalanceminor",
+            "type": "integer"
+          },
+          "rentExpectationId": {
+            "format": "uuid",
+            "title": "Rentexpectationid",
+            "type": "string"
+          },
+          "rentLedgerRevision": {
+            "minimum": 0.0,
+            "title": "Rentledgerrevision",
+            "type": "integer"
+          },
+          "replacedByAssessmentId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacedbyassessmentid"
+          },
+          "replacesAssessmentId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacesassessmentid"
+          },
+          "ruleBasisSnapshot": {
+            "title": "Rulebasissnapshot",
+            "type": "string"
+          },
+          "settlementStatus": {
+            "enum": [
+              "unpaid",
+              "partially_paid",
+              "paid",
+              "waived",
+              "voided"
+            ],
+            "title": "Settlementstatus",
+            "type": "string"
+          },
+          "sourceDriftWarning": {
+            "title": "Sourcedriftwarning",
+            "type": "boolean"
+          },
+          "timeZone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "voidReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voidreason"
+          },
+          "voidedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voidedat"
+          },
+          "waivedAmountMinor": {
+            "minimum": 0.0,
+            "title": "Waivedamountminor",
+            "type": "integer"
+          },
+          "waivers": {
+            "items": {
+              "$ref": "#/components/schemas/LateFeeWaiverResponse"
+            },
+            "title": "Waivers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "leaseId",
+          "rentExpectationId",
+          "policyVersionId",
+          "occurrenceNumber",
+          "asOfDate",
+          "accrualStartsOn",
+          "accrualEndsOn",
+          "accrualDays",
+          "assessedAmountMinor",
+          "waivedAmountMinor",
+          "paidAmountMinor",
+          "remainingBalanceMinor",
+          "settlementStatus",
+          "currencyCode",
+          "timeZone",
+          "ruleBasisSnapshot",
+          "processingAcknowledged",
+          "processingAcknowledgmentReason",
+          "internalNotes",
+          "replacesAssessmentId",
+          "replacedByAssessmentId",
+          "voidedAt",
+          "voidReason",
+          "assessedAt",
+          "assessedByActor",
+          "sourceDriftWarning",
+          "calculationSnapshotHash",
+          "calculationSnapshot",
+          "calculationSteps",
+          "waivers",
+          "allocations",
+          "rentLedgerRevision"
+        ],
+        "title": "LateFeeAssessmentDetailResponse",
+        "type": "object"
+      },
+      "LateFeeAssessmentMutationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "accrualDays": {
+            "minimum": 1.0,
+            "title": "Accrualdays",
+            "type": "integer"
+          },
+          "accrualEndsOn": {
+            "format": "date",
+            "title": "Accrualendson",
+            "type": "string"
+          },
+          "accrualStartsOn": {
+            "format": "date",
+            "title": "Accrualstartson",
+            "type": "string"
+          },
+          "allocations": {
+            "items": {
+              "$ref": "#/components/schemas/LateFeeAllocationSummaryResponse"
+            },
+            "title": "Allocations",
+            "type": "array"
+          },
+          "asOfDate": {
+            "format": "date",
+            "title": "Asofdate",
+            "type": "string"
+          },
+          "assessedAmountMinor": {
+            "minimum": 1.0,
+            "title": "Assessedamountminor",
+            "type": "integer"
+          },
+          "assessedAt": {
+            "format": "date-time",
+            "title": "Assessedat",
+            "type": "string"
+          },
+          "assessedByActor": {
+            "title": "Assessedbyactor",
+            "type": "string"
+          },
+          "calculationSnapshot": {
+            "additionalProperties": true,
+            "title": "Calculationsnapshot",
+            "type": "object"
+          },
+          "calculationSnapshotHash": {
+            "title": "Calculationsnapshothash",
+            "type": "string"
+          },
+          "calculationSteps": {
+            "items": {
+              "$ref": "#/components/schemas/CalculationStepResponse"
+            },
+            "title": "Calculationsteps",
+            "type": "array"
+          },
+          "currencyCode": {
+            "const": "USD",
+            "title": "Currencycode",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "internalNotes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Internalnotes"
+          },
+          "leaseId": {
+            "format": "uuid",
+            "title": "Leaseid",
+            "type": "string"
+          },
+          "occurrenceNumber": {
+            "minimum": 1.0,
+            "title": "Occurrencenumber",
+            "type": "integer"
+          },
+          "operationId": {
+            "format": "uuid",
+            "title": "Operationid",
+            "type": "string"
+          },
+          "paidAmountMinor": {
+            "minimum": 0.0,
+            "title": "Paidamountminor",
+            "type": "integer"
+          },
+          "policyVersionId": {
+            "format": "uuid",
+            "title": "Policyversionid",
+            "type": "string"
+          },
+          "processingAcknowledged": {
+            "title": "Processingacknowledged",
+            "type": "boolean"
+          },
+          "processingAcknowledgmentReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processingacknowledgmentreason"
+          },
+          "remainingBalanceMinor": {
+            "minimum": 0.0,
+            "title": "Remainingbalanceminor",
+            "type": "integer"
+          },
+          "rentExpectationId": {
+            "format": "uuid",
+            "title": "Rentexpectationid",
+            "type": "string"
+          },
+          "rentLedgerRevision": {
+            "minimum": 0.0,
+            "title": "Rentledgerrevision",
+            "type": "integer"
+          },
+          "replacedByAssessmentId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacedbyassessmentid"
+          },
+          "replacesAssessmentId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacesassessmentid"
+          },
+          "ruleBasisSnapshot": {
+            "title": "Rulebasissnapshot",
+            "type": "string"
+          },
+          "settlementStatus": {
+            "enum": [
+              "unpaid",
+              "partially_paid",
+              "paid",
+              "waived",
+              "voided"
+            ],
+            "title": "Settlementstatus",
+            "type": "string"
+          },
+          "sourceDriftWarning": {
+            "title": "Sourcedriftwarning",
+            "type": "boolean"
+          },
+          "timeZone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "voidReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voidreason"
+          },
+          "voidedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voidedat"
+          },
+          "waivedAmountMinor": {
+            "minimum": 0.0,
+            "title": "Waivedamountminor",
+            "type": "integer"
+          },
+          "waivers": {
+            "items": {
+              "$ref": "#/components/schemas/LateFeeWaiverResponse"
+            },
+            "title": "Waivers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "leaseId",
+          "rentExpectationId",
+          "policyVersionId",
+          "occurrenceNumber",
+          "asOfDate",
+          "accrualStartsOn",
+          "accrualEndsOn",
+          "accrualDays",
+          "assessedAmountMinor",
+          "waivedAmountMinor",
+          "paidAmountMinor",
+          "remainingBalanceMinor",
+          "settlementStatus",
+          "currencyCode",
+          "timeZone",
+          "ruleBasisSnapshot",
+          "processingAcknowledged",
+          "processingAcknowledgmentReason",
+          "internalNotes",
+          "replacesAssessmentId",
+          "replacedByAssessmentId",
+          "voidedAt",
+          "voidReason",
+          "assessedAt",
+          "assessedByActor",
+          "sourceDriftWarning",
+          "calculationSnapshotHash",
+          "calculationSnapshot",
+          "calculationSteps",
+          "waivers",
+          "allocations",
+          "rentLedgerRevision",
+          "operationId"
+        ],
+        "title": "LateFeeAssessmentMutationResponse",
+        "type": "object"
+      },
+      "LateFeeAssessmentPageResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LateFeeAssessmentSummaryResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextcursor"
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "title": "LateFeeAssessmentPageResponse",
+        "type": "object"
+      },
+      "LateFeeAssessmentSummaryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "accrualDays": {
+            "minimum": 1.0,
+            "title": "Accrualdays",
+            "type": "integer"
+          },
+          "accrualEndsOn": {
+            "format": "date",
+            "title": "Accrualendson",
+            "type": "string"
+          },
+          "accrualStartsOn": {
+            "format": "date",
+            "title": "Accrualstartson",
+            "type": "string"
+          },
+          "asOfDate": {
+            "format": "date",
+            "title": "Asofdate",
+            "type": "string"
+          },
+          "assessedAmountMinor": {
+            "minimum": 1.0,
+            "title": "Assessedamountminor",
+            "type": "integer"
+          },
+          "assessedAt": {
+            "format": "date-time",
+            "title": "Assessedat",
+            "type": "string"
+          },
+          "assessedByActor": {
+            "title": "Assessedbyactor",
+            "type": "string"
+          },
+          "currencyCode": {
+            "const": "USD",
+            "title": "Currencycode",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "internalNotes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Internalnotes"
+          },
+          "leaseId": {
+            "format": "uuid",
+            "title": "Leaseid",
+            "type": "string"
+          },
+          "occurrenceNumber": {
+            "minimum": 1.0,
+            "title": "Occurrencenumber",
+            "type": "integer"
+          },
+          "paidAmountMinor": {
+            "minimum": 0.0,
+            "title": "Paidamountminor",
+            "type": "integer"
+          },
+          "policyVersionId": {
+            "format": "uuid",
+            "title": "Policyversionid",
+            "type": "string"
+          },
+          "processingAcknowledged": {
+            "title": "Processingacknowledged",
+            "type": "boolean"
+          },
+          "processingAcknowledgmentReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processingacknowledgmentreason"
+          },
+          "remainingBalanceMinor": {
+            "minimum": 0.0,
+            "title": "Remainingbalanceminor",
+            "type": "integer"
+          },
+          "rentExpectationId": {
+            "format": "uuid",
+            "title": "Rentexpectationid",
+            "type": "string"
+          },
+          "replacedByAssessmentId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacedbyassessmentid"
+          },
+          "replacesAssessmentId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacesassessmentid"
+          },
+          "ruleBasisSnapshot": {
+            "title": "Rulebasissnapshot",
+            "type": "string"
+          },
+          "settlementStatus": {
+            "enum": [
+              "unpaid",
+              "partially_paid",
+              "paid",
+              "waived",
+              "voided"
+            ],
+            "title": "Settlementstatus",
+            "type": "string"
+          },
+          "sourceDriftWarning": {
+            "title": "Sourcedriftwarning",
+            "type": "boolean"
+          },
+          "timeZone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "voidReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voidreason"
+          },
+          "voidedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voidedat"
+          },
+          "waivedAmountMinor": {
+            "minimum": 0.0,
+            "title": "Waivedamountminor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "leaseId",
+          "rentExpectationId",
+          "policyVersionId",
+          "occurrenceNumber",
+          "asOfDate",
+          "accrualStartsOn",
+          "accrualEndsOn",
+          "accrualDays",
+          "assessedAmountMinor",
+          "waivedAmountMinor",
+          "paidAmountMinor",
+          "remainingBalanceMinor",
+          "settlementStatus",
+          "currencyCode",
+          "timeZone",
+          "ruleBasisSnapshot",
+          "processingAcknowledged",
+          "processingAcknowledgmentReason",
+          "internalNotes",
+          "replacesAssessmentId",
+          "replacedByAssessmentId",
+          "voidedAt",
+          "voidReason",
+          "assessedAt",
+          "assessedByActor",
+          "sourceDriftWarning"
+        ],
+        "title": "LateFeeAssessmentSummaryResponse",
+        "type": "object"
+      },
+      "LateFeePolicyListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LateFeePolicyResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "leaseId": {
+            "format": "uuid",
+            "title": "Leaseid",
+            "type": "string"
+          },
+          "rentLedgerRevision": {
+            "minimum": 0.0,
+            "title": "Rentledgerrevision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "leaseId",
+          "rentLedgerRevision",
+          "items"
+        ],
+        "title": "LateFeePolicyListResponse",
+        "type": "object"
+      },
+      "LateFeePolicyMutationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "appliesToProratedPeriods": {
+            "title": "Appliestoproratedperiods",
+            "type": "boolean"
+          },
+          "calculationBasis": {
+            "enum": [
+              "unpaid_rent_at_grace_end",
+              "current_unpaid_rent",
+              "scheduled_rent"
+            ],
+            "title": "Calculationbasis",
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "dailyAmountMinor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dailyamountminor"
+          },
+          "effectiveOn": {
+            "format": "date",
+            "title": "Effectiveon",
+            "type": "string"
+          },
+          "endsOn": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endson"
+          },
+          "flatAmountMinor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flatamountminor"
+          },
+          "formulaKind": {
+            "enum": [
+              "fixed_flat",
+              "percentage_once",
+              "daily_flat",
+              "fixed_plus_daily_flat"
+            ],
+            "title": "Formulakind",
+            "type": "string"
+          },
+          "gracePeriodDays": {
+            "title": "Graceperioddays",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "leaseId": {
+            "format": "uuid",
+            "title": "Leaseid",
+            "type": "string"
+          },
+          "leaseTermId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Leasetermid"
+          },
+          "maxAccrualDays": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maxaccrualdays"
+          },
+          "minimumUnpaidThresholdMinor": {
+            "title": "Minimumunpaidthresholdminor",
+            "type": "integer"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "operationId": {
+            "format": "uuid",
+            "title": "Operationid",
+            "type": "string"
+          },
+          "operatorConfirmedAt": {
+            "format": "date-time",
+            "title": "Operatorconfirmedat",
+            "type": "string"
+          },
+          "operatorConfirmedByActor": {
+            "title": "Operatorconfirmedbyactor",
+            "type": "string"
+          },
+          "perPeriodCapMinor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Perperiodcapminor"
+          },
+          "perPeriodMinMinor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Perperiodminminor"
+          },
+          "percentageBps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percentagebps"
+          },
+          "rentLedgerRevision": {
+            "minimum": 0.0,
+            "title": "Rentledgerrevision",
+            "type": "integer"
+          },
+          "roundingMode": {
+            "enum": [
+              "half_up",
+              "floor"
+            ],
+            "title": "Roundingmode",
+            "type": "string"
+          },
+          "ruleBasis": {
+            "title": "Rulebasis",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "superseded",
+              "voided"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "supersedesPolicyVersionId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedespolicyversionid"
+          },
+          "versionNumber": {
+            "minimum": 1.0,
+            "title": "Versionnumber",
+            "type": "integer"
+          },
+          "voidReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voidreason"
+          },
+          "voidedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voidedat"
+          }
+        },
+        "required": [
+          "id",
+          "leaseId",
+          "leaseTermId",
+          "versionNumber",
+          "effectiveOn",
+          "endsOn",
+          "ruleBasis",
+          "gracePeriodDays",
+          "calculationBasis",
+          "formulaKind",
+          "flatAmountMinor",
+          "percentageBps",
+          "dailyAmountMinor",
+          "maxAccrualDays",
+          "perPeriodCapMinor",
+          "perPeriodMinMinor",
+          "minimumUnpaidThresholdMinor",
+          "roundingMode",
+          "appliesToProratedPeriods",
+          "status",
+          "supersedesPolicyVersionId",
+          "notes",
+          "operatorConfirmedAt",
+          "operatorConfirmedByActor",
+          "voidedAt",
+          "voidReason",
+          "createdAt",
+          "rentLedgerRevision",
+          "operationId"
+        ],
+        "title": "LateFeePolicyMutationResponse",
+        "type": "object"
+      },
+      "LateFeePolicyResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "appliesToProratedPeriods": {
+            "title": "Appliestoproratedperiods",
+            "type": "boolean"
+          },
+          "calculationBasis": {
+            "enum": [
+              "unpaid_rent_at_grace_end",
+              "current_unpaid_rent",
+              "scheduled_rent"
+            ],
+            "title": "Calculationbasis",
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "dailyAmountMinor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dailyamountminor"
+          },
+          "effectiveOn": {
+            "format": "date",
+            "title": "Effectiveon",
+            "type": "string"
+          },
+          "endsOn": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endson"
+          },
+          "flatAmountMinor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flatamountminor"
+          },
+          "formulaKind": {
+            "enum": [
+              "fixed_flat",
+              "percentage_once",
+              "daily_flat",
+              "fixed_plus_daily_flat"
+            ],
+            "title": "Formulakind",
+            "type": "string"
+          },
+          "gracePeriodDays": {
+            "title": "Graceperioddays",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "leaseId": {
+            "format": "uuid",
+            "title": "Leaseid",
+            "type": "string"
+          },
+          "leaseTermId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Leasetermid"
+          },
+          "maxAccrualDays": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maxaccrualdays"
+          },
+          "minimumUnpaidThresholdMinor": {
+            "title": "Minimumunpaidthresholdminor",
+            "type": "integer"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "operatorConfirmedAt": {
+            "format": "date-time",
+            "title": "Operatorconfirmedat",
+            "type": "string"
+          },
+          "operatorConfirmedByActor": {
+            "title": "Operatorconfirmedbyactor",
+            "type": "string"
+          },
+          "perPeriodCapMinor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Perperiodcapminor"
+          },
+          "perPeriodMinMinor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Perperiodminminor"
+          },
+          "percentageBps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percentagebps"
+          },
+          "roundingMode": {
+            "enum": [
+              "half_up",
+              "floor"
+            ],
+            "title": "Roundingmode",
+            "type": "string"
+          },
+          "ruleBasis": {
+            "title": "Rulebasis",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "superseded",
+              "voided"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "supersedesPolicyVersionId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedespolicyversionid"
+          },
+          "versionNumber": {
+            "minimum": 1.0,
+            "title": "Versionnumber",
+            "type": "integer"
+          },
+          "voidReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voidreason"
+          },
+          "voidedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voidedat"
+          }
+        },
+        "required": [
+          "id",
+          "leaseId",
+          "leaseTermId",
+          "versionNumber",
+          "effectiveOn",
+          "endsOn",
+          "ruleBasis",
+          "gracePeriodDays",
+          "calculationBasis",
+          "formulaKind",
+          "flatAmountMinor",
+          "percentageBps",
+          "dailyAmountMinor",
+          "maxAccrualDays",
+          "perPeriodCapMinor",
+          "perPeriodMinMinor",
+          "minimumUnpaidThresholdMinor",
+          "roundingMode",
+          "appliesToProratedPeriods",
+          "status",
+          "supersedesPolicyVersionId",
+          "notes",
+          "operatorConfirmedAt",
+          "operatorConfirmedByActor",
+          "voidedAt",
+          "voidReason",
+          "createdAt"
+        ],
+        "title": "LateFeePolicyResponse",
+        "type": "object"
+      },
+      "LateFeePreviewInput": {
+        "additionalProperties": false,
+        "properties": {
+          "asOfDate": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asofdate"
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor"
+          },
+          "rentExpectationId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rentexpectationid"
+          }
+        },
+        "title": "LateFeePreviewInput",
+        "type": "object"
+      },
+      "LateFeePreviewItemResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "accrualDays": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accrualdays"
+          },
+          "accrualEndsOn": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accrualendson"
+          },
+          "accrualStartsOn": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accrualstartson"
+          },
+          "basisAmountMinor": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basisamountminor"
+          },
+          "calculatedAmountMinor": {
+            "minimum": 0.0,
+            "title": "Calculatedamountminor",
+            "type": "integer"
+          },
+          "calculationBasis": {
+            "anyOf": [
+              {
+                "enum": [
+                  "unpaid_rent_at_grace_end",
+                  "current_unpaid_rent",
+                  "scheduled_rent"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calculationbasis"
+          },
+          "calculationSnapshot": {
+            "additionalProperties": true,
+            "title": "Calculationsnapshot",
+            "type": "object"
+          },
+          "calculationSteps": {
+            "items": {
+              "$ref": "#/components/schemas/CalculationStepResponse"
+            },
+            "title": "Calculationsteps",
+            "type": "array"
+          },
+          "currencyCode": {
+            "const": "USD",
+            "title": "Currencycode",
+            "type": "string"
+          },
+          "dueOn": {
+            "format": "date",
+            "title": "Dueon",
+            "type": "string"
+          },
+          "eligibilityStatus": {
+            "enum": [
+              "eligible",
+              "no_applicable_policy",
+              "excluded_prorated_period",
+              "within_grace_period",
+              "paid_in_full",
+              "below_minimum_threshold",
+              "already_assessed",
+              "already_assessed_through_date",
+              "max_accrual_days_reached",
+              "period_cap_reached",
+              "calculated_zero"
+            ],
+            "title": "Eligibilitystatus",
+            "type": "string"
+          },
+          "expectedAmountMinor": {
+            "exclusiveMinimum": 0.0,
+            "title": "Expectedamountminor",
+            "type": "integer"
+          },
+          "firstEligibleOn": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firsteligibleon"
+          },
+          "formulaKind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "fixed_flat",
+                  "percentage_once",
+                  "daily_flat",
+                  "fixed_plus_daily_flat"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Formulakind"
+          },
+          "graceEndsOn": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graceendson"
+          },
+          "isProrated": {
+            "title": "Isprorated",
+            "type": "boolean"
+          },
+          "occurrenceNumber": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurrencenumber"
+          },
+          "paidAfterGraceThroughAsOfMinor": {
+            "minimum": 0.0,
+            "title": "Paidaftergracethroughasofminor",
+            "type": "integer"
+          },
+          "paidThroughGraceMinor": {
+            "minimum": 0.0,
+            "title": "Paidthroughgraceminor",
+            "type": "integer"
+          },
+          "periodEndsOn": {
+            "format": "date",
+            "title": "Periodendson",
+            "type": "string"
+          },
+          "periodStartsOn": {
+            "format": "date",
+            "title": "Periodstartson",
+            "type": "string"
+          },
+          "policyVersionId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policyversionid"
+          },
+          "policyVersionNumber": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policyversionnumber"
+          },
+          "previewFingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previewfingerprint"
+          },
+          "previouslyAssessedMinor": {
+            "minimum": 0.0,
+            "title": "Previouslyassessedminor",
+            "type": "integer"
+          },
+          "processingPayments": {
+            "$ref": "#/components/schemas/ProcessingPaymentsWarningResponse"
+          },
+          "rentExpectationId": {
+            "format": "uuid",
+            "title": "Rentexpectationid",
+            "type": "string"
+          },
+          "requiresProcessingAcknowledgment": {
+            "title": "Requiresprocessingacknowledgment",
+            "type": "boolean"
+          },
+          "roundingMode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "half_up",
+                  "floor"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Roundingmode"
+          },
+          "ruleBasis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rulebasis"
+          },
+          "scheduledPrepaidChecks": {
+            "$ref": "#/components/schemas/ScheduledPrepaidChecksWarningResponse"
+          },
+          "unpaidAsOfDateMinor": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unpaidasofdateminor"
+          },
+          "unpaidAtGraceEndMinor": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unpaidatgraceendminor"
+          }
+        },
+        "required": [
+          "rentExpectationId",
+          "periodStartsOn",
+          "periodEndsOn",
+          "dueOn",
+          "isProrated",
+          "expectedAmountMinor",
+          "policyVersionId",
+          "policyVersionNumber",
+          "ruleBasis",
+          "formulaKind",
+          "calculationBasis",
+          "roundingMode",
+          "eligibilityStatus",
+          "graceEndsOn",
+          "firstEligibleOn",
+          "paidThroughGraceMinor",
+          "paidAfterGraceThroughAsOfMinor",
+          "previouslyAssessedMinor",
+          "accrualStartsOn",
+          "accrualEndsOn",
+          "calculatedAmountMinor",
+          "currencyCode",
+          "scheduledPrepaidChecks",
+          "processingPayments",
+          "requiresProcessingAcknowledgment",
+          "calculationSteps",
+          "calculationSnapshot",
+          "previewFingerprint"
+        ],
+        "title": "LateFeePreviewItemResponse",
+        "type": "object"
+      },
+      "LateFeePreviewResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "asOf": {
+            "format": "date-time",
+            "title": "Asof",
+            "type": "string"
+          },
+          "asOfDate": {
+            "format": "date",
+            "title": "Asofdate",
+            "type": "string"
+          },
+          "currentPropertyLocalDate": {
+            "format": "date",
+            "title": "Currentpropertylocaldate",
+            "type": "string"
+          },
+          "futureProjection": {
+            "title": "Futureprojection",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LateFeePreviewItemResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "leaseId": {
+            "format": "uuid",
+            "title": "Leaseid",
+            "type": "string"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextcursor"
+          },
+          "previewOnly": {
+            "const": true,
+            "title": "Previewonly",
+            "type": "boolean"
+          },
+          "rentLedgerRevision": {
+            "minimum": 0.0,
+            "title": "Rentledgerrevision",
+            "type": "integer"
+          },
+          "timeZone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "previewOnly",
+          "leaseId",
+          "timeZone",
+          "asOf",
+          "asOfDate",
+          "currentPropertyLocalDate",
+          "futureProjection",
+          "rentLedgerRevision",
+          "items"
+        ],
+        "title": "LateFeePreviewResponse",
+        "type": "object"
+      },
+      "LateFeeReceiptAllocationInput": {
+        "additionalProperties": false,
+        "properties": {
+          "amountMinor": {
+            "maximum": 9999999999.0,
+            "minimum": 1.0,
+            "title": "Amountminor",
+            "type": "integer"
+          },
+          "assessmentId": {
+            "format": "uuid",
+            "title": "Assessmentid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "assessmentId",
+          "amountMinor"
+        ],
+        "title": "LateFeeReceiptAllocationInput",
+        "type": "object"
+      },
+      "LateFeeReceiptAllocationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "amountMinor": {
+            "minimum": 1.0,
+            "title": "Amountminor",
+            "type": "integer"
+          },
+          "assessmentId": {
+            "format": "uuid",
+            "title": "Assessmentid",
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "receiptId": {
+            "format": "uuid",
+            "title": "Receiptid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "receiptId",
+          "assessmentId",
+          "amountMinor",
+          "createdAt"
+        ],
+        "title": "LateFeeReceiptAllocationResponse",
+        "type": "object"
+      },
+      "LateFeeReceiptMutationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "allocations": {
+            "items": {
+              "$ref": "#/components/schemas/LateFeeReceiptAllocationResponse"
+            },
+            "title": "Allocations",
+            "type": "array"
+          },
+          "amountMinor": {
+            "minimum": 1.0,
+            "title": "Amountminor",
+            "type": "integer"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "currencyCode": {
+            "const": "USD",
+            "title": "Currencycode",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "idempotencyKey": {
+            "format": "uuid",
+            "title": "Idempotencykey",
+            "type": "string"
+          },
+          "leaseId": {
+            "format": "uuid",
+            "title": "Leaseid",
+            "type": "string"
+          },
+          "maskedReference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maskedreference"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "operationId": {
+            "format": "uuid",
+            "title": "Operationid",
+            "type": "string"
+          },
+          "otherPaymentMethodNote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Otherpaymentmethodnote"
+          },
+          "paymentBatchId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paymentbatchid"
+          },
+          "paymentMethodKind": {
+            "enum": [
+              "automatic_bank_payment",
+              "bank_transfer",
+              "check",
+              "cash",
+              "online_payment",
+              "other"
+            ],
+            "title": "Paymentmethodkind",
+            "type": "string"
+          },
+          "paymentMethodLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paymentmethodlabel"
+          },
+          "receivedByPartyId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receivedbypartyid"
+          },
+          "receivedOn": {
+            "format": "date",
+            "title": "Receivedon",
+            "type": "string"
+          },
+          "rentLedgerRevision": {
+            "minimum": 0.0,
+            "title": "Rentledgerrevision",
+            "type": "integer"
+          },
+          "replacedByReceiptId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacedbyreceiptid"
+          },
+          "replacesReceiptId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacesreceiptid"
+          },
+          "voidReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voidreason"
+          },
+          "voidedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voidedat"
+          }
+        },
+        "required": [
+          "id",
+          "leaseId",
+          "idempotencyKey",
+          "paymentBatchId",
+          "receivedOn",
+          "amountMinor",
+          "currencyCode",
+          "paymentMethodKind",
+          "paymentMethodLabel",
+          "maskedReference",
+          "otherPaymentMethodNote",
+          "receivedByPartyId",
+          "replacesReceiptId",
+          "rentLedgerRevision",
+          "notes",
+          "voidedAt",
+          "voidReason",
+          "createdAt",
+          "allocations",
+          "operationId"
+        ],
+        "title": "LateFeeReceiptMutationResponse",
+        "type": "object"
+      },
+      "LateFeeReceiptResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "allocations": {
+            "items": {
+              "$ref": "#/components/schemas/LateFeeReceiptAllocationResponse"
+            },
+            "title": "Allocations",
+            "type": "array"
+          },
+          "amountMinor": {
+            "minimum": 1.0,
+            "title": "Amountminor",
+            "type": "integer"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "currencyCode": {
+            "const": "USD",
+            "title": "Currencycode",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "idempotencyKey": {
+            "format": "uuid",
+            "title": "Idempotencykey",
+            "type": "string"
+          },
+          "leaseId": {
+            "format": "uuid",
+            "title": "Leaseid",
+            "type": "string"
+          },
+          "maskedReference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maskedreference"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "otherPaymentMethodNote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Otherpaymentmethodnote"
+          },
+          "paymentBatchId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paymentbatchid"
+          },
+          "paymentMethodKind": {
+            "enum": [
+              "automatic_bank_payment",
+              "bank_transfer",
+              "check",
+              "cash",
+              "online_payment",
+              "other"
+            ],
+            "title": "Paymentmethodkind",
+            "type": "string"
+          },
+          "paymentMethodLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paymentmethodlabel"
+          },
+          "receivedByPartyId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receivedbypartyid"
+          },
+          "receivedOn": {
+            "format": "date",
+            "title": "Receivedon",
+            "type": "string"
+          },
+          "rentLedgerRevision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rentledgerrevision"
+          },
+          "replacedByReceiptId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacedbyreceiptid"
+          },
+          "replacesReceiptId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacesreceiptid"
+          },
+          "voidReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voidreason"
+          },
+          "voidedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voidedat"
+          }
+        },
+        "required": [
+          "id",
+          "leaseId",
+          "idempotencyKey",
+          "paymentBatchId",
+          "receivedOn",
+          "amountMinor",
+          "currencyCode",
+          "paymentMethodKind",
+          "paymentMethodLabel",
+          "maskedReference",
+          "otherPaymentMethodNote",
+          "receivedByPartyId",
+          "replacesReceiptId",
+          "notes",
+          "voidedAt",
+          "voidReason",
+          "createdAt",
+          "allocations"
+        ],
+        "title": "LateFeeReceiptResponse",
+        "type": "object"
+      },
+      "LateFeeWaiverResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "assessmentId": {
+            "format": "uuid",
+            "title": "Assessmentid",
+            "type": "string"
+          },
+          "currencyCode": {
+            "const": "USD",
+            "title": "Currencycode",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "internalNotes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Internalnotes"
+          },
+          "leaseId": {
+            "format": "uuid",
+            "title": "Leaseid",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "waivedAmountMinor": {
+            "minimum": 1.0,
+            "title": "Waivedamountminor",
+            "type": "integer"
+          },
+          "waivedAt": {
+            "format": "date-time",
+            "title": "Waivedat",
+            "type": "string"
+          },
+          "waivedByActor": {
+            "title": "Waivedbyactor",
+            "type": "string"
+          },
+          "waivedOn": {
+            "format": "date",
+            "title": "Waivedon",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "assessmentId",
+          "leaseId",
+          "waivedAmountMinor",
+          "currencyCode",
+          "reason",
+          "internalNotes",
+          "waivedOn",
+          "waivedAt",
+          "waivedByActor"
+        ],
+        "title": "LateFeeWaiverResponse",
+        "type": "object"
+      },
       "LeaseCommandRequest": {
         "additionalProperties": false,
         "properties": {
@@ -20328,6 +23322,7 @@
       "Metric": {
         "enum": [
           "rentReceived",
+          "lateFeesReceived",
           "expensesPaid",
           "expenseRefundsReceived",
           "netRecordedExpenses",
@@ -20346,7 +23341,6 @@
         "type": "string"
       },
       "MetricDescriptor": {
-        "additionalProperties": false,
         "properties": {
           "amount": {
             "title": "Amount",
@@ -20702,7 +23696,6 @@
         "type": "object"
       },
       "MoneySummary": {
-        "additionalProperties": false,
         "properties": {
           "as_of": {
             "title": "As Of",
@@ -21368,7 +24361,6 @@
         "type": "object"
       },
       "Operating": {
-        "additionalProperties": false,
         "properties": {
           "available": {
             "default": true,
@@ -21389,6 +24381,16 @@
           },
           "expenses_paid": {
             "title": "Expenses Paid",
+            "type": "string"
+          },
+          "late_fee_receipt_count": {
+            "default": 0,
+            "title": "Late Fee Receipt Count",
+            "type": "integer"
+          },
+          "late_fees_received": {
+            "default": "0.00",
+            "title": "Late Fees Received",
             "type": "string"
           },
           "net_recorded_expenses": {
@@ -21446,6 +24448,15 @@
             "title": "Expensespaid",
             "type": "string"
           },
+          "lateFeeReceiptCount": {
+            "title": "Latefeereceiptcount",
+            "type": "integer"
+          },
+          "lateFeesReceived": {
+            "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$",
+            "title": "Latefeesreceived",
+            "type": "string"
+          },
           "netRecordedExpenses": {
             "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$",
             "title": "Netrecordedexpenses",
@@ -21468,11 +24479,13 @@
         },
         "required": [
           "rentReceived",
+          "lateFeesReceived",
           "expensesPaid",
           "expenseRefundsReceived",
           "netRecordedExpenses",
           "operatingRemainder",
           "rentReceiptCount",
+          "lateFeeReceiptCount",
           "expenseCount",
           "expenseRefundCount",
           "available"
@@ -22069,6 +25082,7 @@
           "sharePercent": {
             "anyOf": [
               {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,3}|(?=[\\d.]{1,6}0*$)\\d{0,3}\\.\\d{0,2}0*$)",
                 "type": "string"
               },
               {
@@ -23390,6 +26404,7 @@
                 "type": "number"
               },
               {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,3}|(?=[\\d.]{1,6}0*$)\\d{0,3}\\.\\d{0,2}0*$)",
                 "type": "string"
               },
               {
@@ -23480,6 +26495,7 @@
           "sharePercent": {
             "anyOf": [
               {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,3}|(?=[\\d.]{1,6}0*$)\\d{0,3}\\.\\d{0,2}0*$)",
                 "type": "string"
               },
               {
@@ -24892,6 +27908,40 @@
           "receipt"
         ],
         "title": "PrepaidCheckResponse",
+        "type": "object"
+      },
+      "ProcessingPaymentsWarningResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "minimum": 0.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "earliestSubmittedOn": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Earliestsubmittedon"
+          },
+          "totalMinor": {
+            "minimum": 0.0,
+            "title": "Totalminor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "count",
+          "totalMinor",
+          "earliestSubmittedOn"
+        ],
+        "title": "ProcessingPaymentsWarningResponse",
         "type": "object"
       },
       "ProfileMutationResponse": {
@@ -27776,6 +30826,150 @@
         "title": "RecentCommunicationSummary",
         "type": "object"
       },
+      "RecordCombinedReceiptInput": {
+        "additionalProperties": false,
+        "properties": {
+          "currencyCode": {
+            "const": "USD",
+            "title": "Currencycode",
+            "type": "string"
+          },
+          "duplicateConfirmed": {
+            "default": false,
+            "title": "Duplicateconfirmed",
+            "type": "boolean"
+          },
+          "duplicateReason": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicatereason"
+          },
+          "expectedRevision": {
+            "minimum": 0.0,
+            "title": "Expectedrevision",
+            "type": "integer"
+          },
+          "idempotencyKey": {
+            "format": "uuid",
+            "title": "Idempotencykey",
+            "type": "string"
+          },
+          "lateFeeAllocations": {
+            "items": {
+              "$ref": "#/components/schemas/LateFeeReceiptAllocationInput"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Latefeeallocations",
+            "type": "array"
+          },
+          "maskedReference": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "pattern": "^(?:[A-Za-z][A-Za-z ]{0,59} )?[\u2022*]{2,}(?:[ -]?[0-9]{1,4})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maskedreference"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "otherPaymentMethodNote": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Otherpaymentmethodnote"
+          },
+          "paymentMethodKind": {
+            "enum": [
+              "automatic_bank_payment",
+              "bank_transfer",
+              "check",
+              "cash",
+              "online_payment",
+              "other"
+            ],
+            "title": "Paymentmethodkind",
+            "type": "string"
+          },
+          "paymentMethodLabel": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paymentmethodlabel"
+          },
+          "receivedByPartyId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receivedbypartyid"
+          },
+          "receivedOn": {
+            "format": "date",
+            "title": "Receivedon",
+            "type": "string"
+          },
+          "rentAllocations": {
+            "items": {
+              "$ref": "#/components/schemas/RentAllocationInput"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Rentallocations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "expectedRevision",
+          "idempotencyKey",
+          "receivedOn",
+          "currencyCode",
+          "rentAllocations",
+          "lateFeeAllocations",
+          "paymentMethodKind"
+        ],
+        "title": "RecordCombinedReceiptInput",
+        "type": "object"
+      },
       "RecordInput": {
         "additionalProperties": false,
         "properties": {
@@ -27805,6 +30999,142 @@
           "idempotencyKey"
         ],
         "title": "RecordInput",
+        "type": "object"
+      },
+      "RecordLateFeeReceiptInput": {
+        "additionalProperties": false,
+        "properties": {
+          "allocations": {
+            "items": {
+              "$ref": "#/components/schemas/LateFeeReceiptAllocationInput"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Allocations",
+            "type": "array"
+          },
+          "amountMinor": {
+            "maximum": 9999999999.0,
+            "minimum": 1.0,
+            "title": "Amountminor",
+            "type": "integer"
+          },
+          "currencyCode": {
+            "const": "USD",
+            "title": "Currencycode",
+            "type": "string"
+          },
+          "expectedRevision": {
+            "minimum": 0.0,
+            "title": "Expectedrevision",
+            "type": "integer"
+          },
+          "idempotencyKey": {
+            "format": "uuid",
+            "title": "Idempotencykey",
+            "type": "string"
+          },
+          "maskedReference": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "pattern": "^(?:[A-Za-z][A-Za-z ]{0,59} )?[\u2022*]{2,}(?:[ -]?[0-9]{1,4})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maskedreference"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "otherPaymentMethodNote": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Otherpaymentmethodnote"
+          },
+          "paymentMethodKind": {
+            "enum": [
+              "automatic_bank_payment",
+              "bank_transfer",
+              "check",
+              "cash",
+              "online_payment",
+              "other"
+            ],
+            "title": "Paymentmethodkind",
+            "type": "string"
+          },
+          "paymentMethodLabel": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paymentmethodlabel"
+          },
+          "receivedByPartyId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receivedbypartyid"
+          },
+          "receivedOn": {
+            "format": "date",
+            "title": "Receivedon",
+            "type": "string"
+          },
+          "replacesReceiptId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacesreceiptid"
+          }
+        },
+        "required": [
+          "expectedRevision",
+          "idempotencyKey",
+          "receivedOn",
+          "amountMinor",
+          "currencyCode",
+          "allocations",
+          "paymentMethodKind"
+        ],
+        "title": "RecordLateFeeReceiptInput",
         "type": "object"
       },
       "RecordSummary": {
@@ -28115,7 +31445,15 @@
               "finance.prepaid_check.deposit",
               "finance.prepaid_check.return",
               "finance.prepaid_check.void",
-              "finance.prepaid_check.replace"
+              "finance.prepaid_check.replace",
+              "finance.late_fee_policy.create",
+              "finance.late_fee_policy.void",
+              "finance.late_fee_assessment.create",
+              "finance.late_fee_assessment.waive",
+              "finance.late_fee_assessment.void",
+              "finance.late_fee_receipt.create",
+              "finance.late_fee_receipt.void",
+              "finance.combined_receipt.create"
             ],
             "title": "Formkey",
             "type": "string"
@@ -28369,7 +31707,15 @@
               "finance.prepaid_check.deposit",
               "finance.prepaid_check.return",
               "finance.prepaid_check.void",
-              "finance.prepaid_check.replace"
+              "finance.prepaid_check.replace",
+              "finance.late_fee_policy.create",
+              "finance.late_fee_policy.void",
+              "finance.late_fee_assessment.create",
+              "finance.late_fee_assessment.waive",
+              "finance.late_fee_assessment.void",
+              "finance.late_fee_receipt.create",
+              "finance.late_fee_receipt.void",
+              "finance.combined_receipt.create"
             ],
             "title": "Formkey",
             "type": "string"
@@ -29543,6 +32889,7 @@
           "sharePercent": {
             "anyOf": [
               {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,3}|(?=[\\d.]{1,6}0*$)\\d{0,3}\\.\\d{0,2}0*$)",
                 "type": "string"
               },
               {
@@ -29973,6 +33320,28 @@
           "proposedStartsOn"
         ],
         "title": "RenewalRequest",
+        "type": "object"
+      },
+      "RentAllocationInput": {
+        "additionalProperties": false,
+        "properties": {
+          "amountMinor": {
+            "maximum": 9999999999.0,
+            "minimum": 1.0,
+            "title": "Amountminor",
+            "type": "integer"
+          },
+          "expectationId": {
+            "format": "uuid",
+            "title": "Expectationid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expectationId",
+          "amountMinor"
+        ],
+        "title": "RentAllocationInput",
         "type": "object"
       },
       "RentSource": {
@@ -31597,8 +34966,37 @@
         "title": "SchedulePreviewResponse",
         "type": "object"
       },
-      "Scope": {
+      "ScheduledPrepaidChecksWarningResponse": {
         "additionalProperties": false,
+        "properties": {
+          "checkDates": {
+            "items": {
+              "format": "date",
+              "type": "string"
+            },
+            "title": "Checkdates",
+            "type": "array"
+          },
+          "count": {
+            "minimum": 0.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "totalMinor": {
+            "minimum": 0.0,
+            "title": "Totalminor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "count",
+          "totalMinor",
+          "checkDates"
+        ],
+        "title": "ScheduledPrepaidChecksWarningResponse",
+        "type": "object"
+      },
+      "Scope": {
         "properties": {
           "excluded_property_count": {
             "title": "Excluded Property Count",
@@ -38951,6 +42349,105 @@
         "title": "VerifyInput",
         "type": "object"
       },
+      "VoidLateFeeAssessmentInput": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "expectedRevision": {
+            "minimum": 0.0,
+            "title": "Expectedrevision",
+            "type": "integer"
+          },
+          "idempotencyKey": {
+            "format": "uuid",
+            "title": "Idempotencykey",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expectedRevision",
+          "idempotencyKey",
+          "confirmed",
+          "reason"
+        ],
+        "title": "VoidLateFeeAssessmentInput",
+        "type": "object"
+      },
+      "VoidLateFeePolicyInput": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "expectedRevision": {
+            "minimum": 0.0,
+            "title": "Expectedrevision",
+            "type": "integer"
+          },
+          "idempotencyKey": {
+            "format": "uuid",
+            "title": "Idempotencykey",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expectedRevision",
+          "idempotencyKey",
+          "confirmed",
+          "reason"
+        ],
+        "title": "VoidLateFeePolicyInput",
+        "type": "object"
+      },
+      "VoidLateFeeReceiptInput": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "expectedRevision": {
+            "minimum": 0.0,
+            "title": "Expectedrevision",
+            "type": "integer"
+          },
+          "idempotencyKey": {
+            "format": "uuid",
+            "title": "Idempotencykey",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expectedRevision",
+          "idempotencyKey",
+          "confirmed",
+          "reason"
+        ],
+        "title": "VoidLateFeeReceiptInput",
+        "type": "object"
+      },
       "WaitingClearRequest": {
         "additionalProperties": false,
         "properties": {
@@ -39394,6 +42891,64 @@
           "waitingForLabel"
         ],
         "title": "WaitingSetRequest",
+        "type": "object"
+      },
+      "WaiveLateFeeInput": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "expectedRevision": {
+            "minimum": 0.0,
+            "title": "Expectedrevision",
+            "type": "integer"
+          },
+          "idempotencyKey": {
+            "format": "uuid",
+            "title": "Idempotencykey",
+            "type": "string"
+          },
+          "internalNotes": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Internalnotes"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "waivedAmountMinor": {
+            "maximum": 9999999999.0,
+            "minimum": 1.0,
+            "title": "Waivedamountminor",
+            "type": "integer"
+          },
+          "waivedOn": {
+            "format": "date",
+            "title": "Waivedon",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expectedRevision",
+          "idempotencyKey",
+          "waivedAmountMinor",
+          "waivedOn",
+          "reason",
+          "confirmed"
+        ],
+        "title": "WaiveLateFeeInput",
         "type": "object"
       },
       "WorkInput": {
@@ -42839,6 +46394,14 @@
               "return_prepaid_check",
               "void_prepaid_check",
               "replace_prepaid_check",
+              "create_late_fee_policy",
+              "void_late_fee_policy",
+              "assess_late_fee",
+              "waive_late_fee",
+              "void_late_fee_assessment",
+              "record_late_fee_receipt",
+              "record_combined_receipt",
+              "void_late_fee_receipt",
               "record_expense",
               "patch_expense",
               "void_expense",
@@ -42891,6 +46454,18 @@
               },
               {
                 "$ref": "#/components/schemas/PrepaidCheckMutationResponse"
+              },
+              {
+                "$ref": "#/components/schemas/LateFeePolicyMutationResponse"
+              },
+              {
+                "$ref": "#/components/schemas/LateFeeAssessmentMutationResponse"
+              },
+              {
+                "$ref": "#/components/schemas/LateFeeReceiptMutationResponse"
+              },
+              {
+                "$ref": "#/components/schemas/CombinedReceiptMutationResponse"
               },
               {
                 "$ref": "#/components/schemas/DepositMutationResponse"
@@ -51716,6 +55291,499 @@
         ]
       }
     },
+    "/api/late-fee-assessments": {
+      "get": {
+        "operationId": "listLateFeeAssessments",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "propertyId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Propertyid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "leaseId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Leaseid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "settlementStatus",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "unpaid",
+                    "partially_paid",
+                    "paid",
+                    "waived",
+                    "voided"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Settlementstatus"
+            }
+          },
+          {
+            "in": "query",
+            "name": "includeVoided",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Includevoided",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Pagesize",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LateFeeAssessmentPageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Portfolio Assessments",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
+    "/api/late-fee-assessments/{assessment_id}": {
+      "get": {
+        "operationId": "getLateFeeAssessment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LateFeeAssessmentDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Assessment",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
+    "/api/late-fee-assessments/{assessment_id}/void": {
+      "post": {
+        "operationId": "voidLateFeeAssessment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoidLateFeeAssessmentInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LateFeeAssessmentMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Void Assessment",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
+    "/api/late-fee-assessments/{assessment_id}/waive": {
+      "post": {
+        "operationId": "waiveLateFee",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WaiveLateFeeInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LateFeeAssessmentMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Waive Assessment",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
+    "/api/late-fee-receipts/{receipt_id}": {
+      "get": {
+        "operationId": "getLateFeeReceipt",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "receipt_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Receipt Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LateFeeReceiptResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Late Fee Receipt",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
+    "/api/late-fee-receipts/{receipt_id}/void": {
+      "post": {
+        "operationId": "voidLateFeeReceipt",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "receipt_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Receipt Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoidLateFeeReceiptInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LateFeeReceiptMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Void Late Fee Receipt",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
     "/api/leases": {
       "get": {
         "operationId": "listLeases",
@@ -52273,6 +56341,79 @@
         ]
       }
     },
+    "/api/leases/{lease_id}/combined-receipts": {
+      "post": {
+        "operationId": "recordCombinedReceipt",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Lease Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordCombinedReceiptInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CombinedReceiptMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Combined Receipt",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
     "/api/leases/{lease_id}/condition-comparison": {
       "get": {
         "operationId": "getConditionComparison",
@@ -52757,6 +56898,564 @@
         "summary": "Replace Term",
         "tags": [
           "leases"
+        ]
+      }
+    },
+    "/api/leases/{lease_id}/late-fee-assessments": {
+      "get": {
+        "operationId": "listLeaseLateFeeAssessments",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "settlementStatus",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "unpaid",
+                    "partially_paid",
+                    "paid",
+                    "waived",
+                    "voided"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Settlementstatus"
+            }
+          },
+          {
+            "in": "query",
+            "name": "includeVoided",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Includevoided",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Pagesize",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LateFeeAssessmentPageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Lease Assessments",
+        "tags": [
+          "finance"
+        ]
+      },
+      "post": {
+        "operationId": "assessLateFee",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Lease Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssessLateFeeInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LateFeeAssessmentMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assess Late Fee",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
+    "/api/leases/{lease_id}/late-fee-policies": {
+      "get": {
+        "operationId": "listLateFeePolicies",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Lease Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LateFeePolicyListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Policies",
+        "tags": [
+          "finance"
+        ]
+      },
+      "post": {
+        "operationId": "createLateFeePolicy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Lease Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLateFeePolicyInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LateFeePolicyMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Policy",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
+    "/api/leases/{lease_id}/late-fee-policies/{policy_version_id}/void": {
+      "post": {
+        "operationId": "voidLateFeePolicy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "policy_version_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Policy Version Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoidLateFeePolicyInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LateFeePolicyMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Void Policy",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
+    "/api/leases/{lease_id}/late-fee-receipts": {
+      "post": {
+        "operationId": "recordLateFeeReceipt",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Lease Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordLateFeeReceiptInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LateFeeReceiptMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Late Fee Receipt",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
+    "/api/leases/{lease_id}/late-fees/preview": {
+      "post": {
+        "operationId": "previewLateFees",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Lease Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LateFeePreviewInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LateFeePreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Late Fees",
+        "tags": [
+          "finance"
         ]
       }
     },

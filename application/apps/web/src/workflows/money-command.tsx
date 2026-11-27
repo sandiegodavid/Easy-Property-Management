@@ -9,6 +9,7 @@ import { useWorkspace } from "../app/workspace-gate";
 import { CommandLoader } from "./command";
 import { useSaveCompletion } from "./saved-command";
 import { readResult } from "./reads";
+import { CombinedReceiptForm, LeasePendingRecoveryBanner } from "./late-fees";
 import { loadMoneyRecord, MoneyFacts, moneyRecordUrl, type MoneyKind } from "./money-records";
 import { ExpenseContext } from "./expense-context";
 import { CheckContext } from "./check-context";
@@ -308,6 +309,7 @@ export function MoneyCommand() {
   const [confirmedSchedule, setConfirmedSchedule] = useState<string>();
   const [confirmedInterest, setConfirmedInterest] = useState<string>();
   const [confirmedSource, setConfirmedSource] = useState<string>();
+  const [includeLateFees, setIncludeLateFees] = useState(false);
   const [expenseCandidates, setExpenseCandidates] = useState<
     components["schemas"]["ExpenseDuplicateCandidate"][]
   >([]);
@@ -710,226 +712,266 @@ export function MoneyCommand() {
           )}
         </>
       )}
-      {(!verification || selectedMode) && (
-        <CommandLoader
-          onSaved={onSaved}
-          showParentLink={false}
-          key={`${session}:${selectedMode}`}
-          definition={editor}
-          sourceId={target}
-          childId={selectedChild}
-          revision={state.revision}
-          initial={initial}
-          choices={state.choices}
-          renderFields={
-            definition.formKey === "finance.rent_receipt.create"
-              ? (values, locked, onChange) => (
-                  <ReceiptFields
-                    schema={definition.schema}
-                    values={values}
-                    locked={locked}
-                    onChange={onChange}
-                    choices={state.choices}
-                    leaseId={target!}
-                    periods={state.receiptPeriods!}
-                    selected={selected as components["schemas"]["ExpectationResponse"] | undefined}
-                    revision={state.revision}
-                  />
-                )
-              : undefined
-          }
-          choicesForValues={(values) => ({
-            ...state.choices,
-            categoryId: (state.choices.categoryId ?? []).filter(
-              (choice) =>
-                !choice.historical ||
-                (values.historicalEntryConfirmed === true &&
-                  !!scalar(values.historicalEntryReason, "").trim()),
-            ),
-          })}
-          canSubmit={(values) =>
-            verification
-              ? !ownerVerificationProblem(values, state.value, selectedMode)
-              : definition.formKey === "finance.rent_expectation.synchronize"
-                ? confirmedSchedule === scheduleKey(values)
-                : definition.formKey === "finance.rent_receipt.create"
-                  ? true
-                  : definition.formKey === "finance.deposit_credit.create" ||
-                      definition.formKey === "finance.deposit_credit.update"
-                    ? creditReady(values, confirmedInterest)
-                    : definition.formKey === "finance.deposit_deduction_source.add"
-                      ? confirmedSource === sourceReviewKey(values)
-                      : depositDuplicates(definition.formKey, values, state.children).length > 0
-                        ? values.duplicateConfirmed === true
-                        : true
-          }
-          renderContext={(values, locked, onChange) =>
-            definition.formKey.startsWith("owner_rent_report.") ? (
-              <OwnerReportContext
-                values={values}
-                report={state.value}
-                locked={locked}
-                onChange={onChange}
-                mode={verification ? selectedMode : undefined}
-                editableOwner={["owner_rent_report.create", "owner_rent_report.patch"].includes(
-                  definition.formKey,
-                )}
-              />
-            ) : definition.formKey === "finance.rent_expectation.synchronize" ? (
-              <RentScheduleContext
-                leaseId={target!}
-                lease={state.value}
-                values={values}
-                locked={locked}
-                onChange={onChange}
-                onConfirm={setConfirmedSchedule}
-              />
-            ) : definition.formKey.startsWith("finance.prepaid_check.") ? (
-              <CheckContext check={selected} lease={state.value} />
-            ) : definition.formKey === "finance.expense.create" ? (
-              <ExpenseContext
-                values={values}
-                locked={locked}
-                onChange={onChange}
-                candidates={expenseCandidates}
-              />
-            ) : definition.formKey.startsWith("finance.deposit_") ? (
-              <>
-                <DepositContext
-                  formKey={definition.formKey}
-                  account={state.value}
-                  selected={selected}
-                  children={state.children}
+      {!completed &&
+        definition.formKey === "finance.rent_receipt.create" &&
+        !priorReceipt.data &&
+        target && (
+          <>
+            <LeasePendingRecoveryBanner leaseId={target} onRecovered={() => onSaved()} />
+            <section className="record-detail-panel" aria-label="Include assessed late fees">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={includeLateFees}
+                  onChange={(e) => setIncludeLateFees(e.target.checked)}
+                />{" "}
+                Include assessed late fees with this payment (atomic rent + late-fee split)
+              </label>
+            </section>
+          </>
+        )}
+      {!completed &&
+      definition.formKey === "finance.rent_receipt.create" &&
+      !priorReceipt.data &&
+      target &&
+      includeLateFees ? (
+        <CombinedReceiptForm
+          leaseId={target}
+          expectedRevision={state.revision}
+          initialReceivedOn={state.receivedToday ?? ""}
+          initialExpectationId={selectedChild ?? ""}
+          onCancel={() => setIncludeLateFees(false)}
+          onCommitted={() => {
+            setIncludeLateFees(false);
+            onSaved();
+          }}
+        />
+      ) : (
+        (!verification || selectedMode) && (
+          <CommandLoader
+            onSaved={onSaved}
+            showParentLink={false}
+            key={`${session}:${selectedMode}`}
+            definition={editor}
+            sourceId={target}
+            childId={selectedChild}
+            revision={state.revision}
+            initial={initial}
+            choices={state.choices}
+            renderFields={
+              definition.formKey === "finance.rent_receipt.create"
+                ? (values, locked, onChange) => (
+                    <ReceiptFields
+                      schema={definition.schema}
+                      values={values}
+                      locked={locked}
+                      onChange={onChange}
+                      choices={state.choices}
+                      leaseId={target!}
+                      periods={state.receiptPeriods!}
+                      selected={
+                        selected as components["schemas"]["ExpectationResponse"] | undefined
+                      }
+                      revision={state.revision}
+                    />
+                  )
+                : undefined
+            }
+            choicesForValues={(values) => ({
+              ...state.choices,
+              categoryId: (state.choices.categoryId ?? []).filter(
+                (choice) =>
+                  !choice.historical ||
+                  (values.historicalEntryConfirmed === true &&
+                    !!scalar(values.historicalEntryReason, "").trim()),
+              ),
+            })}
+            canSubmit={(values) =>
+              verification
+                ? !ownerVerificationProblem(values, state.value, selectedMode)
+                : definition.formKey === "finance.rent_expectation.synchronize"
+                  ? confirmedSchedule === scheduleKey(values)
+                  : definition.formKey === "finance.rent_receipt.create"
+                    ? true
+                    : definition.formKey === "finance.deposit_credit.create" ||
+                        definition.formKey === "finance.deposit_credit.update"
+                      ? creditReady(values, confirmedInterest)
+                      : definition.formKey === "finance.deposit_deduction_source.add"
+                        ? confirmedSource === sourceReviewKey(values)
+                        : depositDuplicates(definition.formKey, values, state.children).length > 0
+                          ? values.duplicateConfirmed === true
+                          : true
+            }
+            renderContext={(values, locked, onChange) =>
+              definition.formKey.startsWith("owner_rent_report.") ? (
+                <OwnerReportContext
+                  values={values}
+                  report={state.value}
+                  locked={locked}
+                  onChange={onChange}
+                  mode={verification ? selectedMode : undefined}
+                  editableOwner={["owner_rent_report.create", "owner_rent_report.patch"].includes(
+                    definition.formKey,
+                  )}
+                />
+              ) : definition.formKey === "finance.rent_expectation.synchronize" ? (
+                <RentScheduleContext
+                  leaseId={target!}
+                  lease={state.value}
                   values={values}
                   locked={locked}
                   onChange={onChange}
+                  onConfirm={setConfirmedSchedule}
                 />
-                {(definition.formKey === "finance.deposit_credit.create" ||
-                  definition.formKey === "finance.deposit_credit.update") && (
-                  <InterestCreditReview
+              ) : definition.formKey.startsWith("finance.prepaid_check.") ? (
+                <CheckContext check={selected} lease={state.value} />
+              ) : definition.formKey === "finance.expense.create" ? (
+                <ExpenseContext
+                  values={values}
+                  locked={locked}
+                  onChange={onChange}
+                  candidates={expenseCandidates}
+                />
+              ) : definition.formKey.startsWith("finance.deposit_") ? (
+                <>
+                  <DepositContext
+                    formKey={definition.formKey}
+                    account={state.value}
+                    selected={selected}
+                    children={state.children}
                     values={values}
                     locked={locked}
                     onChange={onChange}
-                    onConfirm={setConfirmedInterest}
-                    confirmed={confirmedInterest}
                   />
-                )}
-                {definition.formKey === "finance.deposit_deduction_source.add" && (
-                  <DeductionSourceReview
-                    accountId={target!}
+                  {(definition.formKey === "finance.deposit_credit.create" ||
+                    definition.formKey === "finance.deposit_credit.update") && (
+                    <InterestCreditReview
+                      values={values}
+                      locked={locked}
+                      onChange={onChange}
+                      onConfirm={setConfirmedInterest}
+                      confirmed={confirmedInterest}
+                    />
+                  )}
+                  {definition.formKey === "finance.deposit_deduction_source.add" && (
+                    <DeductionSourceReview
+                      accountId={target!}
+                      values={values}
+                      locked={locked}
+                      onConfirm={setConfirmedSource}
+                      confirmed={confirmedSource}
+                    />
+                  )}
+                </>
+              ) : definition.formKey === "finance.rent_receipt.create" ? (
+                <>
+                  <PaymentMethodReview
                     values={values}
-                    locked={locked}
-                    onConfirm={setConfirmedSource}
-                    confirmed={confirmedSource}
+                    suggestion={priorReceipt.data ?? state.receiptSuggestion}
+                    replacement={!!priorReceipt.data}
                   />
-                )}
-              </>
-            ) : definition.formKey === "finance.rent_receipt.create" ? (
-              <>
-                <PaymentMethodReview
-                  values={values}
-                  suggestion={priorReceipt.data ?? state.receiptSuggestion}
-                  replacement={!!priorReceipt.data}
-                />
-              </>
-            ) : null
-          }
-          reviewSource={
-            target
-              ? async () => {
-                  const current = await commandSource(definition, target, selectedChild, leaseId);
-                  return {
-                    revision: current.revision,
-                    value: current.value,
-                    relatedRevisions:
-                      current.ledgerRevision === undefined
-                        ? undefined
-                        : { expectedRentLedgerRevision: current.ledgerRevision },
-                  };
-                }
-              : undefined
-          }
-          checkSource={async (values) => {
-            if (verification) {
-              const problem = ownerVerificationProblem(values, state.value, selectedMode);
-              if (problem) throw new Error(problem);
+                </>
+              ) : null
             }
-            if (definition.formKey === "finance.rent_receipt.create") {
-              const problem =
-                receiptProblem(values) ?? paymentMethodProblem(values, definition.schema);
-              if (problem) throw new Error(problem);
+            reviewSource={
+              target
+                ? async () => {
+                    const current = await commandSource(definition, target, selectedChild, leaseId);
+                    return {
+                      revision: current.revision,
+                      value: current.value,
+                      relatedRevisions:
+                        current.ledgerRevision === undefined
+                          ? undefined
+                          : { expectedRentLedgerRevision: current.ledgerRevision },
+                    };
+                  }
+                : undefined
             }
-            if (
-              definition.formKey === "finance.deposit_deduction_source.add" &&
-              confirmedSource !== sourceReviewKey(values)
-            )
-              throw new Error(
-                "Preview and confirm the selected deduction source before attaching it.",
-              );
-            if (
-              (definition.formKey === "finance.deposit_credit.create" ||
-                definition.formKey === "finance.deposit_credit.update") &&
-              !creditReady(values, confirmedInterest)
-            )
-              throw new Error(
-                "Review the current interest inputs and applied credit; confirm any override reason before saving.",
-              );
-            if (
-              depositDuplicates(definition.formKey, values, state.children).length &&
-              values.duplicateConfirmed !== true
-            )
-              throw new Error(
-                "Review the possible duplicate deposit payment and explicitly confirm a separate payment.",
-              );
-            if (
-              definition.formKey === "finance.expense.create" &&
-              values.duplicateConfirmed !== true
-            ) {
-              const reviewed = readResult(
-                await api.POST("/api/expenses/duplicate-review", {
-                  body: {
-                    propertyId: scalar(values.propertyId),
-                    paidOn: scalar(values.paidOn),
-                    amount: scalar(values.amount),
-                    providerPartyId: values.providerPartyId
-                      ? scalar(values.providerPartyId)
-                      : undefined,
-                    payeeName: values.payeeName ? scalar(values.payeeName) : undefined,
-                  },
-                }),
-              );
-              setExpenseCandidates(reviewed.candidates);
-              if (reviewed.candidates.length)
-                throw new Error("Review possible duplicate expenses before recording separately.");
-            }
-            if (
-              definition.formKey === "finance.rent_expectation.synchronize" &&
-              confirmedSchedule !== scheduleKey(values)
-            )
-              throw new Error(
-                "Preview and confirm the current rent schedule before synchronizing.",
-              );
-            if (
-              definition.formKey === "finance.rent_receipt.create" &&
-              receiptBalance(values).remaining !== 0n
-            )
-              throw new Error("Receipt and allocated totals must match before recording money.");
-            if (
-              verification &&
-              (!!values.existingReceiptId === !!values.receiptIdempotencyKey ||
-                (selectedMode === "existing" &&
-                  Array.isArray(values.allocations) &&
-                  values.allocations.length))
-            )
-              throw new Error("Choose exactly one receipt verification mode.");
-            if (definition.formKey === "finance.rent_receipt.create" && values.leaseId !== target)
-              throw new Error("The payment must use the displayed Lease ledger.");
-            if (definition.formKey === "file.upload" && (!values.entityType || !values.entityId))
-              throw new Error("Select a record's evidence action first.");
-            return Promise.resolve();
-          }}
-          returnTo={parentTarget}
-        />
+            checkSource={async (values) => {
+              if (verification) {
+                const problem = ownerVerificationProblem(values, state.value, selectedMode);
+                if (problem) throw new Error(problem);
+              }
+              if (definition.formKey === "finance.rent_receipt.create") {
+                const problem =
+                  receiptProblem(values) ?? paymentMethodProblem(values, definition.schema);
+                if (problem) throw new Error(problem);
+              }
+              if (
+                definition.formKey === "finance.deposit_deduction_source.add" &&
+                confirmedSource !== sourceReviewKey(values)
+              )
+                throw new Error(
+                  "Preview and confirm the selected deduction source before attaching it.",
+                );
+              if (
+                (definition.formKey === "finance.deposit_credit.create" ||
+                  definition.formKey === "finance.deposit_credit.update") &&
+                !creditReady(values, confirmedInterest)
+              )
+                throw new Error(
+                  "Review the current interest inputs and applied credit; confirm any override reason before saving.",
+                );
+              if (
+                depositDuplicates(definition.formKey, values, state.children).length &&
+                values.duplicateConfirmed !== true
+              )
+                throw new Error(
+                  "Review the possible duplicate deposit payment and explicitly confirm a separate payment.",
+                );
+              if (
+                definition.formKey === "finance.expense.create" &&
+                values.duplicateConfirmed !== true
+              ) {
+                const reviewed = readResult(
+                  await api.POST("/api/expenses/duplicate-review", {
+                    body: {
+                      propertyId: scalar(values.propertyId),
+                      paidOn: scalar(values.paidOn),
+                      amount: scalar(values.amount),
+                      providerPartyId: values.providerPartyId
+                        ? scalar(values.providerPartyId)
+                        : undefined,
+                      payeeName: values.payeeName ? scalar(values.payeeName) : undefined,
+                    },
+                  }),
+                );
+                setExpenseCandidates(reviewed.candidates);
+                if (reviewed.candidates.length)
+                  throw new Error(
+                    "Review possible duplicate expenses before recording separately.",
+                  );
+              }
+              if (
+                definition.formKey === "finance.rent_expectation.synchronize" &&
+                confirmedSchedule !== scheduleKey(values)
+              )
+                throw new Error(
+                  "Preview and confirm the current rent schedule before synchronizing.",
+                );
+              if (
+                definition.formKey === "finance.rent_receipt.create" &&
+                receiptBalance(values).remaining !== 0n
+              )
+                throw new Error("Receipt and allocated totals must match before recording money.");
+              if (
+                verification &&
+                (!!values.existingReceiptId === !!values.receiptIdempotencyKey ||
+                  (selectedMode === "existing" &&
+                    Array.isArray(values.allocations) &&
+                    values.allocations.length))
+              )
+                throw new Error("Choose exactly one receipt verification mode.");
+              if (definition.formKey === "finance.rent_receipt.create" && values.leaseId !== target)
+                throw new Error("The payment must use the displayed Lease ledger.");
+              if (definition.formKey === "file.upload" && (!values.entityType || !values.entityId))
+                throw new Error("Select a record's evidence action first.");
+              return Promise.resolve();
+            }}
+            returnTo={parentTarget}
+          />
+        )
       )}
     </div>
   );

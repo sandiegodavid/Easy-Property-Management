@@ -7,6 +7,17 @@ from app.modules.finance.application.commands import (
     FinanceScope,
     fingerprint,
 )
+from app.modules.finance.domain.late_fee_models import (
+    AssessLateFeeCommand,
+    CreateLateFeePolicyCommand,
+    LateFeeReceiptAllocationCommand,
+    RecordCombinedReceiptCommand,
+    RecordLateFeeReceiptCommand,
+    VoidLateFeeAssessmentCommand,
+    VoidLateFeePolicyCommand,
+    VoidLateFeeReceiptCommand,
+    WaiveLateFeeCommand,
+)
 from app.modules.finance.domain.models import (
     FinanceError,
     PrepaidCheckCommand,
@@ -126,5 +137,109 @@ def _payload(action, lease_id, payload, key):
             },
         )
     else:
-        raise OperatorError("Finance command form is not registered.")
+        return _late_fee_payload(action, lease_id, payload)
     return target, request
+
+
+def _late_fee_payload(action, lease_id, payload):
+    if action == "create_late_fee_policy":
+        command = CreateLateFeePolicyCommand(
+            effective_on=payload["effectiveOn"],
+            ends_on=payload.get("endsOn"),
+            lease_term_id=payload.get("leaseTermId"),
+            rule_basis=payload["ruleBasis"],
+            grace_period_days=payload["gracePeriodDays"],
+            calculation_basis=payload["calculationBasis"],
+            formula_kind=payload["formulaKind"],
+            flat_amount_minor=payload.get("flatAmountMinor"),
+            percentage_bps=payload.get("percentageBps"),
+            daily_amount_minor=payload.get("dailyAmountMinor"),
+            max_accrual_days=payload.get("maxAccrualDays"),
+            per_period_cap_minor=payload.get("perPeriodCapMinor"),
+            per_period_min_minor=payload.get("perPeriodMinMinor"),
+            minimum_unpaid_threshold_minor=payload.get("minimumUnpaidThresholdMinor", 0),
+            rounding_mode=payload["roundingMode"],
+            applies_to_prorated_periods=payload["appliesToProratedPeriods"],
+            supersedes_policy_version_id=payload.get("supersedesPolicyVersionId"),
+            notes=payload.get("notes"),
+            operator_confirmed=payload["operatorConfirmed"],
+        )
+        return lease_id, command.command_payload()
+    if action == "void_late_fee_policy":
+        command = VoidLateFeePolicyCommand(payload["confirmed"], payload["reason"])
+        return payload["policyVersionId"], {
+            "confirmed": command.confirmed,
+            "reason": command.reason,
+        }
+    if action == "assess_late_fee":
+        command = AssessLateFeeCommand(
+            rent_expectation_id=payload["rentExpectationId"],
+            as_of_date=payload["asOfDate"],
+            preview_fingerprint=payload["previewFingerprint"],
+            operator_confirmed=payload["operatorConfirmed"],
+            acknowledge_processing_payments=payload.get("acknowledgeProcessingPayments", False),
+            processing_acknowledgment_reason=payload.get("processingAcknowledgmentReason"),
+            internal_notes=payload.get("internalNotes"),
+            replaces_assessment_id=payload.get("replacesAssessmentId"),
+        )
+        return command.rent_expectation_id, command.command_payload()
+    if action == "waive_late_fee":
+        command = WaiveLateFeeCommand(
+            waived_amount_minor=payload["waivedAmountMinor"],
+            waived_on=payload["waivedOn"],
+            reason=payload["reason"],
+            confirmed=payload["confirmed"],
+            internal_notes=payload.get("internalNotes"),
+        )
+        return payload["assessmentId"], command.command_payload()
+    if action == "void_late_fee_assessment":
+        command = VoidLateFeeAssessmentCommand(payload["confirmed"], payload["reason"])
+        return payload["assessmentId"], {"confirmed": command.confirmed, "reason": command.reason}
+    return _late_fee_receipt_payload(action, lease_id, payload)
+
+
+def _late_fee_receipt_payload(action, lease_id, payload):
+    if action == "record_late_fee_receipt":
+        command = RecordLateFeeReceiptCommand(
+            received_on=payload["receivedOn"],
+            amount_minor=payload["amountMinor"],
+            currency_code=payload["currencyCode"],
+            allocations=tuple(
+                LateFeeReceiptAllocationCommand(item["assessmentId"], item["amountMinor"])
+                for item in payload["allocations"]
+            ),
+            payment_method_kind=payload["paymentMethodKind"],
+            payment_method_label=payload.get("paymentMethodLabel"),
+            masked_reference=payload.get("maskedReference"),
+            other_payment_method_note=payload.get("otherPaymentMethodNote"),
+            received_by_party_id=payload.get("receivedByPartyId"),
+            replaces_receipt_id=payload.get("replacesReceiptId"),
+            notes=payload.get("notes"),
+        )
+        return lease_id, command.command_payload()
+    if action == "void_late_fee_receipt":
+        command = VoidLateFeeReceiptCommand(payload["confirmed"], payload["reason"])
+        return payload["receiptId"], {"confirmed": command.confirmed, "reason": command.reason}
+    if action == "record_combined_receipt":
+        command = RecordCombinedReceiptCommand(
+            received_on=payload["receivedOn"],
+            currency_code=payload["currencyCode"],
+            rent_allocations=tuple(
+                ReceiptAllocationCommand(item["expectationId"], item["amountMinor"])
+                for item in payload["rentAllocations"]
+            ),
+            late_fee_allocations=tuple(
+                LateFeeReceiptAllocationCommand(item["assessmentId"], item["amountMinor"])
+                for item in payload["lateFeeAllocations"]
+            ),
+            payment_method_kind=payload["paymentMethodKind"],
+            payment_method_label=payload.get("paymentMethodLabel"),
+            masked_reference=payload.get("maskedReference"),
+            other_payment_method_note=payload.get("otherPaymentMethodNote"),
+            received_by_party_id=payload.get("receivedByPartyId"),
+            notes=payload.get("notes"),
+            duplicate_confirmed=payload.get("duplicateConfirmed", False),
+            duplicate_reason=payload.get("duplicateReason"),
+        )
+        return lease_id, command.command_payload()
+    raise OperatorError("Finance command form is not registered.")

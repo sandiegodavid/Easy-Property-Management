@@ -34,26 +34,26 @@ class SQLitePortfolioContextReader:
         }
 
     def context_for_space(self, connection: Any, space_id: str) -> dict[str, object] | None:
-        space = (
-            connection.execute(SpaceModel.__table__.select().where(SpaceModel.id == space_id))
-            .mappings()
-            .first()
-        )
-        if space is None:
-            return None
-        property_record = (
+        row = (
             connection.execute(
-                PropertyModel.__table__.select().where(PropertyModel.id == space["property_id"])
+                select(
+                    PropertyModel.id.label("property_id"),
+                    SpaceModel.id.label("space_id"),
+                    PropertyModel.time_zone.label("time_zone"),
+                )
+                .select_from(SpaceModel)
+                .join(PropertyModel, PropertyModel.id == SpaceModel.property_id)
+                .where(SpaceModel.id == space_id)
             )
             .mappings()
             .first()
         )
-        if property_record is None:
+        if row is None:
             return None
         return {
-            "property_id": property_record["id"],
-            "space_id": space["id"],
-            "time_zone": property_record["time_zone"],
+            "property_id": row["property_id"],
+            "space_id": row["space_id"],
+            "time_zone": row["time_zone"],
         }
 
     def contexts_for_spaces(

@@ -81,10 +81,16 @@ def upgrade() -> None:
     )
     from app.modules.finance.infrastructure.sqlalchemy_models import (
         CATEGORY_COMMAND_TRIGGERS as EXPENSE_CATEGORY_COMMAND_TRIGGERS,
+        LATE_FEE_TRIGGERS,
         ExpenseCategoryCommandOperationModel,
         ExpenseCategoryModel,
         ExpenseModel,
         ExpenseRefundModel,
+        LateFeeAssessmentModel,
+        LateFeePolicyVersionModel,
+        LateFeeReceiptAllocationModel,
+        LateFeeReceiptModel,
+        LateFeeWaiverModel,
         RentExpectationModel,
         RentExpectationTimelinessReviewModel,
         RentReceiptModel,
@@ -801,6 +807,11 @@ def upgrade() -> None:
         SecurityDepositDeductionSourceModel.__table__,
         SecurityDepositCreditModel.__table__,
         SecurityDepositRefundModel.__table__,
+        LateFeePolicyVersionModel.__table__,
+        LateFeeAssessmentModel.__table__,
+        LateFeeWaiverModel.__table__,
+        LateFeeReceiptModel.__table__,
+        LateFeeReceiptAllocationModel.__table__,
         FinanceCommandRevisionModel.__table__,
         FinanceCommandOperationModel.__table__,
         CommunicationModel.__table__,
@@ -844,6 +855,7 @@ def upgrade() -> None:
     _create_triggers(CATEGORY_COMMAND_TRIGGERS)
     _create_triggers(FINANCE_COMMAND_TRIGGERS)
     _create_triggers(EXPENSE_CATEGORY_COMMAND_TRIGGERS)
+    _create_triggers(LATE_FEE_TRIGGERS)
     op.bulk_insert(
         AiSettingsModel.__table__,
         [
@@ -1062,6 +1074,14 @@ def downgrade() -> None:
     op.drop_table("security_deposit_settlements")
     op.drop_table("security_deposit_receipts")
     op.drop_table("security_deposit_accounts")
+    from app.modules.finance.infrastructure.sqlalchemy_models import LATE_FEE_TRIGGERS
+
+    _drop_triggers(LATE_FEE_TRIGGERS)
+    op.drop_table("late_fee_receipt_allocations")
+    op.drop_table("late_fee_receipts")
+    op.drop_table("late_fee_waivers")
+    op.drop_table("late_fee_assessments")
+    op.drop_table("late_fee_policy_versions")
     op.drop_table("expense_refunds")
     op.drop_table("expenses")
     from app.modules.finance.infrastructure.sqlalchemy_models import (

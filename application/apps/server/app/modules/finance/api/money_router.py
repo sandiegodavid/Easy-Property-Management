@@ -75,11 +75,13 @@ Money = Annotated[str, Field(pattern=r"^-?(0|[1-9][0-9]*)\.[0-9]{2}$")]
 
 class OperatingResponse(Contract):
     rent_received: Money
+    late_fees_received: Money
     expenses_paid: Money
     expense_refunds_received: Money
     net_recorded_expenses: Money
     operating_remainder: Money
     rent_receipt_count: int
+    late_fee_receipt_count: int
     expense_count: int
     expense_refund_count: int
     available: bool

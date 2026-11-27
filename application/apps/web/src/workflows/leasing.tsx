@@ -13,6 +13,7 @@ import { History, readResult } from "./reads";
 import { InspectionList } from "./inspections";
 import { ReadableFacts } from "./readable-facts";
 import { LeaseDocuments } from "./lease-documents";
+import { LeaseLateFeesSection } from "./late-fees";
 import { MoneyFacts } from "./money-presentation";
 import { PageAsOf } from "../shared/page-as-of";
 import { useWorkflowRecovery } from "./use-workflow-recovery";
@@ -411,6 +412,7 @@ function LeaseRecord({ id }: { id: string }) {
         </section>
       </div>
       <LeaseParticipants lease={item} />
+      <LeaseLateFeesSection leaseId={id} leaseStatus={item.status} />
       {item.notes && (
         <section className="lease-detail-section" aria-label="Lease notes">
           <h3>Notes</h3>

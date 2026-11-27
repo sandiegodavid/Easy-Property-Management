@@ -263,6 +263,7 @@ export function MoneyReporting() {
                     labels={{ operatingRemainder: "Rent less net expenses" }}
                     fields={[
                       "rentReceived",
+                      "lateFeesReceived",
                       "expensesPaid",
                       "expenseRefundsReceived",
                       "netRecordedExpenses",
@@ -287,14 +288,16 @@ export function MoneyReporting() {
             const url =
               item.sourceKind === "rent_receipt"
                 ? moneyRecordUrl("receipt", item.sourceId)
-                : item.sourceKind === "expense" || item.sourceKind === "expense_refund"
-                  ? moneyRecordUrl("expense", item.parentId ?? item.sourceId)
-                  : item.sourceKind === "settlement_credit" ||
-                      item.sourceKind === "settlement_deduction"
-                    ? moneyRecordUrl("settlement", item.sourceId)
-                    : item.accountId
-                      ? moneyRecordUrl("deposit", item.accountId)
-                      : undefined;
+                : item.sourceKind === "late_fee_receipt"
+                  ? moneyRecordUrl("late_fee_receipt", item.sourceId)
+                  : item.sourceKind === "expense" || item.sourceKind === "expense_refund"
+                    ? moneyRecordUrl("expense", item.parentId ?? item.sourceId)
+                    : item.sourceKind === "settlement_credit" ||
+                        item.sourceKind === "settlement_deduction"
+                      ? moneyRecordUrl("settlement", item.sourceId)
+                      : item.accountId
+                        ? moneyRecordUrl("deposit", item.accountId)
+                        : undefined;
             return (
               <article className="reporting-source-row" key={`${item.sourceKind}:${item.sourceId}`}>
                 <header className="child-record-heading">

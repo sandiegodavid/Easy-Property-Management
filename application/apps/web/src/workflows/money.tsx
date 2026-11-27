@@ -11,6 +11,7 @@ import { readResult } from "./reads";
 import { MoneyCommand } from "./money-command";
 import { MoneyRecord, MoneyFacts, moneyRecordUrl, type MoneyKind } from "./money-records";
 import { MoneyReporting } from "./money-reporting";
+import { MoneyLateFeesQueue } from "./late-fees";
 import { ExpenseEvidenceArchive, ExpenseFilters } from "./expense-context";
 import { DepositFilters, DepositEvidenceArchive } from "./deposit-context";
 import { CheckFilters } from "./check-context";
@@ -21,6 +22,7 @@ import { formatDate } from "../shared/presentation";
 const tabs = [
   "rent",
   "receipts",
+  "late_fees",
   "expenses",
   "deposits",
   "checks",
@@ -31,6 +33,7 @@ const tabs = [
 const tabLabels: Record<(typeof tabs)[number], string> = {
   rent: "Rent",
   receipts: "Received rent",
+  late_fees: "Late fees",
   expenses: "Expenses",
   deposits: "Deposits",
   checks: "Scheduled checks",
@@ -63,6 +66,8 @@ export function MoneyWorkspace() {
       ![
         "expectation",
         "receipt",
+        "late_fee_receipt",
+        "late_fee_assessment",
         "expense",
         "check",
         "report",
@@ -103,7 +108,13 @@ export function MoneyWorkspace() {
           );
         })}
       </nav>
-      {tab === "reporting" ? <MoneyReporting /> : <MoneyDirectory key={tab} tab={tab} />}
+      {tab === "reporting" ? (
+        <MoneyReporting />
+      ) : tab === "late_fees" ? (
+        <MoneyLateFeesQueue />
+      ) : (
+        <MoneyDirectory key={tab} tab={tab} />
+      )}
     </section>
   );
 }
@@ -233,7 +244,11 @@ function FileMetadata({ id }: { id: string }) {
   );
 }
 
-function MoneyDirectory({ tab }: { tab: Exclude<(typeof tabs)[number], "reporting"> }) {
+function MoneyDirectory({
+  tab,
+}: {
+  tab: Exclude<(typeof tabs)[number], "reporting" | "late_fees">;
+}) {
   const { scope } = useWorkspace();
   const [params, setParams] = useSearchParams();
   const leaseId = params.get("leaseId") ?? undefined,

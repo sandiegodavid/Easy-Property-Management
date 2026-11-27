@@ -15,7 +15,7 @@ not executable resources and must not be used as fallbacks.
 
 | Resource set / configuration | Revision namespace | Delivery / connection owner |
 | --- | --- | --- |
-| Existing `sqlite-migrations/`, `application/alembic.ini` | Existing business revision | Domain-owned business runner; unchanged |
+| Existing `sqlite-migrations/`, `application/alembic.ini` | Existing business revision | Domain-owned business runner (includes `FIN-009` late-fee tables and immutability triggers in `0001_initial_schema`) |
 | [admin-migrations/alembic.ini](../../application/database/admin-migrations/alembic.ini) | `admin_` | H02 complete Pilot 0 structural baseline/FK closure and protected deployment metadata; H03/H04 own identity/provisioning population/behavior, H05 protection observations |
 | [admin-recovery-migrations/alembic.ini](../../application/database/admin-recovery-migrations/alembic.ini) | `admin_recovery_` | H05 Admin recovery service, independent of main Admin startup |
 | [host-inventory-migrations/alembic.ini](../../application/database/host-inventory-migrations/alembic.ini) | `host_inventory_` | H02 restricted host agent only |

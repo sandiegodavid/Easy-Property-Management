@@ -43,6 +43,7 @@ class MoneyWorkspaceUnavailable(MoneyError):
 
 class Metric(StrEnum):
     RENT = "rentReceived"
+    LATE_FEES = "lateFeesReceived"
     EXPENSES = "expensesPaid"
     REFUNDS = "expenseRefundsReceived"
     NET_EXPENSES = "netRecordedExpenses"
@@ -132,6 +133,8 @@ class Operating:
     expense_count: int
     expense_refund_count: int
     available: bool = True
+    late_fees_received: str = "0.00"
+    late_fee_receipt_count: int = 0
 
 
 @dataclass(frozen=True)

@@ -2,7 +2,7 @@
 
 [Manual contents](README.md)
 
-**Money** separates Rent, Received rent, Expenses, Deposits, Scheduled checks, Owner reports, Expense categories and Reporting. Check Property/Lease filters before entering anything. The app records external activity; it does not move money or connect to a bank account.
+**Money** separates Rent, Received rent, Late fees, Expenses, Deposits, Scheduled checks, Owner reports, Expense categories and Reporting. Check Property/Lease filters before entering anything. The app records external activity; it does not move money or connect to a bank account.
 
 ## Set up rent expectations
 
@@ -29,6 +29,17 @@ An early payment actually received and allocated to a future expectation is rece
 ### Correct a receipt
 
 Open the actual receipt and review date, allocations, method and replacement history. Use the offered void/correction flow, provide the reason and confirm. Record a replacement only through the supported predecessor/context flow. Preserve the original and check the resulting ledger. If another window changed the ledger, review latest facts while retaining input. Do not re-enter a receipt after an unknown response; recover its original result first.
+
+## Late fees
+
+EPM ships no default late-fee rates and never assesses late fees automatically.
+
+1. Open the Lease's **Late fees** section and choose **Configure late-fee policy**. Enter the effective date, contractual rule basis (for example, lease section and signed date), grace period, formula, rounding mode, and explicit confirmation. To change rules going forward, configure a new effective-dated policy version rather than rewriting past assessments.
+2. Run **Preview eligible late fees** for a property-local as-of date. Previews are read-only quotes (**Preview only — not an assessed charge**) and create no debt or audit entries; editing the as-of date invalidates an active preview until refreshed.
+3. Expand an eligible period to inspect the step-by-step math and any scheduled-check or processing-payment warnings, then explicitly confirm **Assess late fee** to record an immutable charge with frozen calculation steps.
+4. Expand any assessed fee to inspect its frozen breakdown, record a partial or full **Waive** with a required reason, **Void assessment** when unpaid, or review a **Source drift warning** if rent receipts for that period changed after assessment.
+5. Collect fee payments with **Record late-fee payment** (standalone) or **Record combined rent + late-fee payment**, which records separate rent and late-fee receipts atomically under one batch ID without mixing fee dollars into rent received.
+6. Use **Money → Late fees** to review assessed late fees across the portfolio by settlement status or voided history and jump back to each Lease.
 
 ## Scheduled prepaid checks
 
@@ -84,6 +95,7 @@ Choose an explicit inclusive From/Through period and scope, then open a metric t
 | Figure                 | Interpretation                                                                                |
 | ---------------------- | --------------------------------------------------------------------------------------------- |
 | Rent received          | Current non-voided receipts dated in the selected period, each once                           |
+| Late fees received     | Current non-voided late-fee receipts dated in the selected period, separate from rent         |
 | Expenses paid          | Paid non-voided expenses in the period                                                        |
 | Expense refunds        | Active actual refunds received in the period                                                  |
 | Net recorded expenses  | Expenses paid less refunds received                                                           |

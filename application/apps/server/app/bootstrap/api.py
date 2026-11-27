@@ -74,10 +74,12 @@ from app.modules.files.infrastructure.file_link_reader import SQLiteFileLinkRead
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
 from app.modules.finance.api.deposit_router import build_router as build_deposit_router
 from app.modules.finance.api.expense_router import build_router as build_expense_router
+from app.modules.finance.api.late_fee_router import build_router as build_late_fee_router
 from app.modules.finance.api.prepaid_check_router import build_router as build_prepaid_check_router
 from app.modules.finance.api.router import build_router as build_finance_router
 from app.modules.finance.application.deposit_service import DepositService
 from app.modules.finance.application.expense_service import ExpenseService
+from app.modules.finance.application.late_fee_service import LateFeeService
 from app.modules.finance.application.prepaid_check_service import PrepaidCheckService
 from app.modules.finance.application.service import FinanceService
 from app.modules.finance.domain.command_audit_policy import FINANCE_COMMAND_ACTIVITY_POLICY
@@ -98,6 +100,10 @@ from app.modules.finance.domain.audit_policy import (
     EXPENSE_ACTIVITY_POLICY,
     EXPENSE_CATEGORY_ACTIVITY_POLICY,
     EXPENSE_REFUND_ACTIVITY_POLICY,
+    LATE_FEE_ASSESSMENT_ACTIVITY_POLICY,
+    LATE_FEE_POLICY_ACTIVITY_POLICY,
+    LATE_FEE_RECEIPT_ACTIVITY_POLICY,
+    LATE_FEE_WAIVER_ACTIVITY_POLICY,
     PREPAID_CHECK_ACTIVITY_POLICY,
     RECEIPT_ACTIVITY_POLICY,
     REVIEW_ACTIVITY_POLICY,
@@ -455,6 +461,7 @@ def create_app(  # noqa: C901, PLR0915
         )
     )
     prepaid_checks = PrepaidCheckService(finance.unit_of_work)
+    late_fees = LateFeeService(finance.unit_of_work)
     money_locations = SQLitePortfolioLocationRelations()
 
     def money_read_identity() -> tuple[str, str]:
@@ -607,6 +614,7 @@ def create_app(  # noqa: C901, PLR0915
     app.state.finance_service = finance
     app.state.money_summary_reader = money
     app.state.prepaid_check_service = prepaid_checks
+    app.state.late_fee_service = late_fees
     app.state.expense_service = expenses
     app.state.deposit_service = deposits
     app.state.maintenance_service = maintenance
@@ -715,6 +723,11 @@ def create_app(  # noqa: C901, PLR0915
             ("rent_receipt", 1): DEFAULT_SNAPSHOT_POLICY,
             ("rent_receipt_allocation", 1): DEFAULT_SNAPSHOT_POLICY,
             ("prepaid_check", 1): DEFAULT_SNAPSHOT_POLICY,
+            ("late_fee_policy_version", 1): DEFAULT_SNAPSHOT_POLICY,
+            ("late_fee_assessment", 1): DEFAULT_SNAPSHOT_POLICY,
+            ("late_fee_waiver", 1): DEFAULT_SNAPSHOT_POLICY,
+            ("late_fee_receipt", 1): DEFAULT_SNAPSHOT_POLICY,
+            ("late_fee_receipt_allocation", 1): DEFAULT_SNAPSHOT_POLICY,
             ("expense_category", 1): DEFAULT_SNAPSHOT_POLICY,
             ("expense_category_command_operation", 1): DEFAULT_SNAPSHOT_POLICY,
             ("expense", 1): DEFAULT_SNAPSHOT_POLICY,
@@ -780,6 +793,11 @@ def create_app(  # noqa: C901, PLR0915
             ("rent_receipt", 1): RECEIPT_ACTIVITY_POLICY,
             ("rent_receipt_allocation", 1): ALLOCATION_ACTIVITY_POLICY,
             ("prepaid_check", 1): PREPAID_CHECK_ACTIVITY_POLICY,
+            ("late_fee_policy_version", 1): LATE_FEE_POLICY_ACTIVITY_POLICY,
+            ("late_fee_assessment", 1): LATE_FEE_ASSESSMENT_ACTIVITY_POLICY,
+            ("late_fee_waiver", 1): LATE_FEE_WAIVER_ACTIVITY_POLICY,
+            ("late_fee_receipt", 1): LATE_FEE_RECEIPT_ACTIVITY_POLICY,
+            ("late_fee_receipt_allocation", 1): ALLOCATION_ACTIVITY_POLICY,
             ("expense_category", 1): EXPENSE_CATEGORY_ACTIVITY_POLICY,
             ("expense", 1): EXPENSE_ACTIVITY_POLICY,
             ("expense_refund", 1): EXPENSE_REFUND_ACTIVITY_POLICY,
@@ -834,6 +852,7 @@ def create_app(  # noqa: C901, PLR0915
     app.include_router(build_finance_router(finance, runtime))
     app.include_router(build_money_router(money, runtime))
     app.include_router(build_prepaid_check_router(prepaid_checks, runtime))
+    app.include_router(build_late_fee_router(late_fees, runtime))
     app.include_router(build_expense_router(expenses, runtime))
     app.include_router(build_deposit_router(deposits, runtime))
     app.include_router(build_communications_router(communications, runtime))

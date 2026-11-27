@@ -1173,6 +1173,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/late-fee-assessments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Portfolio Assessments */
+        get: operations["listLateFeeAssessments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/late-fee-assessments/{assessment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Assessment */
+        get: operations["getLateFeeAssessment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/late-fee-assessments/{assessment_id}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Void Assessment */
+        post: operations["voidLateFeeAssessment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/late-fee-assessments/{assessment_id}/waive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Waive Assessment */
+        post: operations["waiveLateFee"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/late-fee-receipts/{receipt_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Late Fee Receipt */
+        get: operations["getLateFeeReceipt"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/late-fee-receipts/{receipt_id}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Void Late Fee Receipt */
+        post: operations["voidLateFeeReceipt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/leases": {
         parameters: {
             query?: never;
@@ -1241,6 +1343,23 @@ export interface paths {
         head?: never;
         /** Patch */
         patch: operations["leasePatch"];
+        trace?: never;
+    };
+    "/api/leases/{lease_id}/combined-receipts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record Combined Receipt */
+        post: operations["recordCombinedReceipt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/leases/{lease_id}/condition-comparison": {
@@ -1324,6 +1443,93 @@ export interface paths {
         /** Replace Term */
         put: operations["leaseReplaceTerm"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/leases/{lease_id}/late-fee-assessments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Lease Assessments */
+        get: operations["listLeaseLateFeeAssessments"];
+        put?: never;
+        /** Assess Late Fee */
+        post: operations["assessLateFee"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/leases/{lease_id}/late-fee-policies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Policies */
+        get: operations["listLateFeePolicies"];
+        put?: never;
+        /** Create Policy */
+        post: operations["createLateFeePolicy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/leases/{lease_id}/late-fee-policies/{policy_version_id}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Void Policy */
+        post: operations["voidLateFeePolicy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/leases/{lease_id}/late-fee-receipts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record Late Fee Receipt */
+        post: operations["recordLateFeeReceipt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/leases/{lease_id}/late-fees/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Late Fees */
+        post: operations["previewLateFees"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5567,6 +5773,41 @@ export interface components {
             /** Observations */
             observations?: components["schemas"]["ObservationRequest"][];
         };
+        /** AssessLateFeeInput */
+        AssessLateFeeInput: {
+            /**
+             * Acknowledgeprocessingpayments
+             * @default false
+             */
+            acknowledgeProcessingPayments: boolean;
+            /**
+             * Asofdate
+             * Format: date
+             */
+            asOfDate: string;
+            /** Expectedrevision */
+            expectedRevision: number;
+            /**
+             * Idempotencykey
+             * Format: uuid
+             */
+            idempotencyKey: string;
+            /** Internalnotes */
+            internalNotes?: string | null;
+            /** Operatorconfirmed */
+            operatorConfirmed: boolean;
+            /** Previewfingerprint */
+            previewFingerprint: string;
+            /** Processingacknowledgmentreason */
+            processingAcknowledgmentReason?: string | null;
+            /**
+             * Rentexpectationid
+             * Format: uuid
+             */
+            rentExpectationId: string;
+            /** Replacesassessmentid */
+            replacesAssessmentId?: string | null;
+        };
         /** AssignmentArchiveInput */
         AssignmentArchiveInput: {
             /** Confirmed */
@@ -6035,6 +6276,21 @@ export interface components {
             /** Workspaceid */
             workspaceId: string | null;
         };
+        /** CalculationStepResponse */
+        CalculationStepResponse: {
+            /** Expression */
+            expression: string;
+            /** Inputs */
+            inputs: {
+                [key: string]: unknown;
+            };
+            /** Label */
+            label: string;
+            /** Resultminor */
+            resultMinor: number | null;
+            /** Stepcode */
+            stepCode: string;
+        };
         /** Capture */
         Capture: {
             /**
@@ -6258,6 +6514,136 @@ export interface components {
              */
             kind: "home_collection";
             scope: components["schemas"]["HomeScope"];
+        };
+        /** CombinedReceiptMutationResponse */
+        CombinedReceiptMutationResponse: {
+            /**
+             * Currencycode
+             * @constant
+             */
+            currencyCode: "USD";
+            /** Latefeeamountminor */
+            lateFeeAmountMinor: number;
+            lateFeeReceipt: components["schemas"]["LateFeeReceiptResponse"];
+            /**
+             * Leaseid
+             * Format: uuid
+             */
+            leaseId: string;
+            /**
+             * Operationid
+             * Format: uuid
+             */
+            operationId: string;
+            /**
+             * Paymentbatchid
+             * Format: uuid
+             */
+            paymentBatchId: string;
+            /**
+             * Receivedon
+             * Format: date
+             */
+            receivedOn: string;
+            /** Rentamountminor */
+            rentAmountMinor: number;
+            /** Rentledgerrevision */
+            rentLedgerRevision: number;
+            rentReceipt: components["schemas"]["CombinedRentReceiptResponse"];
+            /** Totalamountminor */
+            totalAmountMinor: number;
+        };
+        /** CombinedRentAllocationResponse */
+        CombinedRentAllocationResponse: {
+            /** Amountminor */
+            amountMinor: number;
+            /**
+             * Createdat
+             * Format: date-time
+             */
+            createdAt: string;
+            /**
+             * Expectationid
+             * Format: uuid
+             */
+            expectationId: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Receiptid
+             * Format: uuid
+             */
+            receiptId: string;
+        };
+        /** CombinedRentReceiptResponse */
+        CombinedRentReceiptResponse: {
+            /** Allocations */
+            allocations: components["schemas"]["CombinedRentAllocationResponse"][];
+            /** Amountminor */
+            amountMinor: number;
+            /**
+             * Createdat
+             * Format: date-time
+             */
+            createdAt: string;
+            /**
+             * Currencycode
+             * @constant
+             */
+            currencyCode: "USD";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Idempotencykey
+             * Format: uuid
+             */
+            idempotencyKey: string;
+            /**
+             * Leaseid
+             * Format: uuid
+             */
+            leaseId: string;
+            /** Maskedreference */
+            maskedReference: string | null;
+            /** Notes */
+            notes: string | null;
+            /** Otherpaymentmethodnote */
+            otherPaymentMethodNote: string | null;
+            /**
+             * Paymentbatchid
+             * Format: uuid
+             */
+            paymentBatchId: string;
+            /**
+             * Paymentmethodkind
+             * @enum {string}
+             */
+            paymentMethodKind: "automatic_bank_payment" | "bank_transfer" | "check" | "cash" | "online_payment" | "other";
+            /** Paymentmethodlabel */
+            paymentMethodLabel: string | null;
+            /** Receivedbypartyid */
+            receivedByPartyId: string | null;
+            /**
+             * Receivedon
+             * Format: date
+             */
+            receivedOn: string;
+            /** Rentledgerrevision */
+            rentLedgerRevision?: number | null;
+            /** Replacedbyreceiptid */
+            replacedByReceiptId?: string | null;
+            /** Replacesreceiptid */
+            replacesReceiptId: string | null;
+            /** Voidreason */
+            voidReason: string | null;
+            /** Voidedat */
+            voidedAt: string | null;
         };
         /** CommandConflictDetail */
         CommandConflictDetail: {
@@ -8093,6 +8479,69 @@ export interface components {
              * Format: date
              */
             receivedOn: string;
+        };
+        /** CreateLateFeePolicyInput */
+        CreateLateFeePolicyInput: {
+            /** Appliestoproratedperiods */
+            appliesToProratedPeriods: boolean;
+            /**
+             * Calculationbasis
+             * @enum {string}
+             */
+            calculationBasis: "unpaid_rent_at_grace_end" | "current_unpaid_rent" | "scheduled_rent";
+            /** Dailyamountminor */
+            dailyAmountMinor?: number | null;
+            /**
+             * Effectiveon
+             * Format: date
+             */
+            effectiveOn: string;
+            /** Endson */
+            endsOn?: string | null;
+            /** Expectedrevision */
+            expectedRevision: number;
+            /** Flatamountminor */
+            flatAmountMinor?: number | null;
+            /**
+             * Formulakind
+             * @enum {string}
+             */
+            formulaKind: "fixed_flat" | "percentage_once" | "daily_flat" | "fixed_plus_daily_flat";
+            /** Graceperioddays */
+            gracePeriodDays: number;
+            /**
+             * Idempotencykey
+             * Format: uuid
+             */
+            idempotencyKey: string;
+            /** Leasetermid */
+            leaseTermId?: string | null;
+            /** Maxaccrualdays */
+            maxAccrualDays?: number | null;
+            /**
+             * Minimumunpaidthresholdminor
+             * @default 0
+             */
+            minimumUnpaidThresholdMinor: number;
+            /** Notes */
+            notes?: string | null;
+            /** Operatorconfirmed */
+            operatorConfirmed: boolean;
+            /** Perperiodcapminor */
+            perPeriodCapMinor?: number | null;
+            /** Perperiodminminor */
+            perPeriodMinMinor?: number | null;
+            /** Percentagebps */
+            percentageBps?: number | null;
+            /**
+             * Roundingmode
+             * @enum {string}
+             */
+            roundingMode: "half_up" | "floor";
+            /** Rulebasis */
+            ruleBasis: string;
+            /** Supersedespolicyversionid */
+            supersedesPolicyVersionId?: string | null;
         };
         /** CreateProviderInput */
         CreateProviderInput: {
@@ -11720,6 +12169,862 @@ export interface components {
             summary: string;
         };
         JsonValue: unknown;
+        /** LateFeeAllocationSummaryResponse */
+        LateFeeAllocationSummaryResponse: {
+            /**
+             * Allocationid
+             * Format: uuid
+             */
+            allocationId: string;
+            /** Amountminor */
+            amountMinor: number;
+            /**
+             * Receiptid
+             * Format: uuid
+             */
+            receiptId: string;
+            /**
+             * Receiptlifecyclestatus
+             * @enum {string}
+             */
+            receiptLifecycleStatus: "active" | "voided";
+            /**
+             * Receivedon
+             * Format: date
+             */
+            receivedOn: string;
+        };
+        /** LateFeeAssessmentDetailResponse */
+        LateFeeAssessmentDetailResponse: {
+            /** Accrualdays */
+            accrualDays: number;
+            /**
+             * Accrualendson
+             * Format: date
+             */
+            accrualEndsOn: string;
+            /**
+             * Accrualstartson
+             * Format: date
+             */
+            accrualStartsOn: string;
+            /** Allocations */
+            allocations: components["schemas"]["LateFeeAllocationSummaryResponse"][];
+            /**
+             * Asofdate
+             * Format: date
+             */
+            asOfDate: string;
+            /** Assessedamountminor */
+            assessedAmountMinor: number;
+            /**
+             * Assessedat
+             * Format: date-time
+             */
+            assessedAt: string;
+            /** Assessedbyactor */
+            assessedByActor: string;
+            /** Calculationsnapshot */
+            calculationSnapshot: {
+                [key: string]: unknown;
+            };
+            /** Calculationsnapshothash */
+            calculationSnapshotHash: string;
+            /** Calculationsteps */
+            calculationSteps: components["schemas"]["CalculationStepResponse"][];
+            /**
+             * Currencycode
+             * @constant
+             */
+            currencyCode: "USD";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Internalnotes */
+            internalNotes: string | null;
+            /**
+             * Leaseid
+             * Format: uuid
+             */
+            leaseId: string;
+            /** Occurrencenumber */
+            occurrenceNumber: number;
+            /** Paidamountminor */
+            paidAmountMinor: number;
+            /**
+             * Policyversionid
+             * Format: uuid
+             */
+            policyVersionId: string;
+            /** Processingacknowledged */
+            processingAcknowledged: boolean;
+            /** Processingacknowledgmentreason */
+            processingAcknowledgmentReason: string | null;
+            /** Remainingbalanceminor */
+            remainingBalanceMinor: number;
+            /**
+             * Rentexpectationid
+             * Format: uuid
+             */
+            rentExpectationId: string;
+            /** Rentledgerrevision */
+            rentLedgerRevision: number;
+            /** Replacedbyassessmentid */
+            replacedByAssessmentId: string | null;
+            /** Replacesassessmentid */
+            replacesAssessmentId: string | null;
+            /** Rulebasissnapshot */
+            ruleBasisSnapshot: string;
+            /**
+             * Settlementstatus
+             * @enum {string}
+             */
+            settlementStatus: "unpaid" | "partially_paid" | "paid" | "waived" | "voided";
+            /** Sourcedriftwarning */
+            sourceDriftWarning: boolean;
+            /** Timezone */
+            timeZone: string;
+            /** Voidreason */
+            voidReason: string | null;
+            /** Voidedat */
+            voidedAt: string | null;
+            /** Waivedamountminor */
+            waivedAmountMinor: number;
+            /** Waivers */
+            waivers: components["schemas"]["LateFeeWaiverResponse"][];
+        };
+        /** LateFeeAssessmentMutationResponse */
+        LateFeeAssessmentMutationResponse: {
+            /** Accrualdays */
+            accrualDays: number;
+            /**
+             * Accrualendson
+             * Format: date
+             */
+            accrualEndsOn: string;
+            /**
+             * Accrualstartson
+             * Format: date
+             */
+            accrualStartsOn: string;
+            /** Allocations */
+            allocations: components["schemas"]["LateFeeAllocationSummaryResponse"][];
+            /**
+             * Asofdate
+             * Format: date
+             */
+            asOfDate: string;
+            /** Assessedamountminor */
+            assessedAmountMinor: number;
+            /**
+             * Assessedat
+             * Format: date-time
+             */
+            assessedAt: string;
+            /** Assessedbyactor */
+            assessedByActor: string;
+            /** Calculationsnapshot */
+            calculationSnapshot: {
+                [key: string]: unknown;
+            };
+            /** Calculationsnapshothash */
+            calculationSnapshotHash: string;
+            /** Calculationsteps */
+            calculationSteps: components["schemas"]["CalculationStepResponse"][];
+            /**
+             * Currencycode
+             * @constant
+             */
+            currencyCode: "USD";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Internalnotes */
+            internalNotes: string | null;
+            /**
+             * Leaseid
+             * Format: uuid
+             */
+            leaseId: string;
+            /** Occurrencenumber */
+            occurrenceNumber: number;
+            /**
+             * Operationid
+             * Format: uuid
+             */
+            operationId: string;
+            /** Paidamountminor */
+            paidAmountMinor: number;
+            /**
+             * Policyversionid
+             * Format: uuid
+             */
+            policyVersionId: string;
+            /** Processingacknowledged */
+            processingAcknowledged: boolean;
+            /** Processingacknowledgmentreason */
+            processingAcknowledgmentReason: string | null;
+            /** Remainingbalanceminor */
+            remainingBalanceMinor: number;
+            /**
+             * Rentexpectationid
+             * Format: uuid
+             */
+            rentExpectationId: string;
+            /** Rentledgerrevision */
+            rentLedgerRevision: number;
+            /** Replacedbyassessmentid */
+            replacedByAssessmentId: string | null;
+            /** Replacesassessmentid */
+            replacesAssessmentId: string | null;
+            /** Rulebasissnapshot */
+            ruleBasisSnapshot: string;
+            /**
+             * Settlementstatus
+             * @enum {string}
+             */
+            settlementStatus: "unpaid" | "partially_paid" | "paid" | "waived" | "voided";
+            /** Sourcedriftwarning */
+            sourceDriftWarning: boolean;
+            /** Timezone */
+            timeZone: string;
+            /** Voidreason */
+            voidReason: string | null;
+            /** Voidedat */
+            voidedAt: string | null;
+            /** Waivedamountminor */
+            waivedAmountMinor: number;
+            /** Waivers */
+            waivers: components["schemas"]["LateFeeWaiverResponse"][];
+        };
+        /** LateFeeAssessmentPageResponse */
+        LateFeeAssessmentPageResponse: {
+            /** Items */
+            items: components["schemas"]["LateFeeAssessmentSummaryResponse"][];
+            /** Nextcursor */
+            nextCursor: string | null;
+        };
+        /** LateFeeAssessmentSummaryResponse */
+        LateFeeAssessmentSummaryResponse: {
+            /** Accrualdays */
+            accrualDays: number;
+            /**
+             * Accrualendson
+             * Format: date
+             */
+            accrualEndsOn: string;
+            /**
+             * Accrualstartson
+             * Format: date
+             */
+            accrualStartsOn: string;
+            /**
+             * Asofdate
+             * Format: date
+             */
+            asOfDate: string;
+            /** Assessedamountminor */
+            assessedAmountMinor: number;
+            /**
+             * Assessedat
+             * Format: date-time
+             */
+            assessedAt: string;
+            /** Assessedbyactor */
+            assessedByActor: string;
+            /**
+             * Currencycode
+             * @constant
+             */
+            currencyCode: "USD";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Internalnotes */
+            internalNotes: string | null;
+            /**
+             * Leaseid
+             * Format: uuid
+             */
+            leaseId: string;
+            /** Occurrencenumber */
+            occurrenceNumber: number;
+            /** Paidamountminor */
+            paidAmountMinor: number;
+            /**
+             * Policyversionid
+             * Format: uuid
+             */
+            policyVersionId: string;
+            /** Processingacknowledged */
+            processingAcknowledged: boolean;
+            /** Processingacknowledgmentreason */
+            processingAcknowledgmentReason: string | null;
+            /** Remainingbalanceminor */
+            remainingBalanceMinor: number;
+            /**
+             * Rentexpectationid
+             * Format: uuid
+             */
+            rentExpectationId: string;
+            /** Replacedbyassessmentid */
+            replacedByAssessmentId: string | null;
+            /** Replacesassessmentid */
+            replacesAssessmentId: string | null;
+            /** Rulebasissnapshot */
+            ruleBasisSnapshot: string;
+            /**
+             * Settlementstatus
+             * @enum {string}
+             */
+            settlementStatus: "unpaid" | "partially_paid" | "paid" | "waived" | "voided";
+            /** Sourcedriftwarning */
+            sourceDriftWarning: boolean;
+            /** Timezone */
+            timeZone: string;
+            /** Voidreason */
+            voidReason: string | null;
+            /** Voidedat */
+            voidedAt: string | null;
+            /** Waivedamountminor */
+            waivedAmountMinor: number;
+        };
+        /** LateFeePolicyListResponse */
+        LateFeePolicyListResponse: {
+            /** Items */
+            items: components["schemas"]["LateFeePolicyResponse"][];
+            /**
+             * Leaseid
+             * Format: uuid
+             */
+            leaseId: string;
+            /** Rentledgerrevision */
+            rentLedgerRevision: number;
+        };
+        /** LateFeePolicyMutationResponse */
+        LateFeePolicyMutationResponse: {
+            /** Appliestoproratedperiods */
+            appliesToProratedPeriods: boolean;
+            /**
+             * Calculationbasis
+             * @enum {string}
+             */
+            calculationBasis: "unpaid_rent_at_grace_end" | "current_unpaid_rent" | "scheduled_rent";
+            /**
+             * Createdat
+             * Format: date-time
+             */
+            createdAt: string;
+            /** Dailyamountminor */
+            dailyAmountMinor: number | null;
+            /**
+             * Effectiveon
+             * Format: date
+             */
+            effectiveOn: string;
+            /** Endson */
+            endsOn: string | null;
+            /** Flatamountminor */
+            flatAmountMinor: number | null;
+            /**
+             * Formulakind
+             * @enum {string}
+             */
+            formulaKind: "fixed_flat" | "percentage_once" | "daily_flat" | "fixed_plus_daily_flat";
+            /** Graceperioddays */
+            gracePeriodDays: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Leaseid
+             * Format: uuid
+             */
+            leaseId: string;
+            /** Leasetermid */
+            leaseTermId: string | null;
+            /** Maxaccrualdays */
+            maxAccrualDays: number | null;
+            /** Minimumunpaidthresholdminor */
+            minimumUnpaidThresholdMinor: number;
+            /** Notes */
+            notes: string | null;
+            /**
+             * Operationid
+             * Format: uuid
+             */
+            operationId: string;
+            /**
+             * Operatorconfirmedat
+             * Format: date-time
+             */
+            operatorConfirmedAt: string;
+            /** Operatorconfirmedbyactor */
+            operatorConfirmedByActor: string;
+            /** Perperiodcapminor */
+            perPeriodCapMinor: number | null;
+            /** Perperiodminminor */
+            perPeriodMinMinor: number | null;
+            /** Percentagebps */
+            percentageBps: number | null;
+            /** Rentledgerrevision */
+            rentLedgerRevision: number;
+            /**
+             * Roundingmode
+             * @enum {string}
+             */
+            roundingMode: "half_up" | "floor";
+            /** Rulebasis */
+            ruleBasis: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "superseded" | "voided";
+            /** Supersedespolicyversionid */
+            supersedesPolicyVersionId: string | null;
+            /** Versionnumber */
+            versionNumber: number;
+            /** Voidreason */
+            voidReason: string | null;
+            /** Voidedat */
+            voidedAt: string | null;
+        };
+        /** LateFeePolicyResponse */
+        LateFeePolicyResponse: {
+            /** Appliestoproratedperiods */
+            appliesToProratedPeriods: boolean;
+            /**
+             * Calculationbasis
+             * @enum {string}
+             */
+            calculationBasis: "unpaid_rent_at_grace_end" | "current_unpaid_rent" | "scheduled_rent";
+            /**
+             * Createdat
+             * Format: date-time
+             */
+            createdAt: string;
+            /** Dailyamountminor */
+            dailyAmountMinor: number | null;
+            /**
+             * Effectiveon
+             * Format: date
+             */
+            effectiveOn: string;
+            /** Endson */
+            endsOn: string | null;
+            /** Flatamountminor */
+            flatAmountMinor: number | null;
+            /**
+             * Formulakind
+             * @enum {string}
+             */
+            formulaKind: "fixed_flat" | "percentage_once" | "daily_flat" | "fixed_plus_daily_flat";
+            /** Graceperioddays */
+            gracePeriodDays: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Leaseid
+             * Format: uuid
+             */
+            leaseId: string;
+            /** Leasetermid */
+            leaseTermId: string | null;
+            /** Maxaccrualdays */
+            maxAccrualDays: number | null;
+            /** Minimumunpaidthresholdminor */
+            minimumUnpaidThresholdMinor: number;
+            /** Notes */
+            notes: string | null;
+            /**
+             * Operatorconfirmedat
+             * Format: date-time
+             */
+            operatorConfirmedAt: string;
+            /** Operatorconfirmedbyactor */
+            operatorConfirmedByActor: string;
+            /** Perperiodcapminor */
+            perPeriodCapMinor: number | null;
+            /** Perperiodminminor */
+            perPeriodMinMinor: number | null;
+            /** Percentagebps */
+            percentageBps: number | null;
+            /**
+             * Roundingmode
+             * @enum {string}
+             */
+            roundingMode: "half_up" | "floor";
+            /** Rulebasis */
+            ruleBasis: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "superseded" | "voided";
+            /** Supersedespolicyversionid */
+            supersedesPolicyVersionId: string | null;
+            /** Versionnumber */
+            versionNumber: number;
+            /** Voidreason */
+            voidReason: string | null;
+            /** Voidedat */
+            voidedAt: string | null;
+        };
+        /** LateFeePreviewInput */
+        LateFeePreviewInput: {
+            /** Asofdate */
+            asOfDate?: string | null;
+            /** Cursor */
+            cursor?: string | null;
+            /** Rentexpectationid */
+            rentExpectationId?: string | null;
+        };
+        /** LateFeePreviewItemResponse */
+        LateFeePreviewItemResponse: {
+            /** Accrualdays */
+            accrualDays?: number | null;
+            /** Accrualendson */
+            accrualEndsOn: string | null;
+            /** Accrualstartson */
+            accrualStartsOn: string | null;
+            /** Basisamountminor */
+            basisAmountMinor?: number | null;
+            /** Calculatedamountminor */
+            calculatedAmountMinor: number;
+            /** Calculationbasis */
+            calculationBasis: ("unpaid_rent_at_grace_end" | "current_unpaid_rent" | "scheduled_rent") | null;
+            /** Calculationsnapshot */
+            calculationSnapshot: {
+                [key: string]: unknown;
+            };
+            /** Calculationsteps */
+            calculationSteps: components["schemas"]["CalculationStepResponse"][];
+            /**
+             * Currencycode
+             * @constant
+             */
+            currencyCode: "USD";
+            /**
+             * Dueon
+             * Format: date
+             */
+            dueOn: string;
+            /**
+             * Eligibilitystatus
+             * @enum {string}
+             */
+            eligibilityStatus: "eligible" | "no_applicable_policy" | "excluded_prorated_period" | "within_grace_period" | "paid_in_full" | "below_minimum_threshold" | "already_assessed" | "already_assessed_through_date" | "max_accrual_days_reached" | "period_cap_reached" | "calculated_zero";
+            /** Expectedamountminor */
+            expectedAmountMinor: number;
+            /** Firsteligibleon */
+            firstEligibleOn: string | null;
+            /** Formulakind */
+            formulaKind: ("fixed_flat" | "percentage_once" | "daily_flat" | "fixed_plus_daily_flat") | null;
+            /** Graceendson */
+            graceEndsOn: string | null;
+            /** Isprorated */
+            isProrated: boolean;
+            /** Occurrencenumber */
+            occurrenceNumber?: number | null;
+            /** Paidaftergracethroughasofminor */
+            paidAfterGraceThroughAsOfMinor: number;
+            /** Paidthroughgraceminor */
+            paidThroughGraceMinor: number;
+            /**
+             * Periodendson
+             * Format: date
+             */
+            periodEndsOn: string;
+            /**
+             * Periodstartson
+             * Format: date
+             */
+            periodStartsOn: string;
+            /** Policyversionid */
+            policyVersionId: string | null;
+            /** Policyversionnumber */
+            policyVersionNumber: number | null;
+            /** Previewfingerprint */
+            previewFingerprint: string | null;
+            /** Previouslyassessedminor */
+            previouslyAssessedMinor: number;
+            processingPayments: components["schemas"]["ProcessingPaymentsWarningResponse"];
+            /**
+             * Rentexpectationid
+             * Format: uuid
+             */
+            rentExpectationId: string;
+            /** Requiresprocessingacknowledgment */
+            requiresProcessingAcknowledgment: boolean;
+            /** Roundingmode */
+            roundingMode: ("half_up" | "floor") | null;
+            /** Rulebasis */
+            ruleBasis: string | null;
+            scheduledPrepaidChecks: components["schemas"]["ScheduledPrepaidChecksWarningResponse"];
+            /** Unpaidasofdateminor */
+            unpaidAsOfDateMinor?: number | null;
+            /** Unpaidatgraceendminor */
+            unpaidAtGraceEndMinor?: number | null;
+        };
+        /** LateFeePreviewResponse */
+        LateFeePreviewResponse: {
+            /**
+             * Asof
+             * Format: date-time
+             */
+            asOf: string;
+            /**
+             * Asofdate
+             * Format: date
+             */
+            asOfDate: string;
+            /**
+             * Currentpropertylocaldate
+             * Format: date
+             */
+            currentPropertyLocalDate: string;
+            /** Futureprojection */
+            futureProjection: boolean;
+            /** Items */
+            items: components["schemas"]["LateFeePreviewItemResponse"][];
+            /**
+             * Leaseid
+             * Format: uuid
+             */
+            leaseId: string;
+            /** Nextcursor */
+            nextCursor?: string | null;
+            /**
+             * Previewonly
+             * @constant
+             */
+            previewOnly: true;
+            /** Rentledgerrevision */
+            rentLedgerRevision: number;
+            /** Timezone */
+            timeZone: string;
+        };
+        /** LateFeeReceiptAllocationInput */
+        LateFeeReceiptAllocationInput: {
+            /** Amountminor */
+            amountMinor: number;
+            /**
+             * Assessmentid
+             * Format: uuid
+             */
+            assessmentId: string;
+        };
+        /** LateFeeReceiptAllocationResponse */
+        LateFeeReceiptAllocationResponse: {
+            /** Amountminor */
+            amountMinor: number;
+            /**
+             * Assessmentid
+             * Format: uuid
+             */
+            assessmentId: string;
+            /**
+             * Createdat
+             * Format: date-time
+             */
+            createdAt: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Receiptid
+             * Format: uuid
+             */
+            receiptId: string;
+        };
+        /** LateFeeReceiptMutationResponse */
+        LateFeeReceiptMutationResponse: {
+            /** Allocations */
+            allocations: components["schemas"]["LateFeeReceiptAllocationResponse"][];
+            /** Amountminor */
+            amountMinor: number;
+            /**
+             * Createdat
+             * Format: date-time
+             */
+            createdAt: string;
+            /**
+             * Currencycode
+             * @constant
+             */
+            currencyCode: "USD";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Idempotencykey
+             * Format: uuid
+             */
+            idempotencyKey: string;
+            /**
+             * Leaseid
+             * Format: uuid
+             */
+            leaseId: string;
+            /** Maskedreference */
+            maskedReference: string | null;
+            /** Notes */
+            notes: string | null;
+            /**
+             * Operationid
+             * Format: uuid
+             */
+            operationId: string;
+            /** Otherpaymentmethodnote */
+            otherPaymentMethodNote: string | null;
+            /** Paymentbatchid */
+            paymentBatchId: string | null;
+            /**
+             * Paymentmethodkind
+             * @enum {string}
+             */
+            paymentMethodKind: "automatic_bank_payment" | "bank_transfer" | "check" | "cash" | "online_payment" | "other";
+            /** Paymentmethodlabel */
+            paymentMethodLabel: string | null;
+            /** Receivedbypartyid */
+            receivedByPartyId: string | null;
+            /**
+             * Receivedon
+             * Format: date
+             */
+            receivedOn: string;
+            /** Rentledgerrevision */
+            rentLedgerRevision: number;
+            /** Replacedbyreceiptid */
+            replacedByReceiptId?: string | null;
+            /** Replacesreceiptid */
+            replacesReceiptId: string | null;
+            /** Voidreason */
+            voidReason: string | null;
+            /** Voidedat */
+            voidedAt: string | null;
+        };
+        /** LateFeeReceiptResponse */
+        LateFeeReceiptResponse: {
+            /** Allocations */
+            allocations: components["schemas"]["LateFeeReceiptAllocationResponse"][];
+            /** Amountminor */
+            amountMinor: number;
+            /**
+             * Createdat
+             * Format: date-time
+             */
+            createdAt: string;
+            /**
+             * Currencycode
+             * @constant
+             */
+            currencyCode: "USD";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Idempotencykey
+             * Format: uuid
+             */
+            idempotencyKey: string;
+            /**
+             * Leaseid
+             * Format: uuid
+             */
+            leaseId: string;
+            /** Maskedreference */
+            maskedReference: string | null;
+            /** Notes */
+            notes: string | null;
+            /** Otherpaymentmethodnote */
+            otherPaymentMethodNote: string | null;
+            /** Paymentbatchid */
+            paymentBatchId: string | null;
+            /**
+             * Paymentmethodkind
+             * @enum {string}
+             */
+            paymentMethodKind: "automatic_bank_payment" | "bank_transfer" | "check" | "cash" | "online_payment" | "other";
+            /** Paymentmethodlabel */
+            paymentMethodLabel: string | null;
+            /** Receivedbypartyid */
+            receivedByPartyId: string | null;
+            /**
+             * Receivedon
+             * Format: date
+             */
+            receivedOn: string;
+            /** Rentledgerrevision */
+            rentLedgerRevision?: number | null;
+            /** Replacedbyreceiptid */
+            replacedByReceiptId?: string | null;
+            /** Replacesreceiptid */
+            replacesReceiptId: string | null;
+            /** Voidreason */
+            voidReason: string | null;
+            /** Voidedat */
+            voidedAt: string | null;
+        };
+        /** LateFeeWaiverResponse */
+        LateFeeWaiverResponse: {
+            /**
+             * Assessmentid
+             * Format: uuid
+             */
+            assessmentId: string;
+            /**
+             * Currencycode
+             * @constant
+             */
+            currencyCode: "USD";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Internalnotes */
+            internalNotes: string | null;
+            /**
+             * Leaseid
+             * Format: uuid
+             */
+            leaseId: string;
+            /** Reason */
+            reason: string;
+            /** Waivedamountminor */
+            waivedAmountMinor: number;
+            /**
+             * Waivedat
+             * Format: date-time
+             */
+            waivedAt: string;
+            /** Waivedbyactor */
+            waivedByActor: string;
+            /**
+             * Waivedon
+             * Format: date
+             */
+            waivedOn: string;
+        };
         /** LeaseCommandRequest */
         LeaseCommandRequest: {
             /** Expectedleaserevision */
@@ -12525,7 +13830,7 @@ export interface components {
          * Metric
          * @enum {string}
          */
-        Metric: "rentReceived" | "expensesPaid" | "expenseRefundsReceived" | "netRecordedExpenses" | "operatingRemainder" | "depositReceipts" | "depositRefunds" | "settlementCredits" | "settlementDeductions" | "recordedDepositObligation" | "currentDepositReceipts" | "currentDepositRefunds" | "currentDepositCredits" | "currentDepositDeductions";
+        Metric: "rentReceived" | "lateFeesReceived" | "expensesPaid" | "expenseRefundsReceived" | "netRecordedExpenses" | "operatingRemainder" | "depositReceipts" | "depositRefunds" | "settlementCredits" | "settlementDeductions" | "recordedDepositObligation" | "currentDepositReceipts" | "currentDepositRefunds" | "currentDepositCredits" | "currentDepositDeductions";
         /** MetricDescriptor */
         MetricDescriptor: {
             /** Amount */
@@ -12915,6 +14220,16 @@ export interface components {
             expense_refunds_received: string;
             /** Expenses Paid */
             expenses_paid: string;
+            /**
+             * Late Fee Receipt Count
+             * @default 0
+             */
+            late_fee_receipt_count: number;
+            /**
+             * Late Fees Received
+             * @default 0.00
+             */
+            late_fees_received: string;
             /** Net Recorded Expenses */
             net_recorded_expenses: string;
             /** Operating Remainder */
@@ -12936,6 +14251,10 @@ export interface components {
             expenseRefundsReceived: string;
             /** Expensespaid */
             expensesPaid: string;
+            /** Latefeereceiptcount */
+            lateFeeReceiptCount: number;
+            /** Latefeesreceived */
+            lateFeesReceived: string;
             /** Netrecordedexpenses */
             netRecordedExpenses: string;
             /** Operatingremainder */
@@ -14063,6 +15382,15 @@ export interface components {
             /** Voidedat */
             voidedAt: string | null;
         };
+        /** ProcessingPaymentsWarningResponse */
+        ProcessingPaymentsWarningResponse: {
+            /** Count */
+            count: number;
+            /** Earliestsubmittedon */
+            earliestSubmittedOn: string | null;
+            /** Totalminor */
+            totalMinor: number;
+        };
         /** ProfileMutationResponse */
         ProfileMutationResponse: {
             /** Archivedat */
@@ -15020,6 +16348,52 @@ export interface components {
             /** Subject */
             subject: string;
         };
+        /** RecordCombinedReceiptInput */
+        RecordCombinedReceiptInput: {
+            /**
+             * Currencycode
+             * @constant
+             */
+            currencyCode: "USD";
+            /**
+             * Duplicateconfirmed
+             * @default false
+             */
+            duplicateConfirmed: boolean;
+            /** Duplicatereason */
+            duplicateReason?: string | null;
+            /** Expectedrevision */
+            expectedRevision: number;
+            /**
+             * Idempotencykey
+             * Format: uuid
+             */
+            idempotencyKey: string;
+            /** Latefeeallocations */
+            lateFeeAllocations: components["schemas"]["LateFeeReceiptAllocationInput"][];
+            /** Maskedreference */
+            maskedReference?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Otherpaymentmethodnote */
+            otherPaymentMethodNote?: string | null;
+            /**
+             * Paymentmethodkind
+             * @enum {string}
+             */
+            paymentMethodKind: "automatic_bank_payment" | "bank_transfer" | "check" | "cash" | "online_payment" | "other";
+            /** Paymentmethodlabel */
+            paymentMethodLabel?: string | null;
+            /** Receivedbypartyid */
+            receivedByPartyId?: string | null;
+            /**
+             * Receivedon
+             * Format: date
+             */
+            receivedOn: string;
+            /** Rentallocations */
+            rentAllocations: components["schemas"]["RentAllocationInput"][];
+        };
         /** RecordInput */
         RecordInput: {
             /** Expectedrevision */
@@ -15030,6 +16404,47 @@ export interface components {
              * Format: uuid
              */
             idempotencyKey: string;
+        };
+        /** RecordLateFeeReceiptInput */
+        RecordLateFeeReceiptInput: {
+            /** Allocations */
+            allocations: components["schemas"]["LateFeeReceiptAllocationInput"][];
+            /** Amountminor */
+            amountMinor: number;
+            /**
+             * Currencycode
+             * @constant
+             */
+            currencyCode: "USD";
+            /** Expectedrevision */
+            expectedRevision: number;
+            /**
+             * Idempotencykey
+             * Format: uuid
+             */
+            idempotencyKey: string;
+            /** Maskedreference */
+            maskedReference?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Otherpaymentmethodnote */
+            otherPaymentMethodNote?: string | null;
+            /**
+             * Paymentmethodkind
+             * @enum {string}
+             */
+            paymentMethodKind: "automatic_bank_payment" | "bank_transfer" | "check" | "cash" | "online_payment" | "other";
+            /** Paymentmethodlabel */
+            paymentMethodLabel?: string | null;
+            /** Receivedbypartyid */
+            receivedByPartyId?: string | null;
+            /**
+             * Receivedon
+             * Format: date
+             */
+            receivedOn: string;
+            /** Replacesreceiptid */
+            replacesReceiptId?: string | null;
         };
         /** RecordSummary */
         RecordSummary: {
@@ -15078,7 +16493,7 @@ export interface components {
              * Formkey
              * @enum {string}
              */
-            formKey: "coverage.review" | "task.create" | "maintenance.issue.create" | "communication.record" | "portfolio.property.create" | "portfolio.property.patch" | "portfolio.property.archive" | "portfolio.property.restore" | "portfolio.ownerships.replace" | "portfolio.space.create" | "portfolio.space.patch" | "portfolio.space.archive" | "portfolio.space.restore" | "file.upload" | "file.link.archive" | "party.create" | "party.patch" | "party.archive" | "party.restore" | "party.contact.add" | "party.contact.update" | "party.contact.archive" | "party.contact.restore" | "tenant.create" | "tenant.designate" | "tenant.profile.patch" | "tenant.archive" | "tenant.restore" | "provider.create" | "provider.designate" | "provider.profile.patch" | "provider.archive" | "provider.restore" | "provider.category.create" | "provider.category.patch" | "provider.category.archive" | "provider.category.restore" | "provider.category_assignment.assign" | "provider.category_assignment.archive" | "provider.category_assignment.restore" | "provider.service.add" | "provider.service.update" | "provider.service.archive" | "provider.service.restore" | "provider.area.add" | "provider.area.update" | "provider.area.archive" | "provider.area.restore" | "provider.work_history.add" | "provider.work_history.update" | "provider.work_history.archive" | "provider.work_history.restore" | "provider.reference.add" | "provider.reference.update" | "provider.reference.archive" | "provider.reference.restore" | "provider.reputation_link.add" | "provider.reputation_link.update" | "provider.reputation_link.archive" | "provider.reputation_link.restore" | "owner_concern.create" | "owner_concern.patch" | "owner_concern.in_progress" | "owner_concern.open" | "owner_concern.resolved" | "owner_concern.dismissed" | "owner_concern.follow_up" | "ai.settings.update" | "ai.connection.create" | "ai.connection.update" | "ai.connection.disclosure" | "ai.action_limit.update" | "ai.draft.edit" | "ai.draft.approve" | "ai.draft.dismiss" | "ai.connection.credential.set" | "ai.connection.credential.delete" | "ai.connection.probe" | "inspection.report.create" | "inspection.report.patch" | "inspection.report.areas.replace" | "inspection.report.acknowledge" | "inspection.report.finalize" | "inspection.report.correct" | "inspection.evidence.attach" | "inspection.comparison.review" | "inspection.template.create" | "inspection.template.patch" | "intake.source.admit" | "intake.source.import" | "intake.source.correct" | "intake.source.supersede" | "intake.source.dismiss" | "intake.source.reopen" | "finance.expense.create" | "finance.expense.patch" | "finance.expense.void" | "finance.expense_refund.create" | "finance.expense_refund.void" | "finance.expense_category.create" | "finance.expense_category.patch" | "finance.expense_category.archive" | "finance.expense_category.restore" | "finance.deposit_account.create" | "finance.deposit_receipt.create" | "finance.deposit_receipt.void" | "finance.deposit_settlement.create" | "finance.deposit_settlement.patch" | "finance.deposit_settlement.approve" | "finance.deposit_settlement.complete" | "finance.deposit_settlement.void" | "finance.deposit_deduction.create" | "finance.deposit_deduction.update" | "finance.deposit_deduction.delete" | "finance.deposit_credit.create" | "finance.deposit_credit.update" | "finance.deposit_credit.delete" | "finance.deposit_deduction_source.add" | "finance.deposit_deduction_source.delete" | "finance.deposit_refund.create" | "finance.deposit_refund.void" | "owner_rent_report.create" | "owner_rent_report.patch" | "owner_rent_report.verify" | "owner_rent_report.reject" | "task.edit" | "task.delete" | "task.start" | "task.complete" | "task.cancel" | "task.reopen" | "task.reminder.add" | "task.reminder.acknowledge" | "task.reminder.dismiss" | "task.waiting.set" | "task.waiting.clear" | "task.waiting.reschedule" | "communication.create" | "communication.patch" | "communication.draft.record" | "communication.correct" | "maintenance.issue.patch" | "maintenance.reporter.correct" | "maintenance.issue.start" | "maintenance.issue.return_to_open" | "maintenance.issue.resolve" | "maintenance.issue.cancel" | "maintenance.issue.reopen" | "maintenance.appointment.create" | "maintenance.appointment.update" | "maintenance.appointment.finish" | "maintenance.cost.create" | "maintenance.cost.void" | "maintenance.expense.link" | "maintenance.expense.archive" | "maintenance.quote.create" | "maintenance.quote.withdraw" | "maintenance.assignment.create" | "maintenance.assignment.end" | "maintenance.follow_up.create" | "maintenance.journal.record" | "portfolio.occupancy.change" | "portfolio.occupancy.cancel" | "portfolio.occupancy.replace" | "portfolio.occupancy.correct" | "portfolio.occupancy.reschedule" | "portfolio.availability.change" | "portfolio.space.classify" | "lease.create" | "lease.patch" | "lease.term.replace" | "lease.participant.add" | "lease.participant.update" | "lease.participant.remove" | "lease.execute" | "lease.end" | "lease.terminate" | "lease.void" | "lease.renewal.add" | "lease.renewal.update" | "lease.renewal.decide" | "lease.termination.create" | "lease.termination.proposal.add" | "lease.termination.proposal.accept" | "lease.termination.transition" | "lease.termination.complete" | "finance.rent_expectation.synchronize" | "finance.rent_expectation.void" | "finance.rent_expectation.timeliness_review" | "finance.rent_receipt.create" | "finance.rent_receipt.void" | "finance.prepaid_check.create" | "finance.prepaid_check.deposit" | "finance.prepaid_check.return" | "finance.prepaid_check.void" | "finance.prepaid_check.replace";
+            formKey: "coverage.review" | "task.create" | "maintenance.issue.create" | "communication.record" | "portfolio.property.create" | "portfolio.property.patch" | "portfolio.property.archive" | "portfolio.property.restore" | "portfolio.ownerships.replace" | "portfolio.space.create" | "portfolio.space.patch" | "portfolio.space.archive" | "portfolio.space.restore" | "file.upload" | "file.link.archive" | "party.create" | "party.patch" | "party.archive" | "party.restore" | "party.contact.add" | "party.contact.update" | "party.contact.archive" | "party.contact.restore" | "tenant.create" | "tenant.designate" | "tenant.profile.patch" | "tenant.archive" | "tenant.restore" | "provider.create" | "provider.designate" | "provider.profile.patch" | "provider.archive" | "provider.restore" | "provider.category.create" | "provider.category.patch" | "provider.category.archive" | "provider.category.restore" | "provider.category_assignment.assign" | "provider.category_assignment.archive" | "provider.category_assignment.restore" | "provider.service.add" | "provider.service.update" | "provider.service.archive" | "provider.service.restore" | "provider.area.add" | "provider.area.update" | "provider.area.archive" | "provider.area.restore" | "provider.work_history.add" | "provider.work_history.update" | "provider.work_history.archive" | "provider.work_history.restore" | "provider.reference.add" | "provider.reference.update" | "provider.reference.archive" | "provider.reference.restore" | "provider.reputation_link.add" | "provider.reputation_link.update" | "provider.reputation_link.archive" | "provider.reputation_link.restore" | "owner_concern.create" | "owner_concern.patch" | "owner_concern.in_progress" | "owner_concern.open" | "owner_concern.resolved" | "owner_concern.dismissed" | "owner_concern.follow_up" | "ai.settings.update" | "ai.connection.create" | "ai.connection.update" | "ai.connection.disclosure" | "ai.action_limit.update" | "ai.draft.edit" | "ai.draft.approve" | "ai.draft.dismiss" | "ai.connection.credential.set" | "ai.connection.credential.delete" | "ai.connection.probe" | "inspection.report.create" | "inspection.report.patch" | "inspection.report.areas.replace" | "inspection.report.acknowledge" | "inspection.report.finalize" | "inspection.report.correct" | "inspection.evidence.attach" | "inspection.comparison.review" | "inspection.template.create" | "inspection.template.patch" | "intake.source.admit" | "intake.source.import" | "intake.source.correct" | "intake.source.supersede" | "intake.source.dismiss" | "intake.source.reopen" | "finance.expense.create" | "finance.expense.patch" | "finance.expense.void" | "finance.expense_refund.create" | "finance.expense_refund.void" | "finance.expense_category.create" | "finance.expense_category.patch" | "finance.expense_category.archive" | "finance.expense_category.restore" | "finance.deposit_account.create" | "finance.deposit_receipt.create" | "finance.deposit_receipt.void" | "finance.deposit_settlement.create" | "finance.deposit_settlement.patch" | "finance.deposit_settlement.approve" | "finance.deposit_settlement.complete" | "finance.deposit_settlement.void" | "finance.deposit_deduction.create" | "finance.deposit_deduction.update" | "finance.deposit_deduction.delete" | "finance.deposit_credit.create" | "finance.deposit_credit.update" | "finance.deposit_credit.delete" | "finance.deposit_deduction_source.add" | "finance.deposit_deduction_source.delete" | "finance.deposit_refund.create" | "finance.deposit_refund.void" | "owner_rent_report.create" | "owner_rent_report.patch" | "owner_rent_report.verify" | "owner_rent_report.reject" | "task.edit" | "task.delete" | "task.start" | "task.complete" | "task.cancel" | "task.reopen" | "task.reminder.add" | "task.reminder.acknowledge" | "task.reminder.dismiss" | "task.waiting.set" | "task.waiting.clear" | "task.waiting.reschedule" | "communication.create" | "communication.patch" | "communication.draft.record" | "communication.correct" | "maintenance.issue.patch" | "maintenance.reporter.correct" | "maintenance.issue.start" | "maintenance.issue.return_to_open" | "maintenance.issue.resolve" | "maintenance.issue.cancel" | "maintenance.issue.reopen" | "maintenance.appointment.create" | "maintenance.appointment.update" | "maintenance.appointment.finish" | "maintenance.cost.create" | "maintenance.cost.void" | "maintenance.expense.link" | "maintenance.expense.archive" | "maintenance.quote.create" | "maintenance.quote.withdraw" | "maintenance.assignment.create" | "maintenance.assignment.end" | "maintenance.follow_up.create" | "maintenance.journal.record" | "portfolio.occupancy.change" | "portfolio.occupancy.cancel" | "portfolio.occupancy.replace" | "portfolio.occupancy.correct" | "portfolio.occupancy.reschedule" | "portfolio.availability.change" | "portfolio.space.classify" | "lease.create" | "lease.patch" | "lease.term.replace" | "lease.participant.add" | "lease.participant.update" | "lease.participant.remove" | "lease.execute" | "lease.end" | "lease.terminate" | "lease.void" | "lease.renewal.add" | "lease.renewal.update" | "lease.renewal.decide" | "lease.termination.create" | "lease.termination.proposal.add" | "lease.termination.proposal.accept" | "lease.termination.transition" | "lease.termination.complete" | "finance.rent_expectation.synchronize" | "finance.rent_expectation.void" | "finance.rent_expectation.timeliness_review" | "finance.rent_receipt.create" | "finance.rent_receipt.void" | "finance.prepaid_check.create" | "finance.prepaid_check.deposit" | "finance.prepaid_check.return" | "finance.prepaid_check.void" | "finance.prepaid_check.replace" | "finance.late_fee_policy.create" | "finance.late_fee_policy.void" | "finance.late_fee_assessment.create" | "finance.late_fee_assessment.waive" | "finance.late_fee_assessment.void" | "finance.late_fee_receipt.create" | "finance.late_fee_receipt.void" | "finance.combined_receipt.create";
             /** Payloadschema */
             payloadSchema: {
                 [key: string]: unknown;
@@ -15101,7 +16516,7 @@ export interface components {
              * Formkey
              * @enum {string}
              */
-            formKey: "coverage.review" | "task.create" | "maintenance.issue.create" | "communication.record" | "portfolio.property.create" | "portfolio.property.patch" | "portfolio.property.archive" | "portfolio.property.restore" | "portfolio.ownerships.replace" | "portfolio.space.create" | "portfolio.space.patch" | "portfolio.space.archive" | "portfolio.space.restore" | "file.upload" | "file.link.archive" | "party.create" | "party.patch" | "party.archive" | "party.restore" | "party.contact.add" | "party.contact.update" | "party.contact.archive" | "party.contact.restore" | "tenant.create" | "tenant.designate" | "tenant.profile.patch" | "tenant.archive" | "tenant.restore" | "provider.create" | "provider.designate" | "provider.profile.patch" | "provider.archive" | "provider.restore" | "provider.category.create" | "provider.category.patch" | "provider.category.archive" | "provider.category.restore" | "provider.category_assignment.assign" | "provider.category_assignment.archive" | "provider.category_assignment.restore" | "provider.service.add" | "provider.service.update" | "provider.service.archive" | "provider.service.restore" | "provider.area.add" | "provider.area.update" | "provider.area.archive" | "provider.area.restore" | "provider.work_history.add" | "provider.work_history.update" | "provider.work_history.archive" | "provider.work_history.restore" | "provider.reference.add" | "provider.reference.update" | "provider.reference.archive" | "provider.reference.restore" | "provider.reputation_link.add" | "provider.reputation_link.update" | "provider.reputation_link.archive" | "provider.reputation_link.restore" | "owner_concern.create" | "owner_concern.patch" | "owner_concern.in_progress" | "owner_concern.open" | "owner_concern.resolved" | "owner_concern.dismissed" | "owner_concern.follow_up" | "ai.settings.update" | "ai.connection.create" | "ai.connection.update" | "ai.connection.disclosure" | "ai.action_limit.update" | "ai.draft.edit" | "ai.draft.approve" | "ai.draft.dismiss" | "ai.connection.credential.set" | "ai.connection.credential.delete" | "ai.connection.probe" | "inspection.report.create" | "inspection.report.patch" | "inspection.report.areas.replace" | "inspection.report.acknowledge" | "inspection.report.finalize" | "inspection.report.correct" | "inspection.evidence.attach" | "inspection.comparison.review" | "inspection.template.create" | "inspection.template.patch" | "intake.source.admit" | "intake.source.import" | "intake.source.correct" | "intake.source.supersede" | "intake.source.dismiss" | "intake.source.reopen" | "finance.expense.create" | "finance.expense.patch" | "finance.expense.void" | "finance.expense_refund.create" | "finance.expense_refund.void" | "finance.expense_category.create" | "finance.expense_category.patch" | "finance.expense_category.archive" | "finance.expense_category.restore" | "finance.deposit_account.create" | "finance.deposit_receipt.create" | "finance.deposit_receipt.void" | "finance.deposit_settlement.create" | "finance.deposit_settlement.patch" | "finance.deposit_settlement.approve" | "finance.deposit_settlement.complete" | "finance.deposit_settlement.void" | "finance.deposit_deduction.create" | "finance.deposit_deduction.update" | "finance.deposit_deduction.delete" | "finance.deposit_credit.create" | "finance.deposit_credit.update" | "finance.deposit_credit.delete" | "finance.deposit_deduction_source.add" | "finance.deposit_deduction_source.delete" | "finance.deposit_refund.create" | "finance.deposit_refund.void" | "owner_rent_report.create" | "owner_rent_report.patch" | "owner_rent_report.verify" | "owner_rent_report.reject" | "task.edit" | "task.delete" | "task.start" | "task.complete" | "task.cancel" | "task.reopen" | "task.reminder.add" | "task.reminder.acknowledge" | "task.reminder.dismiss" | "task.waiting.set" | "task.waiting.clear" | "task.waiting.reschedule" | "communication.create" | "communication.patch" | "communication.draft.record" | "communication.correct" | "maintenance.issue.patch" | "maintenance.reporter.correct" | "maintenance.issue.start" | "maintenance.issue.return_to_open" | "maintenance.issue.resolve" | "maintenance.issue.cancel" | "maintenance.issue.reopen" | "maintenance.appointment.create" | "maintenance.appointment.update" | "maintenance.appointment.finish" | "maintenance.cost.create" | "maintenance.cost.void" | "maintenance.expense.link" | "maintenance.expense.archive" | "maintenance.quote.create" | "maintenance.quote.withdraw" | "maintenance.assignment.create" | "maintenance.assignment.end" | "maintenance.follow_up.create" | "maintenance.journal.record" | "portfolio.occupancy.change" | "portfolio.occupancy.cancel" | "portfolio.occupancy.replace" | "portfolio.occupancy.correct" | "portfolio.occupancy.reschedule" | "portfolio.availability.change" | "portfolio.space.classify" | "lease.create" | "lease.patch" | "lease.term.replace" | "lease.participant.add" | "lease.participant.update" | "lease.participant.remove" | "lease.execute" | "lease.end" | "lease.terminate" | "lease.void" | "lease.renewal.add" | "lease.renewal.update" | "lease.renewal.decide" | "lease.termination.create" | "lease.termination.proposal.add" | "lease.termination.proposal.accept" | "lease.termination.transition" | "lease.termination.complete" | "finance.rent_expectation.synchronize" | "finance.rent_expectation.void" | "finance.rent_expectation.timeliness_review" | "finance.rent_receipt.create" | "finance.rent_receipt.void" | "finance.prepaid_check.create" | "finance.prepaid_check.deposit" | "finance.prepaid_check.return" | "finance.prepaid_check.void" | "finance.prepaid_check.replace";
+            formKey: "coverage.review" | "task.create" | "maintenance.issue.create" | "communication.record" | "portfolio.property.create" | "portfolio.property.patch" | "portfolio.property.archive" | "portfolio.property.restore" | "portfolio.ownerships.replace" | "portfolio.space.create" | "portfolio.space.patch" | "portfolio.space.archive" | "portfolio.space.restore" | "file.upload" | "file.link.archive" | "party.create" | "party.patch" | "party.archive" | "party.restore" | "party.contact.add" | "party.contact.update" | "party.contact.archive" | "party.contact.restore" | "tenant.create" | "tenant.designate" | "tenant.profile.patch" | "tenant.archive" | "tenant.restore" | "provider.create" | "provider.designate" | "provider.profile.patch" | "provider.archive" | "provider.restore" | "provider.category.create" | "provider.category.patch" | "provider.category.archive" | "provider.category.restore" | "provider.category_assignment.assign" | "provider.category_assignment.archive" | "provider.category_assignment.restore" | "provider.service.add" | "provider.service.update" | "provider.service.archive" | "provider.service.restore" | "provider.area.add" | "provider.area.update" | "provider.area.archive" | "provider.area.restore" | "provider.work_history.add" | "provider.work_history.update" | "provider.work_history.archive" | "provider.work_history.restore" | "provider.reference.add" | "provider.reference.update" | "provider.reference.archive" | "provider.reference.restore" | "provider.reputation_link.add" | "provider.reputation_link.update" | "provider.reputation_link.archive" | "provider.reputation_link.restore" | "owner_concern.create" | "owner_concern.patch" | "owner_concern.in_progress" | "owner_concern.open" | "owner_concern.resolved" | "owner_concern.dismissed" | "owner_concern.follow_up" | "ai.settings.update" | "ai.connection.create" | "ai.connection.update" | "ai.connection.disclosure" | "ai.action_limit.update" | "ai.draft.edit" | "ai.draft.approve" | "ai.draft.dismiss" | "ai.connection.credential.set" | "ai.connection.credential.delete" | "ai.connection.probe" | "inspection.report.create" | "inspection.report.patch" | "inspection.report.areas.replace" | "inspection.report.acknowledge" | "inspection.report.finalize" | "inspection.report.correct" | "inspection.evidence.attach" | "inspection.comparison.review" | "inspection.template.create" | "inspection.template.patch" | "intake.source.admit" | "intake.source.import" | "intake.source.correct" | "intake.source.supersede" | "intake.source.dismiss" | "intake.source.reopen" | "finance.expense.create" | "finance.expense.patch" | "finance.expense.void" | "finance.expense_refund.create" | "finance.expense_refund.void" | "finance.expense_category.create" | "finance.expense_category.patch" | "finance.expense_category.archive" | "finance.expense_category.restore" | "finance.deposit_account.create" | "finance.deposit_receipt.create" | "finance.deposit_receipt.void" | "finance.deposit_settlement.create" | "finance.deposit_settlement.patch" | "finance.deposit_settlement.approve" | "finance.deposit_settlement.complete" | "finance.deposit_settlement.void" | "finance.deposit_deduction.create" | "finance.deposit_deduction.update" | "finance.deposit_deduction.delete" | "finance.deposit_credit.create" | "finance.deposit_credit.update" | "finance.deposit_credit.delete" | "finance.deposit_deduction_source.add" | "finance.deposit_deduction_source.delete" | "finance.deposit_refund.create" | "finance.deposit_refund.void" | "owner_rent_report.create" | "owner_rent_report.patch" | "owner_rent_report.verify" | "owner_rent_report.reject" | "task.edit" | "task.delete" | "task.start" | "task.complete" | "task.cancel" | "task.reopen" | "task.reminder.add" | "task.reminder.acknowledge" | "task.reminder.dismiss" | "task.waiting.set" | "task.waiting.clear" | "task.waiting.reschedule" | "communication.create" | "communication.patch" | "communication.draft.record" | "communication.correct" | "maintenance.issue.patch" | "maintenance.reporter.correct" | "maintenance.issue.start" | "maintenance.issue.return_to_open" | "maintenance.issue.resolve" | "maintenance.issue.cancel" | "maintenance.issue.reopen" | "maintenance.appointment.create" | "maintenance.appointment.update" | "maintenance.appointment.finish" | "maintenance.cost.create" | "maintenance.cost.void" | "maintenance.expense.link" | "maintenance.expense.archive" | "maintenance.quote.create" | "maintenance.quote.withdraw" | "maintenance.assignment.create" | "maintenance.assignment.end" | "maintenance.follow_up.create" | "maintenance.journal.record" | "portfolio.occupancy.change" | "portfolio.occupancy.cancel" | "portfolio.occupancy.replace" | "portfolio.occupancy.correct" | "portfolio.occupancy.reschedule" | "portfolio.availability.change" | "portfolio.space.classify" | "lease.create" | "lease.patch" | "lease.term.replace" | "lease.participant.add" | "lease.participant.update" | "lease.participant.remove" | "lease.execute" | "lease.end" | "lease.terminate" | "lease.void" | "lease.renewal.add" | "lease.renewal.update" | "lease.renewal.decide" | "lease.termination.create" | "lease.termination.proposal.add" | "lease.termination.proposal.accept" | "lease.termination.transition" | "lease.termination.complete" | "finance.rent_expectation.synchronize" | "finance.rent_expectation.void" | "finance.rent_expectation.timeliness_review" | "finance.rent_receipt.create" | "finance.rent_receipt.void" | "finance.prepaid_check.create" | "finance.prepaid_check.deposit" | "finance.prepaid_check.return" | "finance.prepaid_check.void" | "finance.prepaid_check.replace" | "finance.late_fee_policy.create" | "finance.late_fee_policy.void" | "finance.late_fee_assessment.create" | "finance.late_fee_assessment.waive" | "finance.late_fee_assessment.void" | "finance.late_fee_receipt.create" | "finance.late_fee_receipt.void" | "finance.combined_receipt.create";
             /**
              * Idempotencykey
              * Format: uuid
@@ -15595,6 +17010,16 @@ export interface components {
             proposedStartsOn: string;
             /** Responsedueon */
             responseDueOn?: string | null;
+        };
+        /** RentAllocationInput */
+        RentAllocationInput: {
+            /** Amountminor */
+            amountMinor: number;
+            /**
+             * Expectationid
+             * Format: uuid
+             */
+            expectationId: string;
         };
         /** RentSource */
         RentSource: {
@@ -16186,6 +17611,15 @@ export interface components {
             termStartsOn: string;
             /** Timezone */
             timeZone: string;
+        };
+        /** ScheduledPrepaidChecksWarningResponse */
+        ScheduledPrepaidChecksWarningResponse: {
+            /** Checkdates */
+            checkDates: string[];
+            /** Count */
+            count: number;
+            /** Totalminor */
+            totalMinor: number;
         };
         /** Scope */
         Scope: {
@@ -18708,6 +20142,48 @@ export interface components {
             /** Reviewnote */
             reviewNote: string;
         };
+        /** VoidLateFeeAssessmentInput */
+        VoidLateFeeAssessmentInput: {
+            /** Confirmed */
+            confirmed: boolean;
+            /** Expectedrevision */
+            expectedRevision: number;
+            /**
+             * Idempotencykey
+             * Format: uuid
+             */
+            idempotencyKey: string;
+            /** Reason */
+            reason: string;
+        };
+        /** VoidLateFeePolicyInput */
+        VoidLateFeePolicyInput: {
+            /** Confirmed */
+            confirmed: boolean;
+            /** Expectedrevision */
+            expectedRevision: number;
+            /**
+             * Idempotencykey
+             * Format: uuid
+             */
+            idempotencyKey: string;
+            /** Reason */
+            reason: string;
+        };
+        /** VoidLateFeeReceiptInput */
+        VoidLateFeeReceiptInput: {
+            /** Confirmed */
+            confirmed: boolean;
+            /** Expectedrevision */
+            expectedRevision: number;
+            /**
+             * Idempotencykey
+             * Format: uuid
+             */
+            idempotencyKey: string;
+            /** Reason */
+            reason: string;
+        };
         /** WaitingClearRequest */
         WaitingClearRequest: {
             /** Confirmed */
@@ -18840,6 +20316,29 @@ export interface components {
             waitingForKind: "person" | "organization" | "event" | "other";
             /** Waitingforlabel */
             waitingForLabel: string;
+        };
+        /** WaiveLateFeeInput */
+        WaiveLateFeeInput: {
+            /** Confirmed */
+            confirmed: boolean;
+            /** Expectedrevision */
+            expectedRevision: number;
+            /**
+             * Idempotencykey
+             * Format: uuid
+             */
+            idempotencyKey: string;
+            /** Internalnotes */
+            internalNotes?: string | null;
+            /** Reason */
+            reason: string;
+            /** Waivedamountminor */
+            waivedAmountMinor: number;
+            /**
+             * Waivedon
+             * Format: date
+             */
+            waivedOn: string;
         };
         /** WorkInput */
         WorkInput: {
@@ -20058,7 +21557,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "synchronize_expectations" | "record_receipt" | "void_receipt" | "void_expectation" | "review_timeliness" | "create_prepaid_check" | "deposit_prepaid_check" | "return_prepaid_check" | "void_prepaid_check" | "replace_prepaid_check" | "record_expense" | "patch_expense" | "void_expense" | "record_refund" | "void_refund" | "create_account" | "create_settlement" | "patch_settlement" | "add_deduction" | "update_deduction" | "delete_deduction" | "add_credit" | "update_credit" | "delete_credit" | "add_deduction_source" | "delete_deduction_source" | "approve_settlement" | "complete_settlement" | "void_settlement";
+            action: "synchronize_expectations" | "record_receipt" | "void_receipt" | "void_expectation" | "review_timeliness" | "create_prepaid_check" | "deposit_prepaid_check" | "return_prepaid_check" | "void_prepaid_check" | "replace_prepaid_check" | "create_late_fee_policy" | "void_late_fee_policy" | "assess_late_fee" | "waive_late_fee" | "void_late_fee_assessment" | "record_late_fee_receipt" | "record_combined_receipt" | "void_late_fee_receipt" | "record_expense" | "patch_expense" | "void_expense" | "record_refund" | "void_refund" | "create_account" | "create_settlement" | "patch_settlement" | "add_deduction" | "update_deduction" | "delete_deduction" | "add_credit" | "update_credit" | "delete_credit" | "add_deduction_source" | "delete_deduction_source" | "approve_settlement" | "complete_settlement" | "void_settlement";
             /** Expectedrevision */
             expectedRevision: number;
             /**
@@ -20067,7 +21566,7 @@ export interface components {
              */
             operationId: string;
             /** Result */
-            result: components["schemas"]["SynchronizeResponse"] | components["schemas"]["app__modules__finance__api__router__ReceiptMutationResponse"] | components["schemas"]["ExpectationMutationResponse"] | components["schemas"]["ExpenseMutationResponse"] | components["schemas"]["app__modules__finance__api__expense_router__RefundMutationResponse"] | components["schemas"]["PrepaidCheckMutationResponse"] | components["schemas"]["DepositMutationResponse"] | components["schemas"]["app__modules__finance__api__deposit_router__ReceiptMutationResponse"] | components["schemas"]["SettlementMutationResponse"] | components["schemas"]["DeductionLineMutationResponse"] | components["schemas"]["CreditMutationResponse"] | components["schemas"]["DeductionSourceMutationResponse"] | components["schemas"]["app__modules__finance__api__deposit_router__RefundMutationResponse"] | components["schemas"]["DeletedMutationResponse"];
+            result: components["schemas"]["SynchronizeResponse"] | components["schemas"]["app__modules__finance__api__router__ReceiptMutationResponse"] | components["schemas"]["ExpectationMutationResponse"] | components["schemas"]["ExpenseMutationResponse"] | components["schemas"]["app__modules__finance__api__expense_router__RefundMutationResponse"] | components["schemas"]["PrepaidCheckMutationResponse"] | components["schemas"]["LateFeePolicyMutationResponse"] | components["schemas"]["LateFeeAssessmentMutationResponse"] | components["schemas"]["LateFeeReceiptMutationResponse"] | components["schemas"]["CombinedReceiptMutationResponse"] | components["schemas"]["DepositMutationResponse"] | components["schemas"]["app__modules__finance__api__deposit_router__ReceiptMutationResponse"] | components["schemas"]["SettlementMutationResponse"] | components["schemas"]["DeductionLineMutationResponse"] | components["schemas"]["CreditMutationResponse"] | components["schemas"]["DeductionSourceMutationResponse"] | components["schemas"]["app__modules__finance__api__deposit_router__RefundMutationResponse"] | components["schemas"]["DeletedMutationResponse"];
             /** Resultrevision */
             resultRevision: number;
             /**
@@ -25082,6 +26581,317 @@ export interface operations {
             };
         };
     };
+    listLateFeeAssessments: {
+        parameters: {
+            query?: {
+                propertyId?: string | null;
+                leaseId?: string | null;
+                settlementStatus?: ("unpaid" | "partially_paid" | "paid" | "waived" | "voided") | null;
+                includeVoided?: boolean;
+                cursor?: string | null;
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LateFeeAssessmentPageResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getLateFeeAssessment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assessment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LateFeeAssessmentDetailResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    voidLateFeeAssessment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assessment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoidLateFeeAssessmentInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LateFeeAssessmentMutationResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    waiveLateFee: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assessment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WaiveLateFeeInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LateFeeAssessmentMutationResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getLateFeeReceipt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                receipt_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LateFeeReceiptResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    voidLateFeeReceipt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                receipt_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoidLateFeeReceiptInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LateFeeReceiptMutationResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     listLeases: {
         parameters: {
             query?: {
@@ -25378,6 +27188,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LeaseConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recordCombinedReceipt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lease_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordCombinedReceiptInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CombinedReceiptMutationResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceConflictResponse"];
                 };
             };
             /** @description Validation Error */
@@ -25741,6 +27604,375 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LeaseConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listLeaseLateFeeAssessments: {
+        parameters: {
+            query?: {
+                settlementStatus?: ("unpaid" | "partially_paid" | "paid" | "waived" | "voided") | null;
+                includeVoided?: boolean;
+                cursor?: string | null;
+                pageSize?: number;
+            };
+            header?: never;
+            path: {
+                lease_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LateFeeAssessmentPageResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assessLateFee: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lease_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssessLateFeeInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LateFeeAssessmentMutationResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listLateFeePolicies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lease_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LateFeePolicyListResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    createLateFeePolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lease_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateLateFeePolicyInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LateFeePolicyMutationResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    voidLateFeePolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lease_id: string;
+                policy_version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoidLateFeePolicyInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LateFeePolicyMutationResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recordLateFeeReceipt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lease_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordLateFeeReceiptInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LateFeeReceiptMutationResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    previewLateFees: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lease_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LateFeePreviewInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LateFeePreviewResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceConflictResponse"];
                 };
             };
             /** @description Validation Error */

@@ -141,7 +141,7 @@ class MoneySummaryTests(unittest.TestCase):
         recorder = AuditRecorder(SQLiteAuditRepository(self.db))
         parties = SQLitePartyOperations(self.db)
         self.portfolio = PortfolioService(
-            SQLitePortfolioUnitOfWork(self.db, recorder),
+            SQLitePortfolioUnitOfWork(self.db, recorder, party_operations=parties),
             time_zone_resolver=BundledAddressTimeZoneResolver(),
             now=lambda: datetime(2026, 1, 1, 12, tzinfo=UTC),
         )
@@ -206,6 +206,10 @@ class MoneySummaryTests(unittest.TestCase):
         # in October. Leasing has no injected calendar yet; freeze its clock here.
         with (
             patch("app.modules.leases.application.service.date", FixtureLeaseDate),
+            patch(
+                "app.modules.leases.application.service._zone_today",
+                return_value="2026-01-01",
+            ),
             patch(
                 "app.modules.leases.application.service._now",
                 return_value="2026-01-01T12:00:00+00:00",
@@ -287,6 +291,10 @@ class MoneySummaryTests(unittest.TestCase):
         )
         with (
             patch("app.modules.leases.application.service.date", FixtureLeaseDate),
+            patch(
+                "app.modules.leases.application.service._zone_today",
+                return_value="2026-01-01",
+            ),
             patch(
                 "app.modules.leases.application.service._now",
                 return_value="2026-01-01T12:00:00+00:00",

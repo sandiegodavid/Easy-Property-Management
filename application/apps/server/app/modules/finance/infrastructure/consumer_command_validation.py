@@ -11,6 +11,18 @@ def validate_consumer_result(connection, receipt, response, events):
         _expense(receipt, response, events)
     elif scope == "deposit_account":
         _deposit(receipt, response, events)
+    elif receipt["action"] in {"create_late_fee_policy", "void_late_fee_policy"}:
+        _late_fee_policy(receipt, response, events)
+    elif receipt["action"] in {"assess_late_fee", "waive_late_fee", "void_late_fee_assessment"}:
+        _late_fee_assessment(receipt, response, events)
+    elif receipt["action"] in {
+        "record_late_fee_receipt",
+        "record_combined_receipt",
+        "void_late_fee_receipt",
+    }:
+        _late_fee_receipt(receipt, response, events)
+    elif receipt["action"] == "apply_provider_payment_outcome":
+        _provider_payment_outcome(receipt, response, events)
     else:
         _prepaid(connection, receipt, response, events)
 
@@ -216,5 +228,155 @@ def _prepaid(connection, receipt, response, events):
             or tasks[0]["entity_id"] != response["reminderTaskId"]
         ):
             raise ValueError("Prepaid reminder creation history is incomplete.")
-    elif tasks or any(event["action"] != "dismissed" for event in reminders):
+    elif any(
+        event["entity_id"] != response["reminderTaskId"]
+        or event["action"] not in {"status_changed", "task_waiting_cleared"}
+        or (
+            event["action"] == "status_changed"
+            and loads(event["after_snapshot"]).get("status") != "cancelled"
+        )
+        for event in tasks
+    ) or any(event["action"] != "dismissed" for event in reminders):
         raise ValueError("Prepaid reminder lifecycle history is invalid.")
+
+
+def _late_fee_policy(receipt, response, events):
+    from app.modules.finance.api.late_fee_router import LateFeePolicyMutationResponse
+
+    LateFeePolicyMutationResponse.model_validate(response)
+    if response["leaseId"] != receipt["scope_id"] or not receipt["effective"]:
+        raise ValueError("Late-fee policy command must belong to its Lease and be effective.")
+    action = receipt["action"]
+    if action == "create_late_fee_policy":
+        expected = {(response["id"], "created")}
+        if response.get("supersedesPolicyVersionId") is not None:
+            expected.add((response["supersedesPolicyVersionId"], "superseded"))
+        primary_action = "created"
+    else:
+        if (
+            response["id"] != receipt["target_id"]
+            or response["voidedAt"] != receipt["created_at"]
+            or response["status"] != "voided"
+        ):
+            raise ValueError("Late-fee policy void result differs from the committed command.")
+        expected = {(response["id"], "voided")}
+        primary_action = "voided"
+    if any(event["entity_type"] != "late_fee_policy_version" for event in events):
+        raise ValueError("Late-fee policy command has unsupported correlated mutations.")
+    if {(event["entity_id"], event["action"]) for event in events} != expected or len(
+        events
+    ) != len(expected):
+        raise ValueError("Late-fee policy command audit cardinality differs.")
+    _primary(receipt, response, events, "late_fee_policy_version", primary_action)
+
+
+def _late_fee_assessment(receipt, response, events):
+    from app.modules.finance.api.late_fee_router import LateFeeAssessmentMutationResponse
+
+    LateFeeAssessmentMutationResponse.model_validate(response)
+    if response["leaseId"] != receipt["scope_id"] or not receipt["effective"]:
+        raise ValueError("Late-fee assessment command must belong to its Lease and be effective.")
+    action = receipt["action"]
+    if action == "assess_late_fee":
+        if (
+            response["rentExpectationId"] != receipt["target_id"]
+            or response["voidedAt"] is not None
+        ):
+            raise ValueError("Late-fee assessment creation result is invalid.")
+        expected = {(response["id"], "assessed")}
+        if (
+            any(event["entity_type"] != "late_fee_assessment" for event in events)
+            or {(event["entity_id"], event["action"]) for event in events} != expected
+        ):
+            raise ValueError("Late-fee assessment creation audit differs.")
+        _primary(receipt, response, events, "late_fee_assessment", "assessed")
+    elif action == "void_late_fee_assessment":
+        if response["id"] != receipt["target_id"] or response["voidedAt"] != receipt["created_at"]:
+            raise ValueError("Late-fee assessment void result differs from committed command.")
+        expected = {(response["id"], "voided")}
+        if (
+            any(event["entity_type"] != "late_fee_assessment" for event in events)
+            or {(event["entity_id"], event["action"]) for event in events} != expected
+        ):
+            raise ValueError("Late-fee assessment void audit differs.")
+        _primary(receipt, response, events, "late_fee_assessment", "voided")
+    else:  # waive_late_fee
+        if response["id"] != receipt["target_id"]:
+            raise ValueError("Late-fee waiver target differs from committed command.")
+        if (
+            len(events) != 1
+            or events[0]["entity_type"] != "late_fee_waiver"
+            or events[0]["action"] != "recorded"
+        ):
+            raise ValueError("Late-fee waiver audit cardinality differs.")
+        after = loads(events[0]["after_snapshot"])
+        if (
+            after.get("assessmentId") != receipt["target_id"]
+            or after.get("waivedAt") != receipt["created_at"]
+        ):
+            raise ValueError("Late-fee waiver audit differs from committed command.")
+
+
+def _late_fee_receipt(receipt, response, events):
+    from app.modules.finance.api.late_fee_router import (
+        CombinedReceiptMutationResponse,
+        LateFeeReceiptMutationResponse,
+    )
+
+    action = receipt["action"]
+    if action == "record_combined_receipt":
+        CombinedReceiptMutationResponse.model_validate(response)
+        if response["leaseId"] != receipt["scope_id"] or not receipt["effective"]:
+            raise ValueError("Combined receipt command must belong to its Lease and be effective.")
+        rent_view = response["rentReceipt"]
+        fee_view = response["lateFeeReceipt"]
+        expected = (
+            {("rent_receipt", rent_view["id"], "recorded")}
+            | {
+                ("rent_receipt_allocation", item["id"], "created")
+                for item in rent_view["allocations"]
+            }
+            | {("late_fee_receipt", fee_view["id"], "recorded")}
+            | {
+                ("late_fee_receipt_allocation", item["id"], "created")
+                for item in fee_view["allocations"]
+            }
+        )
+        actual = {(event["entity_type"], event["entity_id"], event["action"]) for event in events}
+        if actual != expected or len(events) != len(expected):
+            raise ValueError("Combined receipt audit cardinality differs.")
+        return
+
+    LateFeeReceiptMutationResponse.model_validate(response)
+    if response["leaseId"] != receipt["scope_id"] or not receipt["effective"]:
+        raise ValueError("Late-fee receipt command must belong to its Lease and be effective.")
+    if action == "record_late_fee_receipt":
+        if (
+            response["idempotencyKey"] != receipt["idempotency_key"]
+            or response["voidedAt"] is not None
+        ):
+            raise ValueError("Late-fee receipt creation result is invalid.")
+        expected = {("late_fee_receipt", response["id"], "recorded")} | {
+            ("late_fee_receipt_allocation", item["id"], "created")
+            for item in response["allocations"]
+        }
+    else:  # void_late_fee_receipt
+        if response["id"] != receipt["target_id"] or response["voidedAt"] != receipt["created_at"]:
+            raise ValueError("Late-fee receipt void result differs from committed command.")
+        expected = {("late_fee_receipt", response["id"], "voided")}
+    actual = {(event["entity_type"], event["entity_id"], event["action"]) for event in events}
+    if actual != expected or len(events) != len(expected):
+        raise ValueError("Late-fee receipt audit cardinality differs.")
+
+
+def _provider_payment_outcome(receipt, response, events):
+    if response.get("leaseId") != receipt["scope_id"]:
+        raise ValueError("Provider payment outcome must belong to its Lease.")
+    if response.get("paymentAttemptId") != receipt["target_id"]:
+        raise ValueError("Provider payment outcome target differs from committed command.")
+    if not receipt["effective"]:
+        if events:
+            raise ValueError("No-op provider payment outcome has business mutations.")
+        return
+    if not events:
+        raise ValueError("Effective provider payment outcome is missing audit events.")

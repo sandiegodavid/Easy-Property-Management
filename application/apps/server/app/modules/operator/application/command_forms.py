@@ -517,6 +517,130 @@ class PrepaidCheckReplaceForm(PrepaidCheckCreateForm):
     reason: str | None = Field(None, max_length=1000)
 
 
+class LateFeePolicyCreateForm(FinanceRevisionForm):
+    effectiveOn: date | None = None
+    endsOn: date | None = None
+    leaseTermId: UUID | None = None
+    ruleBasis: str | None = Field(None, max_length=500)
+    gracePeriodDays: StrictInt | None = None
+    calculationBasis: (
+        Literal["unpaid_rent_at_grace_end", "current_unpaid_rent", "scheduled_rent"] | None
+    ) = None
+    formulaKind: (
+        Literal["fixed_flat", "percentage_once", "daily_flat", "fixed_plus_daily_flat"] | None
+    ) = None
+    flatAmountMinor: StrictInt | None = None
+    percentageBps: StrictInt | None = None
+    dailyAmountMinor: StrictInt | None = None
+    maxAccrualDays: StrictInt | None = None
+    perPeriodCapMinor: StrictInt | None = None
+    perPeriodMinMinor: StrictInt | None = None
+    minimumUnpaidThresholdMinor: StrictInt | None = None
+    roundingMode: Literal["half_up", "floor"] | None = None
+    appliesToProratedPeriods: StrictBool | None = None
+    supersedesPolicyVersionId: UUID | None = None
+    notes: str | None = Field(None, max_length=1000)
+    operatorConfirmed: StrictBool | None = None
+
+
+class LateFeePolicyVoidForm(FinanceRevisionForm):
+    policyVersionId: UUID | None = None
+    confirmed: StrictBool | None = None
+    reason: str | None = Field(None, max_length=1000)
+
+
+class LateFeeAssessmentCreateForm(FinanceRevisionForm):
+    rentExpectationId: UUID | None = None
+    asOfDate: date | None = None
+    previewFingerprint: str | None = Field(None, max_length=64)
+    operatorConfirmed: StrictBool | None = None
+    acknowledgeProcessingPayments: StrictBool | None = None
+    processingAcknowledgmentReason: str | None = Field(None, max_length=1000)
+    internalNotes: str | None = Field(None, max_length=1000)
+    replacesAssessmentId: UUID | None = None
+
+
+class LateFeeAssessmentWaiveForm(FinanceRevisionForm):
+    assessmentId: UUID | None = None
+    waivedAmountMinor: StrictInt | None = None
+    waivedOn: date | None = None
+    reason: str | None = Field(None, max_length=1000)
+    confirmed: StrictBool | None = None
+    internalNotes: str | None = Field(None, max_length=1000)
+
+
+class LateFeeAssessmentVoidForm(FinanceRevisionForm):
+    assessmentId: UUID | None = None
+    confirmed: StrictBool | None = None
+    reason: str | None = Field(None, max_length=1000)
+
+
+class LateFeeAllocationForm(Contract):
+    assessmentId: UUID | None = None
+    amountMinor: ReceiptDraftAmount | None = None
+
+
+class LateFeeReceiptCreateForm(FinanceRevisionForm):
+    receivedOn: date | None = None
+    amountMinor: ReceiptDraftAmount | None = None
+    currencyCode: Literal["USD"] | None = None
+    allocations: list[LateFeeAllocationForm] = Field(
+        default_factory=list, max_length=MAX_FINANCE_RECEIPT_ALLOCATIONS
+    )
+    paymentMethodKind: (
+        Literal[
+            "automatic_bank_payment", "bank_transfer", "check", "cash", "online_payment", "other"
+        ]
+        | None
+    ) = None
+    paymentMethodLabel: str | None = Field(None, max_length=100)
+    maskedReference: str | None = Field(None, max_length=80, pattern=SAFE_MASKED_REFERENCE_PATTERN)
+    otherPaymentMethodNote: str | None = Field(None, max_length=200)
+    receivedByPartyId: UUID | None = None
+    replacesReceiptId: UUID | None = None
+    notes: str | None = Field(None, max_length=4000)
+
+    @field_validator("maskedReference", mode="before")
+    @classmethod
+    def trim_fee_masked_reference(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
+class LateFeeReceiptVoidForm(FinanceRevisionForm):
+    receiptId: UUID | None = None
+    confirmed: StrictBool | None = None
+    reason: str | None = Field(None, max_length=1000)
+
+
+class CombinedReceiptCreateForm(FinanceRevisionForm):
+    receivedOn: date | None = None
+    currencyCode: Literal["USD"] | None = None
+    rentAllocations: list[ReceiptAllocationForm] = Field(
+        default_factory=list, max_length=MAX_FINANCE_RECEIPT_ALLOCATIONS
+    )
+    lateFeeAllocations: list[LateFeeAllocationForm] = Field(
+        default_factory=list, max_length=MAX_FINANCE_RECEIPT_ALLOCATIONS
+    )
+    paymentMethodKind: (
+        Literal[
+            "automatic_bank_payment", "bank_transfer", "check", "cash", "online_payment", "other"
+        ]
+        | None
+    ) = None
+    paymentMethodLabel: str | None = Field(None, max_length=100)
+    maskedReference: str | None = Field(None, max_length=80, pattern=SAFE_MASKED_REFERENCE_PATTERN)
+    otherPaymentMethodNote: str | None = Field(None, max_length=200)
+    receivedByPartyId: UUID | None = None
+    notes: str | None = Field(None, max_length=4000)
+    duplicateConfirmed: StrictBool | None = None
+    duplicateReason: str | None = Field(None, max_length=1000)
+
+    @field_validator("maskedReference", mode="before")
+    @classmethod
+    def trim_combined_masked_reference(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
 # Each entry is an explicit reviewed workflow, not a command discovery/dispatcher.
 COMMAND_SCHEMAS = {
     **INVENTORY_SCHEMAS,
@@ -599,6 +723,14 @@ COMMAND_SCHEMAS = {
     "finance.prepaid_check.return": PrepaidCheckReturnForm,
     "finance.prepaid_check.void": PrepaidCheckVoidForm,
     "finance.prepaid_check.replace": PrepaidCheckReplaceForm,
+    "finance.late_fee_policy.create": LateFeePolicyCreateForm,
+    "finance.late_fee_policy.void": LateFeePolicyVoidForm,
+    "finance.late_fee_assessment.create": LateFeeAssessmentCreateForm,
+    "finance.late_fee_assessment.waive": LateFeeAssessmentWaiveForm,
+    "finance.late_fee_assessment.void": LateFeeAssessmentVoidForm,
+    "finance.late_fee_receipt.create": LateFeeReceiptCreateForm,
+    "finance.late_fee_receipt.void": LateFeeReceiptVoidForm,
+    "finance.combined_receipt.create": CombinedReceiptCreateForm,
 }
 
 

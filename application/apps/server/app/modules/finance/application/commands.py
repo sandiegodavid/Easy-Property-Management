@@ -33,6 +33,15 @@ SCOPE_ACTIONS = {
             "return_prepaid_check",
             "void_prepaid_check",
             "replace_prepaid_check",
+            "create_late_fee_policy",
+            "void_late_fee_policy",
+            "assess_late_fee",
+            "waive_late_fee",
+            "void_late_fee_assessment",
+            "record_late_fee_receipt",
+            "record_combined_receipt",
+            "void_late_fee_receipt",
+            "apply_provider_payment_outcome",
         }
     ),
     "expense": frozenset(

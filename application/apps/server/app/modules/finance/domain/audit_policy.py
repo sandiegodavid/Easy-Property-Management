@@ -113,3 +113,31 @@ EXPENSE_CATEGORY_ACTIVITY_POLICY = FinanceActivityPolicy(
 )
 EXPENSE_ACTIVITY_POLICY = FinanceActivityPolicy({"id", "propertyId", "paidOn", "voidedAt"})
 EXPENSE_REFUND_ACTIVITY_POLICY = FinanceActivityPolicy({"id", "receivedOn", "voidedAt"})
+LATE_FEE_POLICY_ACTIVITY_POLICY = FinanceActivityPolicy(
+    {
+        "id",
+        "leaseId",
+        "versionNumber",
+        "effectiveOn",
+        "endsOn",
+        "formulaKind",
+        "status",
+        "voidedAt",
+    }
+)
+LATE_FEE_ASSESSMENT_ACTIVITY_POLICY = FinanceActivityPolicy(
+    {
+        "id",
+        "leaseId",
+        "rentExpectationId",
+        "occurrenceNumber",
+        "asOfDate",
+        "voidedAt",
+    }
+)
+LATE_FEE_WAIVER_ACTIVITY_POLICY = FinanceActivityPolicy(
+    {"id", "assessmentId", "leaseId", "waivedOn", "waivedAt"}
+)
+LATE_FEE_RECEIPT_ACTIVITY_POLICY = FinanceActivityPolicy(
+    {"id", "leaseId", "receivedOn", "voidedAt"}
+)

@@ -26,27 +26,31 @@ def record_receipt_in_transaction(
     correlation_id: str,
     audit_reason: str,
     duplicate_conflict: Callable[[list[RentReceipt]], FinanceConflictError] | None = None,
+    payment_batch_id: str | None = None,
+    skip_duplicate_check: bool = False,
 ) -> RentReceipt:
     """Apply the FIN-001 receipt policy without opening a second transaction."""
     if command.received_by_party_id and not tx.party_exists(command.received_by_party_id):
         raise FinanceNotFoundError("Recipient party was not found.")
-    duplicates = tx.likely_duplicate_receipts(
-        lease_id=command.lease_id,
-        received_on=command.received_on,
-        amount_minor=command.amount_minor,
-        received_by_party_id=command.received_by_party_id,
-        limit=DUPLICATE_CANDIDATE_LIMIT,
-    )
-    if duplicates and not command.duplicate_confirmed:
-        if duplicate_conflict is not None:
-            raise duplicate_conflict(duplicates)
-        raise FinanceConflictError(
-            "A matching active receipt already exists; explicit duplicate confirmation is required."
+    duplicates: list[RentReceipt] = []
+    if not skip_duplicate_check:
+        duplicates = tx.likely_duplicate_receipts(
+            lease_id=command.lease_id,
+            received_on=command.received_on,
+            amount_minor=command.amount_minor,
+            received_by_party_id=command.received_by_party_id,
+            limit=DUPLICATE_CANDIDATE_LIMIT,
         )
-    if not duplicates and command.duplicate_confirmed:
-        raise FinanceConflictError(
-            "Duplicate confirmation is not applicable because no matching receipt exists."
-        )
+        if duplicates and not command.duplicate_confirmed:
+            if duplicate_conflict is not None:
+                raise duplicate_conflict(duplicates)
+            raise FinanceConflictError(
+                "A matching active receipt already exists; explicit duplicate confirmation is required."
+            )
+        if not duplicates and command.duplicate_confirmed:
+            raise FinanceConflictError(
+                "Duplicate confirmation is not applicable because no matching receipt exists."
+            )
 
     for allocation in command.allocations:
         expectation = tx.expectation(allocation.expectation_id)
@@ -101,6 +105,7 @@ def record_receipt_in_transaction(
         voided_at=None,
         void_reason=None,
         created_at=created_at,
+        payment_batch_id=payment_batch_id,
     )
     tx.insert_receipt(receipt)
     audit_snapshot = receipt.to_dict()

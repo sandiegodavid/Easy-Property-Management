@@ -378,6 +378,11 @@ class FinanceService:
                 raise FinanceConflictError("Rent expectation is already voided.")
             if tx.allocated_amount(old.id):
                 raise FinanceConflictError("Allocated expectations cannot be voided.")
+            if tx.expectation_has_active_late_fees(old.id):
+                raise FinanceConflictError(
+                    "Cannot void a rent expectation while active late-fee assessments exist.",
+                    code="expectation_has_active_late_fees",
+                )
             new = replace(old, voided_at=_stamp(instant), void_reason=command.reason)
             tx.replace_expectation(new)
             tx.record_change(

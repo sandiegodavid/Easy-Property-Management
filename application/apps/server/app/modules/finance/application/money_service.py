@@ -191,6 +191,7 @@ class MoneySummaryService:
 
 PERIOD_KINDS = (
     "rent_receipt",
+    "late_fee_receipt",
     "expense",
     "expense_refund",
     "deposit_receipt",
@@ -202,8 +203,9 @@ PERIOD_KINDS = (
 
 
 def _operating(totals):
-    rent, expense, refund = (
-        totals.get(name, AmountCount()) for name in ("rent_receipt", "expense", "expense_refund")
+    rent, late_fees, expense, refund = (
+        totals.get(name, AmountCount())
+        for name in ("rent_receipt", "late_fee_receipt", "expense", "expense_refund")
     )
     return Operating(
         money(rent.amount_minor),
@@ -214,6 +216,8 @@ def _operating(totals):
         rent.record_count,
         expense.record_count,
         refund.record_count,
+        late_fees_received=money(late_fees.amount_minor),
+        late_fee_receipt_count=late_fees.record_count,
     )
 
 
@@ -255,6 +259,7 @@ def _summary(query, as_of, revision, scope, totals, obligations):
     operating, activity, balances = _operating(totals), _activity(totals), _obligations(obligations)
     values = {
         Metric.RENT: operating.rent_received,
+        Metric.LATE_FEES: operating.late_fees_received,
         Metric.EXPENSES: operating.expenses_paid,
         Metric.REFUNDS: operating.expense_refunds_received,
         Metric.NET_EXPENSES: operating.net_recorded_expenses,
@@ -291,6 +296,8 @@ def _contribution(row, metric):
         route = f"/api/expenses/{row['parent_id']}"
     elif kind == "expense":
         route = f"/api/expenses/{identity}"
+    elif kind == "late_fee_receipt":
+        route = f"/api/late-fee-receipts/{identity}"
     else:
         route = f"/api/rent-receipts/{identity}"
     return Contribution(

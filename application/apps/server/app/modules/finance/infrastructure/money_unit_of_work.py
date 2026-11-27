@@ -23,6 +23,7 @@ from app.modules.finance.application.money_models import (
 from app.modules.finance.infrastructure.sqlalchemy_models import (
     ExpenseModel,
     ExpenseRefundModel,
+    LateFeeReceiptModel,
     RentReceiptModel,
     SecurityDepositAccountModel,
     SecurityDepositReceiptModel,
@@ -114,7 +115,12 @@ class SQLiteMoneyReadTransaction:
     def validate_integrity(self):
         """Guard unresolved relationships and currency even in corrupted sources."""
         p, locations = self.properties, self.locations
-        r, e, f = RentReceiptModel.__table__, ExpenseModel.__table__, ExpenseRefundModel.__table__
+        r, lfr, e, f = (
+            RentReceiptModel.__table__,
+            LateFeeReceiptModel.__table__,
+            ExpenseModel.__table__,
+            ExpenseRefundModel.__table__,
+        )
         a = SecurityDepositAccountModel.__table__
         dr, df, s = (
             SecurityDepositReceiptModel.__table__,
@@ -125,6 +131,9 @@ class SQLiteMoneyReadTransaction:
             select(r.c.id)
             .select_from(r.outerjoin(locations, r.c.lease_id == locations.c.lease_id))
             .where(or_(locations.c.property_id.is_(None), r.c.currency_code != "USD")),
+            select(lfr.c.id)
+            .select_from(lfr.outerjoin(locations, lfr.c.lease_id == locations.c.lease_id))
+            .where(or_(locations.c.property_id.is_(None), lfr.c.currency_code != "USD")),
             select(e.c.id)
             .select_from(e.outerjoin(p, e.c.property_id == p.c.property_id))
             .where(or_(p.c.property_id.is_(None), e.c.currency_code != "USD")),
@@ -169,7 +178,12 @@ class SQLiteMoneyReadTransaction:
     def _events(self):
         """One row per contribution, never per receipt allocation or line item."""
         p, locations = self.properties, self.locations
-        r, e, f = RentReceiptModel.__table__, ExpenseModel.__table__, ExpenseRefundModel.__table__
+        r, lfr, e, f = (
+            RentReceiptModel.__table__,
+            LateFeeReceiptModel.__table__,
+            ExpenseModel.__table__,
+            ExpenseRefundModel.__table__,
+        )
         a, dr, df, s = (
             SecurityDepositAccountModel.__table__,
             SecurityDepositReceiptModel.__table__,
@@ -207,6 +221,18 @@ class SQLiteMoneyReadTransaction:
             )
             .select_from(r.join(locations, r.c.lease_id == locations.c.lease_id))
             .where(r.c.voided_at.is_(None)),
+            projection(
+                "late_fee_receipt",
+                lfr,
+                lfr.c.received_on,
+                lfr.c.amount_minor,
+                locations,
+                lease=lfr.c.lease_id,
+                space=locations.c.space_id,
+                party=lfr.c.received_by_party_id,
+            )
+            .select_from(lfr.join(locations, lfr.c.lease_id == locations.c.lease_id))
+            .where(lfr.c.voided_at.is_(None)),
             projection(
                 "expense",
                 e,
@@ -546,6 +572,7 @@ class SQLiteMoneyReadTransaction:
 
 EVENT_KINDS = (
     "rent_receipt",
+    "late_fee_receipt",
     "expense",
     "expense_refund",
     "deposit_receipt",
@@ -556,6 +583,7 @@ EVENT_KINDS = (
 )
 METRIC_SIGNS = {
     Metric.RENT: {"rent_receipt": 1},
+    Metric.LATE_FEES: {"late_fee_receipt": 1},
     Metric.EXPENSES: {"expense": 1},
     Metric.REFUNDS: {"expense_refund": 1},
     Metric.NET_EXPENSES: {"expense": 1, "expense_refund": -1},

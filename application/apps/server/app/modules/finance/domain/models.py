@@ -275,9 +275,13 @@ class RentReceipt:
     voided_at: str | None
     void_reason: str | None
     created_at: str
+    payment_batch_id: str | None = None
 
     def to_dict(self):
-        return _camel(asdict(self))
+        data = _camel(asdict(self))
+        if self.payment_batch_id is None:
+            data.pop("paymentBatchId", None)
+        return data
 
 
 PREPAID_CHECK_STATES = frozenset({"scheduled", "deposited", "returned", "voided", "replaced"})

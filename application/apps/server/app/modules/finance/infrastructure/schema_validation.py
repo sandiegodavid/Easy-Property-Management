@@ -12,10 +12,16 @@ from app.modules.finance.domain.models import (
     validate_masked_reference,
 )
 from app.modules.finance.infrastructure.sqlalchemy_models import (
+    LATE_FEE_TRIGGERS,
     ExpenseCategoryModel,
     ExpenseCategoryCommandOperationModel,
     ExpenseModel,
     ExpenseRefundModel,
+    LateFeeAssessmentModel,
+    LateFeePolicyVersionModel,
+    LateFeeReceiptAllocationModel,
+    LateFeeReceiptModel,
+    LateFeeWaiverModel,
     PrepaidCheckModel,
     PrepaidCheckOperationModel,
     RentExpectationModel,
@@ -63,6 +69,11 @@ MODELS = (
     SecurityDepositDeductionSourceModel,
     SecurityDepositCreditModel,
     SecurityDepositRefundModel,
+    LateFeePolicyVersionModel,
+    LateFeeAssessmentModel,
+    LateFeeWaiverModel,
+    LateFeeReceiptModel,
+    LateFeeReceiptAllocationModel,
 )
 
 
@@ -159,6 +170,23 @@ def validate_finance_schema(connection):
         if actual_checks != expected_checks:
             raise MigrationSchemaError("Finance checks are incompatible.")
     validate_category_triggers(connection)
+    _validate_late_fee_triggers(connection)
+
+
+def _validate_late_fee_triggers(connection):
+    actual = dict(
+        connection.execute(
+            text(
+                "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' "
+                "AND name NOT LIKE 'epm_closed_%' "
+                "AND tbl_name IN ('late_fee_policy_versions', 'late_fee_assessments', 'late_fee_waivers')"
+            )
+        ).all()
+    )
+    if {key: _normalise(value) for key, value in actual.items()} != {
+        key: _normalise(value) for key, value in LATE_FEE_TRIGGERS.items()
+    }:
+        raise MigrationSchemaError("Finance late-fee immutability triggers are incompatible.")
 
 
 def validate_finance_data(connection):
@@ -423,6 +451,7 @@ def validate_finance_data(connection):
     for query in checks:
         if connection.execute(text(query)).first() is not None:
             raise MigrationSchemaError("FIN-008 data integrity is incompatible.")
+    _validate_late_fee_data(connection)
     reminders = connection.execute(
         text("""
         SELECT item.check_dated_on, task.due_at_utc, task.due_timezone
@@ -440,6 +469,85 @@ def validate_finance_data(connection):
             raise MigrationSchemaError("FIN-007 reminder scheduling is incompatible.") from None
         if due_date != reminder["check_dated_on"]:
             raise MigrationSchemaError("FIN-007 reminder scheduling is incompatible.")
+
+
+def _validate_late_fee_data(connection):
+    for receipt in connection.execute(
+        text(
+            "SELECT payment_method_kind, payment_method_label, masked_reference, other_payment_method_note FROM late_fee_receipts"
+        )
+    ).mappings():
+        try:
+            if receipt["payment_method_kind"] not in PAYMENT_METHOD_KINDS:
+                raise FinanceError("Payment method kind is invalid.")
+            validate_masked_reference(receipt["masked_reference"])
+            if receipt["payment_method_kind"] == "other":
+                note = receipt["other_payment_method_note"]
+                if not isinstance(note, str) or not 1 <= len(note.strip()) <= 200:
+                    raise FinanceError("Other payment method note is invalid.")
+            elif receipt["other_payment_method_note"] is not None:
+                raise FinanceError("Other payment method note is invalid.")
+        except FinanceError as error:
+            raise MigrationSchemaError("FIN-009 receipt-method data is incompatible.") from error
+    late_fee_checks = (
+        """SELECT 1 FROM late_fee_policy_versions policy
+            JOIN lease_term_versions term ON term.id = policy.lease_term_id
+            WHERE policy.lease_term_id IS NOT NULL AND term.lease_id != policy.lease_id LIMIT 1""",
+        """SELECT 1 FROM late_fee_policy_versions policy
+            JOIN late_fee_policy_versions prior ON prior.id = policy.supersedes_policy_version_id
+            WHERE prior.lease_id != policy.lease_id LIMIT 1""",
+        """SELECT 1 FROM late_fee_policy_versions a
+            JOIN late_fee_policy_versions b ON b.lease_id = a.lease_id AND b.id > a.id
+            WHERE a.status != 'voided' AND b.status != 'voided'
+              AND (a.ends_on IS NULL OR b.effective_on < a.ends_on)
+              AND (b.ends_on IS NULL OR a.effective_on < b.ends_on) LIMIT 1""",
+        """WITH RECURSIVE chain(start_id, next_id, path) AS (
+                SELECT id, supersedes_policy_version_id, id || ',' FROM late_fee_policy_versions
+                UNION ALL
+                SELECT chain.start_id, item.supersedes_policy_version_id, chain.path || item.id || ','
+                FROM chain JOIN late_fee_policy_versions item ON item.id = chain.next_id
+                WHERE instr(chain.path, item.id || ',') = 0
+            )
+            SELECT 1 FROM chain JOIN late_fee_policy_versions item ON item.id = chain.next_id
+            WHERE instr(chain.path, item.id || ',') > 0 LIMIT 1""",
+        """SELECT 1 FROM late_fee_assessments assessment
+            JOIN rent_expectations expectation ON expectation.id = assessment.rent_expectation_id
+            WHERE assessment.lease_id != expectation.lease_id LIMIT 1""",
+        """SELECT 1 FROM late_fee_assessments assessment
+            JOIN late_fee_policy_versions policy ON policy.id = assessment.policy_version_id
+            WHERE assessment.lease_id != policy.lease_id LIMIT 1""",
+        """SELECT 1 FROM late_fee_waivers waiver
+            JOIN late_fee_assessments assessment ON assessment.id = waiver.assessment_id
+            WHERE waiver.lease_id != assessment.lease_id LIMIT 1""",
+        """SELECT 1 FROM late_fee_receipt_allocations allocation
+            JOIN late_fee_receipts receipt ON receipt.id = allocation.receipt_id
+            JOIN late_fee_assessments assessment ON assessment.id = allocation.assessment_id
+            WHERE receipt.lease_id != assessment.lease_id LIMIT 1""",
+        """SELECT 1 FROM late_fee_receipts receipt
+            WHERE receipt.amount_minor != COALESCE((
+                  SELECT SUM(allocation.amount_minor)
+                  FROM late_fee_receipt_allocations allocation
+                  WHERE allocation.receipt_id = receipt.id
+              ), 0) LIMIT 1""",
+        """SELECT 1 FROM late_fee_assessments assessment
+            WHERE (
+                COALESCE((
+                    SELECT SUM(waiver.waived_amount_minor)
+                    FROM late_fee_waivers waiver
+                    WHERE waiver.assessment_id = assessment.id
+                ), 0)
+                + COALESCE((
+                    SELECT SUM(allocation.amount_minor)
+                    FROM late_fee_receipt_allocations allocation
+                    JOIN late_fee_receipts receipt ON receipt.id = allocation.receipt_id
+                    WHERE allocation.assessment_id = assessment.id
+                      AND receipt.voided_at IS NULL
+                ), 0)
+            ) > assessment.assessed_amount_minor LIMIT 1""",
+    )
+    for query in late_fee_checks:
+        if connection.execute(text(query)).first() is not None:
+            raise MigrationSchemaError("FIN-009 data integrity is incompatible.")
 
 
 def _normalise(value: str) -> str:

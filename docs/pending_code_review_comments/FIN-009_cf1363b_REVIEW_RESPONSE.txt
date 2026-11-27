@@ -1,0 +1,29 @@
+FIN-009 review response for cf1363b (Re-review of working tree at 716f99a)
+Response date: 2026-11-27
+Original review: docs/pending_code_review_comments/FIN-009_cf1363b_REVIEW_COMMENTS.txt
+
+The final remaining finding (Finding 7) has been addressed and verified (all 12 original findings are now resolved).
+
+---
+Operator UI — Payments and corrections
+---
+
+Finding 7 (still open — Recoverable payment submission):
+- application/apps/web/src/workflows/late-fees.tsx:87-185, 346-360, 433-460, 2480-2498
+  - Added fetchAllRecoveryRecords(signal) to exhaust all pages of GET /api/operator/recovery (limit=50, following nextCursor until null) in both useOpsRecoveryCommand (initial mount query and pre-dispatch live check) and LeasePendingRecoveryBanner.
+  - Made both the initial mount guard and pre-dispatch live check fail closed: if GET /api/operator/recovery fails, submission is blocked (Save combined payment disabled, execute() aborts without dispatching, and an explicit Retry recovery check button is surfaced).
+- application/apps/web/tests/late-fees.spec.ts:795-853
+  - Added regression proving: (1) an unresolved combined payment pushed beyond page 1 by 52 newer OPS-001 drafts is still detected after reloading Money, (2) a 503 failure on GET /api/operator/recovery fails closed and disables Save combined payment, and (3) retrying recovery exhausts both pages, blocks resubmission until reconciled, and reconciles the page-2 attempt with 0 duplicate POST requests.
+
+---
+Validation Results
+---
+
+- Contracts & frontend checks (application/):
+  - npm run contracts:check: Passed
+  - npm run lint (eslint . --max-warnings 0): Passed (0 errors, 0 warnings)
+  - npm run format:check (prettier . --check): Passed
+  - npm run typecheck: Passed (216 source files)
+  - npm run package:web: Passed (built and packaged into application/dist)
+- Playwright browser acceptance:
+  - npm run test:web -- apps/web/tests/late-fees.spec.ts: Passed (5 passed in 14.9s)

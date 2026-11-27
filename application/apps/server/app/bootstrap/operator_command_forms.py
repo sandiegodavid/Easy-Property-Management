@@ -397,12 +397,52 @@ def require_complete_form(form_key, payload):
             "confirmed",
             "reason",
         ),
+        "finance.late_fee_policy.create": (
+            "effectiveOn",
+            "ruleBasis",
+            "gracePeriodDays",
+            "calculationBasis",
+            "formulaKind",
+            "roundingMode",
+            "appliesToProratedPeriods",
+            "operatorConfirmed",
+        ),
+        "finance.late_fee_policy.void": ("policyVersionId", "confirmed", "reason"),
+        "finance.late_fee_assessment.create": (
+            "rentExpectationId",
+            "asOfDate",
+            "previewFingerprint",
+            "operatorConfirmed",
+        ),
+        "finance.late_fee_assessment.waive": (
+            "assessmentId",
+            "waivedAmountMinor",
+            "waivedOn",
+            "reason",
+            "confirmed",
+        ),
+        "finance.late_fee_assessment.void": ("assessmentId", "confirmed", "reason"),
+        "finance.late_fee_receipt.create": (
+            "receivedOn",
+            "amountMinor",
+            "currencyCode",
+            "allocations",
+            "paymentMethodKind",
+        ),
+        "finance.late_fee_receipt.void": ("receiptId", "confirmed", "reason"),
+        "finance.combined_receipt.create": (
+            "receivedOn",
+            "currencyCode",
+            "rentAllocations",
+            "lateFeeAllocations",
+            "paymentMethodKind",
+        ),
     }
     for field in required.get(form_key, ()):
         value = payload.get(field)
         if (
             value is None
-            or (field == "confirmed" and value is not True)
+            or (field in {"confirmed", "operatorConfirmed"} and value is not True)
             or (isinstance(value, str) and not value.strip())
         ):
             raise OperatorError("Complete and confirm the command before starting an attempt.")
@@ -415,10 +455,41 @@ def require_complete_form(form_key, payload):
             raise OperatorError("Complete each receipt allocation before starting an attempt.")
         if payload.get("duplicateConfirmed") and not (payload.get("duplicateReason") or "").strip():
             raise OperatorError("Provide a reason for confirming a possible duplicate.")
+    if form_key in {"finance.late_fee_receipt.create", "finance.combined_receipt.create"}:
+        _require_late_fee_receipt_form(form_key, payload)
     if form_key == "lease.create" and payload.get("expectedRevision") != 0:
         raise OperatorError("Lease creation requires revision zero.")
     if form_key == "communication.create" and revision(payload) != 0:
         raise OperatorError("Communication creation requires source revision zero.")
+
+
+def _require_allocations(items, id_field: str, error_message: str) -> None:
+    if not 1 <= len(items) <= MAX_FINANCE_RECEIPT_ALLOCATIONS or any(
+        not item.get(id_field) or type(item.get("amountMinor")) is not int for item in items
+    ):
+        raise OperatorError(error_message)
+
+
+def _require_late_fee_receipt_form(form_key: str, payload) -> None:
+    if form_key == "finance.late_fee_receipt.create":
+        _require_allocations(
+            payload.get("allocations") or (),
+            "assessmentId",
+            "Complete each late-fee allocation before starting an attempt.",
+        )
+        return
+    _require_allocations(
+        payload.get("rentAllocations") or (),
+        "expectationId",
+        "Complete each rent allocation before starting an attempt.",
+    )
+    _require_allocations(
+        payload.get("lateFeeAllocations") or (),
+        "assessmentId",
+        "Complete each late-fee allocation before starting an attempt.",
+    )
+    if payload.get("duplicateConfirmed") and not (payload.get("duplicateReason") or "").strip():
+        raise OperatorError("Provide a reason for confirming a possible duplicate.")
 
 
 def compose_command_forms(tasks, communications, issues, portfolio):
@@ -589,6 +660,14 @@ def compose_command_forms(tasks, communications, issues, portfolio):
                 "finance.prepaid_check.return": "return_prepaid_check",
                 "finance.prepaid_check.void": "void_prepaid_check",
                 "finance.prepaid_check.replace": "replace_prepaid_check",
+                "finance.late_fee_policy.create": "create_late_fee_policy",
+                "finance.late_fee_policy.void": "void_late_fee_policy",
+                "finance.late_fee_assessment.create": "assess_late_fee",
+                "finance.late_fee_assessment.waive": "waive_late_fee",
+                "finance.late_fee_assessment.void": "void_late_fee_assessment",
+                "finance.late_fee_receipt.create": "record_late_fee_receipt",
+                "finance.late_fee_receipt.void": "void_late_fee_receipt",
+                "finance.combined_receipt.create": "record_combined_receipt",
             },
             finance_request,
         ),
