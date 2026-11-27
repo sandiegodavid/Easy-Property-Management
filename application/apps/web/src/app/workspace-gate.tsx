@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { api } from "@epm/contracts";
 import { Page } from "@epm/ui";
+import { StedanaBrand } from "./stedana-brand";
 import { BootstrapFailure, queryClient, WorkspaceScope, type Bootstrap } from "./workspace-scope";
 import { HostedChanges } from "./hosted-changes";
 import { HostedRecovery } from "./hosted-recovery";
@@ -60,19 +61,6 @@ async function checkRecoveryModeStatus(signal: AbortSignal): Promise<boolean> {
     return false;
   }
 }
-
-const brandAssets = [
-  {
-    appearance: "light",
-    icon: new URL("../assets/brand/logo-4-light.png", import.meta.url).href,
-    wordmark: new URL("../assets/brand/logo-text-4-light.png", import.meta.url).href,
-  },
-  {
-    appearance: "dark",
-    icon: new URL("../assets/brand/logo-4-dark.png", import.meta.url).href,
-    wordmark: new URL("../assets/brand/logo-text-4-dark.png", import.meta.url).href,
-  },
-];
 
 async function loadBootstrap(signal: AbortSignal): Promise<Bootstrap> {
   let result;
@@ -246,19 +234,7 @@ function Gate({ children }: { children: ReactNode }) {
 export function WorkspaceGate({ children }: { children: ReactNode }) {
   const [client] = useState(queryClient);
   return (
-    <Page
-      title="Easy Property Management"
-      brand={
-        <>
-          {brandAssets.map(({ appearance, icon, wordmark }) => (
-            <picture key={appearance} className={`workspace-brand workspace-brand-${appearance}`}>
-              <source media="(max-width: 767px)" srcSet={icon} />
-              <img src={wordmark} alt="Easy Property Management" width="2172" height="724" />
-            </picture>
-          ))}
-        </>
-      }
-    >
+    <Page title="Easy Property Management" brand={<StedanaBrand variant="operator" />}>
       <QueryClientProvider client={client}>
         <Gate>{children}</Gate>
       </QueryClientProvider>

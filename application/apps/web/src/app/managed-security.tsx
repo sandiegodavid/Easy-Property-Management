@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Page } from "@epm/ui";
+import { StedanaBrand } from "./stedana-brand";
 import { admitHostedSession, pauseHostedSession } from "./hosted-session-state";
 
 const endpoint = "/api/hosted/session";
@@ -506,7 +507,7 @@ export function ManagedSecurity({ children }: { children: ReactNode }) {
         </div>
       )}
       {(!active || fallback || renewal || message || pending) && (
-        <Page title="Workspace sign-in">
+        <Page title="Workspace sign-in" brand={<StedanaBrand variant="login" />}>
           {!active && (
             <h2 ref={heading} tabIndex={-1}>
               {phase === "resume"

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { api } from "@epm/contracts";
 import type { components } from "@epm/contracts/generated";
 import { Page } from "@epm/ui";
+import { StedanaBrand } from "./stedana-brand";
 import {
   admitHostedSession,
   hostedMode,
@@ -198,7 +199,7 @@ function SessionGate({ children }: { children: ReactNode }) {
         </div>
       )}
       {!ready && (
-        <Page title="Easy Property Management">
+        <Page title="Easy Property Management" brand={<StedanaBrand variant="login" />}>
           <h2 ref={heading} tabIndex={-1}>
             Sign in to your demo workspace
           </h2>
