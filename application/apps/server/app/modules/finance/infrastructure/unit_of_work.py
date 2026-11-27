@@ -24,6 +24,7 @@ from app.modules.finance.domain.late_fee_calculator import (
 )
 from app.modules.finance.domain.late_fee_models import (
     LateFeeAssessment,
+    LateFeeLeaseWaiver,
     LateFeePolicyVersion,
     LateFeeReceipt,
     LateFeeWaiver,
@@ -32,6 +33,7 @@ from app.modules.finance.domain.models import PrepaidCheck, RentExpectation, Ren
 from app.modules.finance.infrastructure.command_operations import SQLiteFinanceCommandTransaction
 from app.modules.finance.infrastructure.sqlalchemy_models import (
     LateFeeAssessmentModel,
+    LateFeeLeaseWaiverModel,
     LateFeePolicyVersionModel,
     LateFeeReceiptAllocationModel,
     LateFeeReceiptModel,
@@ -1308,11 +1310,182 @@ class _Tx:
             ).scalars()
         )
 
+    def expectation_lease_id(self, expectation_id: str) -> str | None:
+        return self.connection.execute(
+            select(RentExpectationModel.lease_id).where(RentExpectationModel.id == expectation_id)
+        ).scalar_one_or_none()
+
+    def rent_receipt_lineage_allocations_by_expectation(
+        self, lease_id: str, expectation_ids: list[str]
+    ) -> dict[str, list[tuple[str, str, int, bool]]]:
+        ids = set(expectation_ids)
+        if not ids:
+            return {}
+        receipt_rows = self.connection.execute(
+            select(RentReceiptModel.id, RentReceiptModel.replaces_receipt_id).where(
+                RentReceiptModel.lease_id == lease_id
+            )
+        ).all()
+        parent_by_receipt = {receipt_id: parent_id for receipt_id, parent_id in receipt_rows}
+
+        def _chain_root(receipt_id: str) -> str:
+            current = receipt_id
+            seen: set[str] = set()
+            while current not in seen:
+                seen.add(current)
+                parent = parent_by_receipt.get(current)
+                if parent is None:
+                    return current
+                current = parent
+            return current
+
+        rows = self.connection.execute(
+            select(
+                RentReceiptAllocationModel.expectation_id,
+                RentReceiptModel.id,
+                RentReceiptModel.received_on,
+                RentReceiptAllocationModel.amount_minor,
+                RentReceiptModel.voided_at,
+            )
+            .join(RentReceiptModel, RentReceiptModel.id == RentReceiptAllocationModel.receipt_id)
+            .where(RentReceiptAllocationModel.expectation_id.in_(ids))
+        ).all()
+        grouped: dict[str, list[tuple[str, str, int, bool]]] = {}
+        for exp_id, receipt_id, received_on, amount_minor, voided_at in rows:
+            grouped.setdefault(exp_id, []).append(
+                (_chain_root(receipt_id), received_on, int(amount_minor), voided_at is not None)
+            )
+        return grouped
+
+    def active_lease_late_fee_waiver(self, lease_id: str) -> LateFeeLeaseWaiver | None:
+        row = (
+            self.connection.execute(
+                LateFeeLeaseWaiverModel.__table__.select().where(
+                    LateFeeLeaseWaiverModel.lease_id == lease_id,
+                    LateFeeLeaseWaiverModel.status == "active",
+                )
+            )
+            .mappings()
+            .first()
+        )
+        return LateFeeLeaseWaiver(**dict(row)) if row else None
+
+    def lease_late_fee_waivers(self, lease_id: str) -> list[LateFeeLeaseWaiver]:
+        rows = (
+            self.connection.execute(
+                LateFeeLeaseWaiverModel.__table__.select()
+                .where(LateFeeLeaseWaiverModel.lease_id == lease_id)
+                .order_by(
+                    LateFeeLeaseWaiverModel.waived_at.desc(), LateFeeLeaseWaiverModel.id.desc()
+                )
+            )
+            .mappings()
+            .all()
+        )
+        return [LateFeeLeaseWaiver(**dict(row)) for row in rows]
+
+    def insert_lease_late_fee_waiver(self, item: LateFeeLeaseWaiver) -> None:
+        self.connection.execute(
+            LateFeeLeaseWaiverModel.__table__.insert().values(
+                id=item.id,
+                lease_id=item.lease_id,
+                status=item.status,
+                reason=item.reason,
+                internal_notes=item.internal_notes,
+                waived_at=item.waived_at,
+                waived_by_actor=item.waived_by_actor,
+                waived_open_assessments_count=item.waived_open_assessments_count,
+                revoked_at=item.revoked_at,
+                revoked_by_actor=item.revoked_by_actor,
+                revoke_reason=item.revoke_reason,
+            )
+        )
+
+    def revoke_lease_late_fee_waiver(self, item: LateFeeLeaseWaiver) -> None:
+        self.connection.execute(
+            LateFeeLeaseWaiverModel.__table__.update()
+            .where(LateFeeLeaseWaiverModel.id == item.id)
+            .values(
+                status=item.status,
+                revoked_at=item.revoked_at,
+                revoked_by_actor=item.revoked_by_actor,
+                revoke_reason=item.revoke_reason,
+            )
+        )
+
+    def leases_with_active_late_fee_policies(
+        self, *, lease_id: str | None = None, property_id: str | None = None
+    ) -> list[str]:
+        active_waiver_leases = select(LateFeeLeaseWaiverModel.lease_id).where(
+            LateFeeLeaseWaiverModel.status == "active"
+        )
+        query = (
+            select(LateFeePolicyVersionModel.lease_id)
+            .distinct()
+            .where(
+                LateFeePolicyVersionModel.status == "active",
+                LateFeePolicyVersionModel.lease_id.not_in(active_waiver_leases),
+            )
+        )
+        if lease_id is not None:
+            query = query.where(LateFeePolicyVersionModel.lease_id == lease_id)
+        elif property_id is not None:
+            prop_leases = self.lease_ids_for_property(property_id)
+            if not prop_leases:
+                return []
+            query = query.where(LateFeePolicyVersionModel.lease_id.in_(prop_leases))
+        return list(self.connection.execute(query).scalars().all())
+
+    def active_late_fee_assessments_for_lease(self, lease_id: str) -> list[LateFeeAssessment]:
+        rows = (
+            self.connection.execute(
+                LateFeeAssessmentModel.__table__.select()
+                .where(
+                    LateFeeAssessmentModel.lease_id == lease_id,
+                    LateFeeAssessmentModel.voided_at.is_(None),
+                )
+                .order_by(
+                    LateFeeAssessmentModel.as_of_date,
+                    LateFeeAssessmentModel.occurrence_number,
+                    LateFeeAssessmentModel.id,
+                )
+            )
+            .mappings()
+            .all()
+        )
+        return [LateFeeAssessment(**dict(row)) for row in rows]
+
+    def late_fee_assessments_for_expectations_all(
+        self, expectation_ids: list[str]
+    ) -> dict[str, list[LateFeeAssessment]]:
+        ids = set(expectation_ids)
+        if not ids:
+            return {}
+        rows = (
+            self.connection.execute(
+                LateFeeAssessmentModel.__table__.select()
+                .where(LateFeeAssessmentModel.rent_expectation_id.in_(ids))
+                .order_by(
+                    LateFeeAssessmentModel.rent_expectation_id,
+                    LateFeeAssessmentModel.occurrence_number,
+                    LateFeeAssessmentModel.assessed_at,
+                )
+            )
+            .mappings()
+            .all()
+        )
+        grouped: dict[str, list[LateFeeAssessment]] = {}
+        for row in rows:
+            item = LateFeeAssessment(**dict(row))
+            grouped.setdefault(item.rent_expectation_id, []).append(item)
+        return grouped
+
     def late_fee_assessment_page(
         self,
         *,
         lease_id: str | None,
         lease_ids: list[str] | None,
+        rent_expectation_id: str | None = None,
         settlement_status: str | None = None,
         include_voided: bool,
         cursor: tuple[str, str] | None,
@@ -1325,6 +1498,8 @@ class _Tx:
             if not lease_ids:
                 return []
             query = query.where(LateFeeAssessmentModel.lease_id.in_(lease_ids))
+        if rent_expectation_id is not None:
+            query = query.where(LateFeeAssessmentModel.rent_expectation_id == rent_expectation_id)
         if settlement_status == "voided":
             query = query.where(LateFeeAssessmentModel.voided_at.is_not(None))
         elif settlement_status is not None:

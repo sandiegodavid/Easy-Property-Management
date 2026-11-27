@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "@epm/contracts";
@@ -73,6 +73,8 @@ const LATE_FEE_RECOVERY_FORM_KEYS = new Set([
   "finance.late_fee_assessment.create",
   "finance.late_fee_assessment.waive",
   "finance.late_fee_assessment.void",
+  "finance.late_fee_lease_waiver.create",
+  "finance.late_fee_lease_waiver.revoke",
   "finance.late_fee_receipt.create",
   "finance.late_fee_receipt.void",
   "finance.combined_receipt.create",
@@ -361,8 +363,169 @@ function useOpsRecoveryCommand(
   };
 }
 
+function useAutoLateFeeSync({
+  leaseId,
+  propertyId,
+  rentExpectationId,
+  enabled = true,
+  triggerKey = "",
+  onCreated,
+}: {
+  leaseId?: string;
+  propertyId?: string;
+  rentExpectationId?: string;
+  enabled?: boolean;
+  triggerKey?: string;
+  onCreated: () => void;
+}) {
+  const { scope } = useWorkspace();
+  const onCreatedRef = useRef(onCreated);
+  const lastKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    onCreatedRef.current = onCreated;
+  }, [onCreated]);
+
+  useEffect(() => {
+    if (!enabled || !scope.canWrite) return;
+    const syncKey = `${leaseId ?? ""}|${propertyId ?? ""}|${rentExpectationId ?? ""}|${triggerKey}`;
+    if (lastKeyRef.current === syncKey) return;
+    lastKeyRef.current = syncKey;
+    const controller = new AbortController();
+    void api
+      .POST("/api/late-fees/sync", {
+        signal: controller.signal,
+        body: {
+          leaseId: leaseId ?? null,
+          propertyId: propertyId ?? null,
+          rentExpectationId: rentExpectationId ?? null,
+        },
+      })
+      .then((res) => {
+        if (res.data && res.data.createdCount > 0) {
+          onCreatedRef.current();
+        }
+      })
+      .catch(() => {
+        // Non-fatal catch-up; explicit reads and retries remain available.
+      });
+    return () => controller.abort();
+  }, [enabled, scope.canWrite, leaseId, propertyId, rentExpectationId, triggerKey]);
+}
+
 function usd(minor: number): string {
   return formatUsd(cents(minor));
+}
+
+type CalculationStep = components["schemas"]["CalculationStepResponse"];
+
+function numInput(inputs: Record<string, unknown>, key: string): number | null {
+  const value = inputs[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function strInput(inputs: Record<string, unknown>, key: string): string | null {
+  const value = inputs[key];
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function formatCalculationStep(step: CalculationStep): string {
+  const inputs = step.inputs ?? {};
+  switch (step.stepCode) {
+    case "grace_boundary": {
+      const dueOn = strInput(inputs, "dueOn");
+      const graceDays = numInput(inputs, "gracePeriodDays");
+      const match =
+        /grace_ends_on = (\d{4}-\d{2}-\d{2}); first_eligible_on = (\d{4}-\d{2}-\d{2})/.exec(
+          step.expression,
+        );
+      if (dueOn && graceDays !== null && match) {
+        return `Due ${formatDate(dueOn)} + ${graceDays} day(s) grace → grace ends ${formatDate(match[1])}; first eligible ${formatDate(match[2])}`;
+      }
+      return step.expression;
+    }
+    case "rent_balances": {
+      const expected = numInput(inputs, "expectedAmountMinor");
+      const paidGrace = numInput(inputs, "paidThroughGraceMinor");
+      const paidAfter = numInput(inputs, "paidAfterGraceThroughAsOfMinor");
+      if (expected !== null && paidGrace !== null && paidAfter !== null) {
+        const unpaidGrace = Math.max(0, expected - paidGrace);
+        const unpaidAsOf = Math.max(0, expected - paidGrace - paidAfter);
+        return `Expected ${usd(expected)} − Paid through grace ${usd(paidGrace)} = ${usd(unpaidGrace)} unpaid at grace end (Unpaid as of review date: ${usd(unpaidAsOf)})`;
+      }
+      return step.expression;
+    }
+    case "calculation_basis": {
+      const basis = strInput(inputs, "calculationBasis") as CalculationBasis | null;
+      if (step.resultMinor !== null && basis && basis in BASIS_LABELS) {
+        return `${BASIS_LABELS[basis]}: ${usd(step.resultMinor)}`;
+      }
+      return step.expression;
+    }
+    case "accrual_window": {
+      const start = strInput(inputs, "accrualStartsOn");
+      const end = strInput(inputs, "accrualEndsOn");
+      const maxDays = numInput(inputs, "maxAccrualDays");
+      const match = /= (\d+) day\(s\)/.exec(step.expression);
+      if (start && end && match) {
+        const capNote = maxDays !== null ? ` (max ${maxDays} day(s))` : "";
+        return `${formatDate(start)} – ${formatDate(end)}: ${match[1]} delinquent day(s)${capNote}`;
+      }
+      return step.expression;
+    }
+    case "formula": {
+      const flat = numInput(inputs, "flatAmountMinor");
+      const daily = numInput(inputs, "dailyAmountMinor");
+      const dailyDays = numInput(inputs, "dailyDays");
+      const accrualDays = numInput(inputs, "accrualDays");
+      const bps = numInput(inputs, "percentageBps");
+      const basis = numInput(inputs, "basisAmountMinor");
+      if (flat !== null && daily !== null && dailyDays !== null && step.resultMinor !== null) {
+        return `${usd(flat)} initial + (${dailyDays} day(s) × ${usd(daily)}/day) = ${usd(step.resultMinor)}`;
+      }
+      if (daily !== null && accrualDays !== null && step.resultMinor !== null) {
+        return `${accrualDays} day(s) × ${usd(daily)}/day = ${usd(step.resultMinor)}`;
+      }
+      if (basis !== null && bps !== null && step.resultMinor !== null) {
+        return `${usd(basis)} × ${(bps / 100).toFixed(2)}% = ${usd(step.resultMinor)}`;
+      }
+      if (flat !== null && step.resultMinor !== null) {
+        return `Fixed flat fee = ${usd(step.resultMinor)}`;
+      }
+      return step.expression;
+    }
+    case "per_period_min": {
+      const raw = numInput(inputs, "rawMinor");
+      const minFee = numInput(inputs, "perPeriodMinMinor");
+      if (raw !== null && minFee !== null && step.resultMinor !== null) {
+        return `max(${usd(raw)}, ${usd(minFee)} minimum) = ${usd(step.resultMinor)}`;
+      }
+      return step.expression;
+    }
+    case "per_period_cap": {
+      const afterMin = numInput(inputs, "afterMinMinor");
+      const cap = numInput(inputs, "perPeriodCapMinor");
+      const prior = numInput(inputs, "previouslyAssessedMinor");
+      if (afterMin !== null && cap !== null && prior !== null && step.resultMinor !== null) {
+        return prior > 0
+          ? `min(${usd(afterMin)}, ${usd(cap)} cap − ${usd(prior)} prior) = ${usd(step.resultMinor)}`
+          : `min(${usd(afterMin)}, ${usd(cap)} cap) = ${usd(step.resultMinor)}`;
+      }
+      return step.expression;
+    }
+    case "minimum_threshold": {
+      const gate = numInput(inputs, "gateAmountMinor");
+      const threshold = numInput(inputs, "minimumUnpaidThresholdMinor");
+      if (gate !== null && threshold !== null) {
+        return `Unpaid rent ${usd(gate)} is below ${usd(threshold)} threshold → ${usd(0)}`;
+      }
+      return step.expression;
+    }
+    case "delinquency_gate":
+      return `No unpaid rent remains → ${usd(0)}`;
+    default:
+      return step.expression;
+  }
 }
 
 function percentToBps(text: string): number | undefined {
@@ -631,11 +794,20 @@ export function LeaseLateFeesSection({
     });
     void queryClient.invalidateQueries({ queryKey: scope.key("late-fee-assessment-detail") });
     void queryClient.invalidateQueries({ queryKey: scope.key("portfolio-late-fee-assessments") });
+    void queryClient.invalidateQueries({ queryKey: scope.key("lease-late-fee-waiver", leaseId) });
+    void queryClient.invalidateQueries({ queryKey: scope.key("expectation-late-fee-assessments") });
   };
 
   const policies = policiesQuery.data?.items ?? [];
   const activePolicy = policies.find((item) => item.status === "active") ?? null;
   const historicalPolicies = policies.filter((item) => item.status !== "active");
+
+  useAutoLateFeeSync({
+    leaseId,
+    enabled: Boolean(activePolicy) && leaseStatus !== "void",
+    triggerKey: activePolicy?.id ?? "",
+    onCreated: invalidateAll,
+  });
   const revision = policiesQuery.data?.rentLedgerRevision ?? 0;
   const assessments = assessmentsQuery.data?.items ?? [];
   const unpaidAssessments = assessments.filter(
@@ -835,6 +1007,11 @@ export function LeaseLateFeesSection({
           </details>
         )}
       </div>
+
+      {/* Lease-level auto-assessment & waiver panel */}
+      {leaseStatus !== "void" && (
+        <LeaseLevelWaiverPanel leaseId={leaseId} onMutated={invalidateAll} />
+      )}
 
       {/* Calculation preview & review panel */}
       <div className="record-detail-panel" aria-label="Late-fee preview">
@@ -1512,7 +1689,7 @@ function PreviewPeriodRow({
       <ol aria-label="Calculation steps">
         {item.calculationSteps.map((step, idx) => (
           <li key={`${step.stepCode}-${idx}`}>
-            {step.label} — <code>{step.expression}</code>
+            {step.label} — <strong>{formatCalculationStep(step)}</strong>
           </li>
         ))}
       </ol>
@@ -1592,6 +1769,7 @@ function AssessedLateFeeRow({
   expectedRevision,
   onMutated,
   onStartReplacement,
+  defaultExpanded = false,
 }: {
   item: AssessmentSummary;
   expectedRevision: number;
@@ -1601,9 +1779,10 @@ function AssessedLateFeeRow({
     rentExpectationId: string;
     asOfDate: string;
   }) => void;
+  defaultExpanded?: boolean;
 }) {
   const { scope } = useWorkspace();
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [activeAction, setActiveAction] = useState<
     "pay" | "waive" | "void" | "void_and_replace" | null
   >(null);
@@ -1682,7 +1861,7 @@ function AssessedLateFeeRow({
           <ol aria-label="Frozen calculation steps">
             {detail.calculationSteps.map((step, idx) => (
               <li key={`${step.stepCode}-${idx}`}>
-                {step.label} — <code>{step.expression}</code>
+                {step.label} — <strong>{formatCalculationStep(step)}</strong>
               </li>
             ))}
           </ol>
@@ -2764,6 +2943,17 @@ export function MoneyLateFeesQueue() {
   const includeVoided = params.get("includeVoided") === "true";
   const cursor = params.get("cursor") ?? undefined;
 
+  useAutoLateFeeSync({
+    leaseId,
+    propertyId,
+    enabled: cursor === undefined,
+    onCreated: () => {
+      void queryClient.invalidateQueries({
+        queryKey: scope.key("portfolio-late-fee-assessments"),
+      });
+    },
+  });
+
   const queue = useQuery({
     queryKey: scope.key(
       "portfolio-late-fee-assessments",
@@ -2863,6 +3053,7 @@ export function MoneyLateFeesQueue() {
               <AssessedLateFeeRow
                 item={item}
                 expectedRevision={0}
+                defaultExpanded
                 onMutated={() => {
                   void queryClient.invalidateQueries({
                     queryKey: scope.key("portfolio-late-fee-assessments"),
@@ -2884,6 +3075,388 @@ export function MoneyLateFeesQueue() {
             </button>
           )}
         </>
+      )}
+    </section>
+  );
+}
+
+function LeaseLevelWaiverPanel({ leaseId, onMutated }: { leaseId: string; onMutated: () => void }) {
+  const { scope } = useWorkspace();
+  const [mode, setMode] = useState<"waive" | "revoke" | null>(null);
+  const [reason, setReason] = useState("");
+  const [waiveOpen, setWaiveOpen] = useState(true);
+  const [confirmed, setConfirmed] = useState(false);
+
+  const waiverQuery = useQuery({
+    queryKey: scope.key("lease-late-fee-waiver", leaseId),
+    retry: false,
+    queryFn: async ({ signal }) =>
+      readResult(
+        await api.GET("/api/leases/{lease_id}/late-fee-waiver", {
+          signal,
+          params: { path: { lease_id: leaseId } },
+        }),
+      ),
+  });
+
+  const createRecovery = useOpsRecoveryCommand(
+    leaseId,
+    "finance.late_fee_lease_waiver.create",
+    "Waive late fees at lease level",
+    () => {
+      setMode(null);
+      setReason("");
+      setConfirmed(false);
+      onMutated();
+    },
+  );
+
+  const revokeRecovery = useOpsRecoveryCommand(
+    leaseId,
+    "finance.late_fee_lease_waiver.revoke",
+    "Resume automatic late fees",
+    () => {
+      setMode(null);
+      setReason("");
+      setConfirmed(false);
+      onMutated();
+    },
+  );
+
+  const activeWaiver = waiverQuery.data?.activeWaiver ?? null;
+  const revision = waiverQuery.data?.rentLedgerRevision ?? 0;
+
+  async function submitCreate(event: React.FormEvent) {
+    event.preventDefault();
+    createRecovery.setErrorMessage(null);
+    if (!reason.trim() || !confirmed) {
+      createRecovery.setErrorMessage("Provide a reason and confirm the lease-level waiver.");
+      return;
+    }
+    const result = await createRecovery.execute({
+      expectedRevision: revision,
+      recoveryPayload: {
+        expectedRevision: revision,
+        reason: reason.trim(),
+        waiveOpenAssessments: waiveOpen,
+        confirmed: true,
+      },
+      dispatch: (idempotencyKey) =>
+        api.POST("/api/leases/{lease_id}/late-fee-waiver", {
+          params: { path: { lease_id: leaseId } },
+          body: {
+            expectedRevision: revision,
+            idempotencyKey,
+            reason: reason.trim(),
+            waiveOpenAssessments: waiveOpen,
+            internalNotes: null,
+            confirmed: true,
+          },
+        }),
+    });
+    if (result.ok) {
+      setMode(null);
+      setReason("");
+      setConfirmed(false);
+      onMutated();
+    }
+  }
+
+  async function submitRevoke(event: React.FormEvent) {
+    event.preventDefault();
+    revokeRecovery.setErrorMessage(null);
+    if (!reason.trim() || !confirmed) {
+      revokeRecovery.setErrorMessage("Provide a reason and confirm resuming auto-assessment.");
+      return;
+    }
+    const result = await revokeRecovery.execute({
+      expectedRevision: revision,
+      recoveryPayload: {
+        expectedRevision: revision,
+        reason: reason.trim(),
+        confirmed: true,
+      },
+      dispatch: (idempotencyKey) =>
+        api.POST("/api/leases/{lease_id}/late-fee-waiver/revoke", {
+          params: { path: { lease_id: leaseId } },
+          body: {
+            expectedRevision: revision,
+            idempotencyKey,
+            reason: reason.trim(),
+            confirmed: true,
+          },
+        }),
+    });
+    if (result.ok) {
+      setMode(null);
+      setReason("");
+      setConfirmed(false);
+      onMutated();
+    }
+  }
+
+  return (
+    <div className="record-detail-panel" aria-label="Automatic late-fee assessment">
+      <div className="child-record-heading">
+        <h4>Automatic assessment &amp; lease-level waiver</h4>
+        {!activeWaiver && mode !== "waive" && (
+          <button
+            type="button"
+            onClick={() => {
+              setReason("");
+              setWaiveOpen(true);
+              setConfirmed(false);
+              setMode("waive");
+            }}
+          >
+            Waive late fees at lease level
+          </button>
+        )}
+        {activeWaiver && mode !== "revoke" && (
+          <button
+            type="button"
+            onClick={() => {
+              setReason("");
+              setConfirmed(false);
+              setMode("revoke");
+            }}
+          >
+            Resume auto-assessment
+          </button>
+        )}
+      </div>
+      {waiverQuery.isPending && <p role="status">Loading lease waiver status…</p>}
+      {waiverQuery.error && (
+        <p role="alert">Lease waiver status unavailable: {waiverQuery.error.message}</p>
+      )}
+      {waiverQuery.data && !activeWaiver && (
+        <p>
+          <strong>Auto-assessment active.</strong> Overdue rent periods past the grace period are
+          automatically assessed under the active lease policy. You can waive late fees per
+          occurrence below or at the lease level here.
+        </p>
+      )}
+      {activeWaiver && (
+        <p role="status">
+          <strong>Late fees waived at lease level.</strong> Automatic assessment is paused —{" "}
+          {activeWaiver.reason}
+          {activeWaiver.waivedOpenAssessmentsCount > 0
+            ? ` (${activeWaiver.waivedOpenAssessmentsCount} open fee(s) also waived)`
+            : ""}
+          . Periods becoming eligible or delinquent days falling while this waiver is active are
+          permanently excluded from automatic assessment and will not be back-charged when resumed.
+        </p>
+      )}
+      {mode === "waive" && (
+        <form
+          onSubmit={(e) => void submitCreate(e)}
+          aria-label="Waive late fees at lease level"
+          className="child-record-card"
+        >
+          <h5>Waive late fees for this lease</h5>
+          {createRecovery.errorMessage && <p role="alert">{createRecovery.errorMessage}</p>}
+          <label>
+            Reason (required)
+            <input
+              type="text"
+              required
+              maxLength={1000}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={waiveOpen}
+              onChange={(e) => setWaiveOpen(e.target.checked)}
+            />{" "}
+            Also waive all currently unpaid late fees on this lease (fails if any open fee has a
+            processing payment reservation)
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={confirmed}
+              onChange={(e) => setConfirmed(e.target.checked)}
+            />{" "}
+            Confirm pausing automatic late-fee assessment for this lease (required)
+          </label>
+          <div className="form-actions">
+            <button type="submit" disabled={createRecovery.status === "submitting"}>
+              {createRecovery.status === "submitting" ? "Saving…" : "Confirm lease-level waiver"}
+            </button>
+            {createRecovery.status === "outcome_unknown" && (
+              <button type="button" onClick={() => void createRecovery.checkOutcome()}>
+                Check committed outcome
+              </button>
+            )}
+            <button type="button" onClick={() => setMode(null)}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+      {mode === "revoke" && (
+        <form
+          onSubmit={(e) => void submitRevoke(e)}
+          aria-label="Resume automatic late-fee assessment"
+          className="child-record-card"
+        >
+          <h5>Resume automatic late-fee assessment</h5>
+          <p className="record-detail-note">
+            Only future delinquent periods or days after resumption will be automatically assessed;
+            the waived interval remains permanently excluded.
+          </p>
+          {revokeRecovery.errorMessage && <p role="alert">{revokeRecovery.errorMessage}</p>}
+          <label>
+            Reason (required)
+            <input
+              type="text"
+              required
+              maxLength={1000}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={confirmed}
+              onChange={(e) => setConfirmed(e.target.checked)}
+            />{" "}
+            Confirm resuming automatic late-fee assessment (required)
+          </label>
+          <div className="form-actions">
+            <button type="submit" disabled={revokeRecovery.status === "submitting"}>
+              {revokeRecovery.status === "submitting" ? "Resuming…" : "Confirm resume"}
+            </button>
+            {revokeRecovery.status === "outcome_unknown" && (
+              <button type="button" onClick={() => void revokeRecovery.checkOutcome()}>
+                Check committed outcome
+              </button>
+            )}
+            <button type="button" onClick={() => setMode(null)}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
+export function ExpectationLateFeesPanel({
+  expectationId,
+  leaseId,
+}: {
+  expectationId: string;
+  leaseId: string;
+}) {
+  const { scope } = useWorkspace();
+  const queryClient = useQueryClient();
+
+  useAutoLateFeeSync({
+    leaseId,
+    rentExpectationId: expectationId,
+    enabled: Boolean(expectationId && leaseId),
+    onCreated: () => {
+      void queryClient.invalidateQueries({
+        queryKey: scope.key("expectation-late-fee-assessments", expectationId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: scope.key("lease-late-fee-assessments", leaseId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: scope.key("portfolio-late-fee-assessments"),
+      });
+    },
+  });
+
+  const assessmentsQuery = useInfiniteQuery({
+    queryKey: scope.key("expectation-late-fee-assessments", expectationId),
+    enabled: Boolean(expectationId),
+    initialPageParam: null as string | null,
+    retry: false,
+    queryFn: async ({ pageParam, signal }) =>
+      readResult(
+        await api.GET("/api/late-fee-assessments", {
+          signal,
+          params: {
+            query: {
+              leaseId: leaseId || undefined,
+              rentExpectationId: expectationId,
+              includeVoided: true,
+              cursor: pageParam ?? undefined,
+              pageSize: 50,
+            },
+          },
+        }),
+      ),
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
+  });
+
+  const waiverQuery = useQuery({
+    queryKey: scope.key("lease-late-fee-waiver", leaseId),
+    enabled: Boolean(leaseId),
+    retry: false,
+    queryFn: async ({ signal }) =>
+      readResult(
+        await api.GET("/api/leases/{lease_id}/late-fee-waiver", {
+          signal,
+          params: { path: { lease_id: leaseId } },
+        }),
+      ),
+  });
+
+  const items = (assessmentsQuery.data?.pages ?? []).flatMap((page) => page.items);
+  const activeWaiver = waiverQuery.data?.activeWaiver ?? null;
+
+  return (
+    <section className="record-detail-panel" aria-label="Late fees for this rent period">
+      <div className="child-record-heading">
+        <h4>Late fees</h4>
+        <Link to={`/leases/${leaseId}/details`}>Manage late fees on lease →</Link>
+      </div>
+      {activeWaiver && (
+        <p role="status">
+          <strong>Late fees waived at lease level:</strong> {activeWaiver.reason}
+        </p>
+      )}
+      {assessmentsQuery.isPending && <p role="status">Checking late fees for this rent period…</p>}
+      {assessmentsQuery.error && (
+        <p role="alert">Late fees unavailable: {assessmentsQuery.error.message}</p>
+      )}
+      {assessmentsQuery.data && items.length === 0 && (
+        <p className="record-detail-note">No late fees are assessed for this rent period.</p>
+      )}
+      {items.map((item) => (
+        <AssessedLateFeeRow
+          key={item.id}
+          item={item}
+          expectedRevision={0}
+          defaultExpanded
+          onMutated={() => {
+            void queryClient.invalidateQueries({
+              queryKey: scope.key("expectation-late-fee-assessments", expectationId),
+            });
+            void queryClient.invalidateQueries({
+              queryKey: scope.key("lease-late-fee-assessments", leaseId),
+            });
+            void queryClient.invalidateQueries({
+              queryKey: scope.key("portfolio-late-fee-assessments"),
+            });
+          }}
+        />
+      ))}
+      {assessmentsQuery.hasNextPage && (
+        <button
+          type="button"
+          disabled={assessmentsQuery.isFetchingNextPage}
+          onClick={() => void assessmentsQuery.fetchNextPage()}
+        >
+          {assessmentsQuery.isFetchingNextPage ? "Loading more late fees…" : "Load more late fees"}
+        </button>
       )}
     </section>
   );

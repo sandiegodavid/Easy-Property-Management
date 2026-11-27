@@ -25,6 +25,7 @@ test.use({ extraHTTPHeaders: { Origin: "http://127.0.0.1:8001" } });
 const MONEY_TABS = [
   "Rent",
   "Received rent",
+  "Late fees",
   "Expenses",
   "Deposits",
   "Scheduled checks",
@@ -65,7 +66,7 @@ test("money workspace shows its views and rent filters", async ({ page }) => {
 test("rent tab lists the seeded expectations", async ({ page }) => {
   await page.goto("/money");
   const records = page.getByRole("region", { name: "Rent records", exact: true });
-  await expect(records.getByRole("article")).toHaveCount(18);
+  await expect(records.getByRole("article")).toHaveCount(20);
   const first = records.getByRole("article").first();
   await expect(first.getByRole("heading", { name: "Rent due", exact: true })).toBeVisible();
   await expect(first.getByText("Expected", { exact: true })).toBeVisible();
@@ -80,13 +81,15 @@ test("settlement filter separates paid and unpaid rent", async ({ page }) => {
   const settlement = records.getByRole("combobox", { name: "Settlement", exact: true });
   await settlement.selectOption("paid");
   await expect(page).toHaveURL(/status=paid/);
-  await expect(records.getByRole("article")).toHaveCount(9);
+  await expect(records.getByRole("article")).toHaveCount(11);
   await settlement.selectOption("unpaid");
   await expect(page).toHaveURL(/status=unpaid/);
   await expect(records.getByRole("article")).toHaveCount(9);
 });
 
-test("birch townhome shows its unpaid rent expectations", async ({ page }) => {
+test("birch townhome shows its rent expectations including unpaid current month", async ({
+  page,
+}) => {
   await page.goto("/properties");
   await page.getByRole("link", { name: "Birch Townhome — Rent Follow-up", exact: true }).click();
   await page.getByRole("button", { name: "View in Money", exact: true }).click();
@@ -98,11 +101,9 @@ test("birch townhome shows its unpaid rent expectations", async ({ page }) => {
   ).toBeVisible();
   const records = page.getByRole("region", { name: "Rent records", exact: true });
   const cards = records.getByRole("article");
-  await expect(cards).toHaveCount(2);
-  const first = cards.first();
-  await expect(first.getByRole("heading", { name: "Rent due", exact: true })).toBeVisible();
-  await expect(first.getByText("Unpaid", { exact: true }).first()).toBeVisible();
-  await expect(first.getByText("USD 1,950.00", { exact: true }).first()).toBeVisible();
+  await expect(cards).toHaveCount(3);
+  await expect(records.getByText("Unpaid", { exact: true }).first()).toBeVisible();
+  await expect(records.getByText("USD 1,950.00", { exact: true }).first()).toBeVisible();
 });
 
 test("willow house prepayment is a paid future expectation", async ({ page }) => {
@@ -157,4 +158,33 @@ test("scheduled checks tab is empty in the demo", async ({ page }) => {
   await page.goto("/money?tab=checks");
   const records = page.getByRole("region", { name: "Scheduled checks records", exact: true });
   await expect(records.getByText("No records match these filters.", { exact: true })).toBeVisible();
+});
+
+test("late fees tab lists paid and unpaid assessments and filters by settlement status", async ({
+  page,
+}) => {
+  await page.goto("/money?tab=late_fees");
+  const queue = page.getByRole("region", { name: "Late fees queue", exact: true });
+  await expect(queue).toBeVisible();
+  await expect(queue).toContainText("Assessed USD 160.00");
+  await expect(queue).toContainText("Assessed USD 100.00");
+  await expect(queue).toContainText("USD 50.00 initial + (8 day(s) × USD 10.00/day) = USD 130.00");
+  await expect(queue).toContainText("min(USD 130.00, USD 100.00 cap) = USD 100.00");
+  await expect(queue).toContainText("USD 3,200.00 × 5.00% = USD 160.00");
+
+  await queue.getByLabel("Settlement status").selectOption("unpaid");
+  await expect(queue).toContainText("Assessed USD 160.00");
+  await expect(queue).not.toContainText("Assessed USD 100.00");
+
+  await queue.getByLabel("Settlement status").selectOption("paid");
+  await expect(queue).toContainText("Assessed USD 100.00");
+  await expect(queue).not.toContainText("Assessed USD 160.00");
+});
+
+test("reporting tab shows late fees received from the combined payment", async ({ page }) => {
+  await page.goto("/money?tab=reporting");
+  const reporting = page.getByRole("region", { name: "Money reporting", exact: true });
+  await expect(reporting).toBeVisible();
+  await expect(reporting).toContainText("Late fees received");
+  await expect(reporting).toContainText("USD 80.00");
 });

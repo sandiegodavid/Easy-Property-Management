@@ -11,6 +11,7 @@ from sqlalchemy import event, text
 from app.bootstrap.api import create_app
 from app.modules.finance.application.late_fee_ports import PendingPaymentSummary
 from app.modules.finance.application.late_fee_service import LateFeeService
+from app.modules.finance.application.service import FinanceService
 from app.modules.finance.domain.late_fee_models import (
     AssessLateFeeCommand,
     CreateLateFeePolicyCommand,
@@ -641,6 +642,519 @@ class LateFeeAssessmentSlice3Tests(unittest.TestCase):
                 settlement_status="unpaid", page_size=10, cursor=page1["nextCursor"]
             )
         self.assertEqual(expired.exception.code, "cursor_expired")
+
+    def test_auto_assess_lease_level_waiver_and_expectation_filter(self):
+        from app.modules.finance.domain.late_fee_models import (
+            CreateLeaseLateFeeWaiverCommand,
+            RevokeLeaseLateFeeWaiverCommand,
+        )
+
+        # Auto-assess creates the eligible late fee idempotently.
+        first_sync = self.svc.sync_auto_assessments(lease_id=self.lease_id)
+        self.assertEqual(first_sync["createdCount"], 1)
+        second_sync = self.svc.sync_auto_assessments(lease_id=self.lease_id)
+        self.assertEqual(second_sync["createdCount"], 0)
+
+        # Filtering by rent_expectation_id returns the auto-assessed charge.
+        by_exp = self.svc.list_assessments(rent_expectation_id=self.expectation["id"])
+        self.assertEqual(len(by_exp["items"]), 1)
+        self.assertEqual(by_exp["items"][0]["assessedAmountMinor"], 5000)
+        self.assertEqual(by_exp["items"][0]["settlementStatus"], "unpaid")
+
+        # Lease-level waiver with waive_open_assessments=True waives open fees and pauses auto-assess.
+        state = self.svc.get_lease_waiver_state(self.lease_id)
+        self.assertIsNone(state["activeWaiver"])
+        created_waiver = self.svc.create_lease_waiver(
+            self.lease_id,
+            CreateLeaseLateFeeWaiverCommand(
+                reason="Hardship agreement: waive late fees for this lease.",
+                confirmed=True,
+                waive_open_assessments=True,
+            ),
+            expected_revision=state["rentLedgerRevision"],
+            idempotency_key=str(uuid4()),
+        )
+        self.assertEqual(created_waiver["status"], "active")
+        self.assertEqual(created_waiver["waivedOpenAssessmentsCount"], 1)
+
+        after_waive = self.svc.list_assessments(rent_expectation_id=self.expectation["id"])
+        self.assertEqual(after_waive["items"][0]["settlementStatus"], "waived")
+        self.assertEqual(after_waive["items"][0]["remainingBalanceMinor"], 0)
+
+        # Revoking the lease-level waiver re-enables auto-assessment for future periods.
+        revoked = self.svc.revoke_lease_waiver(
+            self.lease_id,
+            RevokeLeaseLateFeeWaiverCommand(
+                reason="Hardship period ended.",
+                confirmed=True,
+            ),
+            expected_revision=created_waiver["rentLedgerRevision"],
+            idempotency_key=str(uuid4()),
+        )
+        self.assertEqual(revoked["status"], "revoked")
+        self.assertIsNone(self.svc.get_lease_waiver_state(self.lease_id)["activeWaiver"])
+        validate_latest_schema(self.workspace.paths.database)
+
+    def test_review_9cd114d_get_readonly_scoped_sync_revision_fence_paging_waiver_exclusion_bulk_conflict_and_d9(
+        self,
+    ):
+        from app.modules.finance.domain.late_fee_models import (
+            CreateLeaseLateFeeWaiverCommand,
+            RevokeLeaseLateFeeWaiverCommand,
+        )
+
+        # 1. [P1] GET list endpoints are strictly read-only (0 assessments, 0 audit rows written).
+        with TestClient(create_app(self.config)) as client:
+            with self.engine.connect() as conn:
+                before_assessments = conn.execute(
+                    text("SELECT count(*) FROM late_fee_assessments")
+                ).scalar_one()
+                before_audits = conn.execute(text("SELECT count(*) FROM audit_events")).scalar_one()
+            r1 = client.get(f"/api/leases/{self.lease_id}/late-fee-assessments")
+            self.assertEqual(r1.status_code, 200)
+            r2 = client.get("/api/late-fee-assessments")
+            self.assertEqual(r2.status_code, 200)
+            with self.engine.connect() as conn:
+                after_assessments = conn.execute(
+                    text("SELECT count(*) FROM late_fee_assessments")
+                ).scalar_one()
+                after_audits = conn.execute(text("SELECT count(*) FROM audit_events")).scalar_one()
+            self.assertEqual(after_assessments, before_assessments)
+            self.assertEqual(after_audits, before_audits)
+
+            # 2. [P2] Scoped sync by rent_expectation_id touches only the targeted lease, not an unrelated eligible lease.
+            other_lease = self._create_other_eligible_lease(client)
+            pre_rev = self.svc.list_policies(self.lease_id)["rentLedgerRevision"]
+            scoped = self.svc.sync_auto_assessments(rent_expectation_id=self.expectation["id"])
+            self.assertEqual(scoped["createdCount"], 1)
+            self.assertEqual(
+                len(self.svc.list_assessments(lease_id=other_lease["leaseId"])["items"]), 0
+            )
+
+            # 3. [P1] Effective sync advances rentLedgerRevision, rejects stale revision commands, and no-op retry preserves revision.
+            post_rev = self.svc.list_policies(self.lease_id)["rentLedgerRevision"]
+            self.assertEqual(post_rev, pre_rev + 1)
+            with self.assertRaises(FinanceConflictError):
+                self.svc.create_lease_waiver(
+                    self.lease_id,
+                    CreateLeaseLateFeeWaiverCommand(reason="Stale rev", confirmed=True),
+                    expected_revision=pre_rev,
+                    idempotency_key=str(uuid4()),
+                )
+            noop = self.svc.sync_auto_assessments(lease_id=self.lease_id)
+            self.assertEqual(noop["createdCount"], 0)
+            self.assertEqual(self.svc.list_policies(self.lease_id)["rentLedgerRevision"], post_rev)
+
+            # 4. [P2] Bulk lease-level waiver is all-or-nothing when any open fee has a processing reservation.
+            other_sync = self.svc.sync_auto_assessments(lease_id=other_lease["leaseId"])
+            self.assertEqual(other_sync["createdCount"], 1)
+            reserved_id = other_sync["assessmentIds"][0]
+            reserved_uow = SQLiteFinanceUnitOfWork(
+                self.workspace.paths.database,
+                self.finance.unit_of_work.recorder,
+                self.finance.unit_of_work.lease_operations,
+                self.finance.unit_of_work.portfolio_operations,
+                self.finance.unit_of_work.party_operations,
+                self.finance.unit_of_work.task_operations,
+                pending_payment_reader=_StubPendingReader(
+                    assessments={
+                        reserved_id: PendingPaymentSummary(1, 5000, self.first_eligible.isoformat())
+                    }
+                ),
+            )
+            reserved_svc = LateFeeService(reserved_uow, now=lambda: self.eligible_instant)
+            other_rev = reserved_svc.list_policies(other_lease["leaseId"])["rentLedgerRevision"]
+            with self.assertRaises(FinanceConflictError) as conflict:
+                reserved_svc.create_lease_waiver(
+                    other_lease["leaseId"],
+                    CreateLeaseLateFeeWaiverCommand(
+                        reason="Bulk conflict test",
+                        confirmed=True,
+                        waive_open_assessments=True,
+                    ),
+                    expected_revision=other_rev,
+                    idempotency_key=str(uuid4()),
+                )
+            self.assertEqual(conflict.exception.code, "late_fee_processing_reservation_conflict")
+            self.assertIsNone(
+                reserved_svc.get_lease_waiver_state(other_lease["leaseId"])["activeWaiver"]
+            )
+
+            # 5. [P2] Timely rent receipt later voided stays manual (FIN-009 D9).
+            d9_lease = self._create_other_eligible_lease(client)
+            d9_exp = d9_lease["expectation"]
+            d9_rev = self.svc.list_policies(d9_lease["leaseId"])["rentLedgerRevision"]
+            rcpt_key = str(uuid4())
+            paid_rcpt = self.finance.record_receipt(
+                RecordReceiptCommand(
+                    lease_id=d9_lease["leaseId"],
+                    idempotency_key=rcpt_key,
+                    received_on=date.today().isoformat(),
+                    amount_minor=d9_exp["expectedAmountMinor"],
+                    currency_code="USD",
+                    allocations=(
+                        ReceiptAllocationCommand(d9_exp["id"], d9_exp["expectedAmountMinor"]),
+                    ),
+                    payment_method_kind="bank_transfer",
+                ),
+                expected_revision=d9_rev,
+            )
+            self.finance.void_receipt(
+                paid_rcpt["id"],
+                VoidCommand(True, "ACH returned NSF"),
+                expected_revision=paid_rcpt["rentLedgerRevision"],
+                idempotency_key=str(uuid4()),
+            )
+            self.assertEqual(
+                self.svc.sync_auto_assessments(lease_id=d9_lease["leaseId"])["createdCount"], 0
+            )
+
+            # 5b. [P2] Under current_unpaid_rent, a fully covering after-grace receipt later voided stays manual (FIN-009 D9).
+            d9_cur_lease = self._create_other_eligible_lease(
+                client, calculation_basis="current_unpaid_rent"
+            )
+            d9_cur_exp = d9_cur_lease["expectation"]
+            d9_cur_rev = self.svc.list_policies(d9_cur_lease["leaseId"])["rentLedgerRevision"]
+            after_grace_svc = FinanceService(
+                self.finance.unit_of_work, now=lambda: self.eligible_instant
+            )
+            cur_key = str(uuid4())
+            cur_rcpt = after_grace_svc.record_receipt(
+                RecordReceiptCommand(
+                    lease_id=d9_cur_lease["leaseId"],
+                    idempotency_key=cur_key,
+                    received_on=self.first_eligible.isoformat(),
+                    amount_minor=d9_cur_exp["expectedAmountMinor"],
+                    currency_code="USD",
+                    allocations=(
+                        ReceiptAllocationCommand(
+                            d9_cur_exp["id"], d9_cur_exp["expectedAmountMinor"]
+                        ),
+                    ),
+                    payment_method_kind="bank_transfer",
+                ),
+                expected_revision=d9_cur_rev,
+            )
+            after_grace_svc.void_receipt(
+                cur_rcpt["id"],
+                VoidCommand(True, "After-grace ACH returned"),
+                expected_revision=cur_rcpt["rentLedgerRevision"],
+                idempotency_key=str(uuid4()),
+            )
+            self.assertEqual(
+                self.svc.sync_auto_assessments(lease_id=d9_cur_lease["leaseId"])["createdCount"], 0
+            )
+
+            # 5c. [P2] A partial after-grace receipt that left the same fixed fee eligible before and after voiding does not suppress auto-assessment.
+            d9_partial_lease = self._create_other_eligible_lease(
+                client, calculation_basis="current_unpaid_rent"
+            )
+            d9_partial_exp = d9_partial_lease["expectation"]
+            d9_partial_rev = self.svc.list_policies(d9_partial_lease["leaseId"])[
+                "rentLedgerRevision"
+            ]
+            partial_rcpt = after_grace_svc.record_receipt(
+                RecordReceiptCommand(
+                    lease_id=d9_partial_lease["leaseId"],
+                    idempotency_key=str(uuid4()),
+                    received_on=self.first_eligible.isoformat(),
+                    amount_minor=100,
+                    currency_code="USD",
+                    allocations=(ReceiptAllocationCommand(d9_partial_exp["id"], 100),),
+                    payment_method_kind="bank_transfer",
+                ),
+                expected_revision=d9_partial_rev,
+            )
+            after_grace_svc.void_receipt(
+                partial_rcpt["id"],
+                VoidCommand(True, "Small partial receipt voided"),
+                expected_revision=partial_rcpt["rentLedgerRevision"],
+                idempotency_key=str(uuid4()),
+            )
+            partial_sync = self.svc.sync_auto_assessments(lease_id=d9_partial_lease["leaseId"])
+            self.assertEqual(partial_sync["createdCount"], 1)
+            partial_fees = self.svc.list_assessments(lease_id=d9_partial_lease["leaseId"])["items"]
+            self.assertEqual(len(partial_fees), 1)
+            self.assertEqual(partial_fees[0]["assessedAmountMinor"], 5000)
+
+            # 5d. [P2] Replacing a 60% partial receipt with an identical 60% allocation does not double-count the lineage and still auto-assesses the unchanged $50 fee.
+            d9_repl_lease = self._create_other_eligible_lease(client)
+            d9_repl_exp = d9_repl_lease["expectation"]
+            sixty_pct = (d9_repl_exp["expectedAmountMinor"] * 60) // 100
+            d9_repl_rev = self.svc.list_policies(d9_repl_lease["leaseId"])["rentLedgerRevision"]
+            orig_rcpt = self.finance.record_receipt(
+                RecordReceiptCommand(
+                    lease_id=d9_repl_lease["leaseId"],
+                    idempotency_key=str(uuid4()),
+                    received_on=date.today().isoformat(),
+                    amount_minor=sixty_pct,
+                    currency_code="USD",
+                    allocations=(ReceiptAllocationCommand(d9_repl_exp["id"], sixty_pct),),
+                    payment_method_kind="bank_transfer",
+                ),
+                expected_revision=d9_repl_rev,
+            )
+            voided_orig = self.finance.void_receipt(
+                orig_rcpt["id"],
+                VoidCommand(True, "Correcting receipt reference"),
+                expected_revision=orig_rcpt["rentLedgerRevision"],
+                idempotency_key=str(uuid4()),
+            )
+            self.finance.record_receipt(
+                RecordReceiptCommand(
+                    lease_id=d9_repl_lease["leaseId"],
+                    idempotency_key=str(uuid4()),
+                    received_on=date.today().isoformat(),
+                    amount_minor=sixty_pct,
+                    currency_code="USD",
+                    allocations=(ReceiptAllocationCommand(d9_repl_exp["id"], sixty_pct),),
+                    payment_method_kind="bank_transfer",
+                    replaces_receipt_id=orig_rcpt["id"],
+                ),
+                expected_revision=voided_orig["rentLedgerRevision"],
+            )
+            repl_sync = self.svc.sync_auto_assessments(lease_id=d9_repl_lease["leaseId"])
+            self.assertEqual(repl_sync["createdCount"], 1)
+            repl_fees = self.svc.list_assessments(lease_id=d9_repl_lease["leaseId"])["items"]
+            self.assertEqual(len(repl_fees), 1)
+            self.assertEqual(repl_fees[0]["assessedAmountMinor"], 5000)
+
+            # 6. [P2] Revoked lease waiver permanently excludes waived interval for both one-time and daily fees.
+            ot_lease = self._create_other_eligible_lease(client)
+            ot_rev = self.svc.list_policies(ot_lease["leaseId"])["rentLedgerRevision"]
+            pre_waive_svc = LateFeeService(
+                self.finance.unit_of_work,
+                now=lambda: self.eligible_instant - timedelta(days=2),
+            )
+            ot_waived = pre_waive_svc.create_lease_waiver(
+                ot_lease["leaseId"],
+                CreateLeaseLateFeeWaiverCommand(reason="Waive during grace", confirmed=True),
+                expected_revision=ot_rev,
+                idempotency_key=str(uuid4()),
+            )
+            post_waive_svc = LateFeeService(
+                self.finance.unit_of_work,
+                now=lambda: self.eligible_instant + timedelta(days=1),
+            )
+            post_waive_svc.revoke_lease_waiver(
+                ot_lease["leaseId"],
+                RevokeLeaseLateFeeWaiverCommand(reason="Resume after grace", confirmed=True),
+                expected_revision=ot_waived["rentLedgerRevision"],
+                idempotency_key=str(uuid4()),
+            )
+            later_svc = LateFeeService(
+                self.finance.unit_of_work,
+                now=lambda: self.eligible_instant + timedelta(days=5),
+            )
+            self.assertEqual(
+                later_svc.sync_auto_assessments(lease_id=ot_lease["leaseId"])["createdCount"], 0
+            )
+
+            # 6a-2. [P2] Pre-waiver already-eligible unassessed one-time fee is also excluded on resume.
+            pre_arrears_lease = self._create_other_eligible_lease(client)
+            pa_rev = self.svc.list_policies(pre_arrears_lease["leaseId"])["rentLedgerRevision"]
+            pa_waive_svc = LateFeeService(
+                self.finance.unit_of_work,
+                now=lambda: self.eligible_instant + timedelta(days=2),
+            )
+            pa_waived = pa_waive_svc.create_lease_waiver(
+                pre_arrears_lease["leaseId"],
+                CreateLeaseLateFeeWaiverCommand(reason="Pause after eligibility", confirmed=True),
+                expected_revision=pa_rev,
+                idempotency_key=str(uuid4()),
+            )
+            pa_revoke_svc = LateFeeService(
+                self.finance.unit_of_work,
+                now=lambda: self.eligible_instant + timedelta(days=4),
+            )
+            pa_revoke_svc.revoke_lease_waiver(
+                pre_arrears_lease["leaseId"],
+                RevokeLeaseLateFeeWaiverCommand(reason="Resume future only", confirmed=True),
+                expected_revision=pa_waived["rentLedgerRevision"],
+                idempotency_key=str(uuid4()),
+            )
+            pa_later_svc = LateFeeService(
+                self.finance.unit_of_work,
+                now=lambda: self.eligible_instant + timedelta(days=6),
+            )
+            self.assertEqual(
+                pa_later_svc.sync_auto_assessments(lease_id=pre_arrears_lease["leaseId"])[
+                    "createdCount"
+                ],
+                0,
+            )
+
+            daily_lease = self._create_other_eligible_lease(client, formula_kind="daily_flat")
+            day1 = self.svc.sync_auto_assessments(lease_id=daily_lease["leaseId"])
+            self.assertEqual(day1["createdCount"], 1)
+            day2_svc = LateFeeService(
+                self.finance.unit_of_work, now=lambda: self.eligible_instant + timedelta(days=1)
+            )
+            d_rev = day2_svc.list_policies(daily_lease["leaseId"])["rentLedgerRevision"]
+            d_waiver = day2_svc.create_lease_waiver(
+                daily_lease["leaseId"],
+                CreateLeaseLateFeeWaiverCommand(reason="Pause days 2-4", confirmed=True),
+                expected_revision=d_rev,
+                idempotency_key=str(uuid4()),
+            )
+            day4_svc = LateFeeService(
+                self.finance.unit_of_work, now=lambda: self.eligible_instant + timedelta(days=3)
+            )
+            day4_svc.revoke_lease_waiver(
+                daily_lease["leaseId"],
+                RevokeLeaseLateFeeWaiverCommand(reason="Resume after day 4", confirmed=True),
+                expected_revision=d_waiver["rentLedgerRevision"],
+                idempotency_key=str(uuid4()),
+            )
+            day6_svc = LateFeeService(
+                self.finance.unit_of_work, now=lambda: self.eligible_instant + timedelta(days=5)
+            )
+            day6_sync = day6_svc.sync_auto_assessments(lease_id=daily_lease["leaseId"])
+            self.assertEqual(day6_sync["createdCount"], 1)
+            day6_detail = day6_svc.get_assessment(day6_sync["assessmentIds"][0])
+            self.assertEqual(day6_detail["accrualDays"], 2)
+            self.assertEqual(day6_detail["assessedAmountMinor"], 2000)
+
+            # 7. [P2] Paging beyond 500 older ineligible candidates still reaches a newer eligible period.
+            long_lease = self._create_other_eligible_lease(client)
+            with self.engine.begin() as conn:
+                template = dict(
+                    conn.execute(
+                        text("SELECT * FROM rent_expectations WHERE id = :id"),
+                        {"id": long_lease["expectation"]["id"]},
+                    )
+                    .mappings()
+                    .one()
+                )
+                cols = list(template.keys())
+                insert_sql = text(
+                    f"INSERT INTO rent_expectations ({', '.join(cols)}) "
+                    f"VALUES ({', '.join(':' + col for col in cols)})"
+                )
+                base_day = date(1975, 1, 1)
+                for idx in range(510):
+                    d_start = (base_day + timedelta(days=idx * 2)).isoformat()
+                    d_end = (base_day + timedelta(days=idx * 2 + 1)).isoformat()
+                    row = {
+                        **template,
+                        "id": str(uuid4()),
+                        "period_starts_on": d_start,
+                        "period_ends_on": d_end,
+                        "due_on": d_start,
+                    }
+                    conn.execute(insert_sql, row)
+            long_sync = self.svc.sync_auto_assessments(lease_id=long_lease["leaseId"])
+            self.assertEqual(long_sync["createdCount"], 1)
+        validate_latest_schema(self.workspace.paths.database)
+
+    def _create_other_eligible_lease(
+        self,
+        client,
+        *,
+        formula_kind: str = "fixed_flat",
+        calculation_basis: str = "unpaid_rent_at_grace_end",
+    ) -> dict[str, object]:
+        prop_res = client.post(
+            "/api/properties",
+            json={
+                "expectedPropertyRevision": 0,
+                "idempotencyKey": str(uuid4()),
+                "displayName": f"Other {uuid4().hex[:6]}",
+                "addressLine1": "99 Pine St",
+                "city": "Portland",
+                "region": "OR",
+                "postalCode": "97201",
+                "countryCode": "US",
+                "propertyType": "single_family_home",
+                "ownerships": [{"ownerKind": "local_operator", "sharePercent": 100}],
+            },
+        )
+        self.assertEqual(prop_res.status_code, 201, prop_res.text)
+        prop = prop_res.json()
+        tenant_res = client.post(
+            "/api/tenants",
+            json={
+                "expectedRevision": 0,
+                "idempotencyKey": str(uuid4()),
+                "partyKind": "individual",
+                "displayName": f"Tenant {uuid4().hex[:6]}",
+                "officialIds": [
+                    {"documentType": "passport", "issuingCountry": "US", "lastFour": "9999"}
+                ],
+            },
+        )
+        self.assertEqual(tenant_res.status_code, 201, tenant_res.text)
+        tenant = tenant_res.json()
+        draft_res = client.post(
+            "/api/leases",
+            json={
+                "expectedLeaseRevision": 0,
+                "idempotencyKey": str(uuid4()),
+                "spaceId": prop["spaces"][0]["id"],
+                "leaseKind": "residential",
+                "contractStartsOn": min(self.due.isoformat(), prop["effectiveLocalDate"]),
+                "occupancyStartsOn": prop["effectiveLocalDate"],
+                "initialTerm": {
+                    "baseRentMinor": 100_000,
+                    "currencyCode": "USD",
+                    "paymentFrequency": "monthly",
+                    "paymentDueDay": 1,
+                    "agreedSecurityDepositMinor": 100_000,
+                },
+                "participants": [
+                    {"tenantPartyId": tenant["id"], "participantRole": "primary_tenant"}
+                ],
+            },
+        )
+        self.assertEqual(draft_res.status_code, 201, draft_res.text)
+        draft = draft_res.json()
+        exec_res = client.post(
+            f"/api/leases/{draft['id']}/execute",
+            json={
+                "expectedLeaseRevision": draft["leaseRevision"],
+                "expectedRevision": prop["spaces"][0]["revision"],
+                "idempotencyKey": str(uuid4()),
+                "confirmed": True,
+                "executedOn": prop["effectiveLocalDate"],
+            },
+        )
+        self.assertEqual(exec_res.status_code, 200, exec_res.text)
+        synced = self.finance.synchronize(
+            draft["id"],
+            SynchronizeExpectationsCommand(
+                draft["terms"][0]["id"],
+                (self.due + timedelta(days=35)).isoformat(),
+                date.today().replace(day=1).isoformat(),
+            ),
+            expected_revision=0,
+            idempotency_key=str(uuid4()),
+        )
+        non_prorated = next(item for item in synced["items"] if not item["isProrated"])
+        self.svc.create_policy(
+            draft["id"],
+            CreateLateFeePolicyCommand(
+                effective_on=non_prorated["dueOn"],
+                rule_basis="Lease Section 6",
+                grace_period_days=5,
+                calculation_basis=calculation_basis,
+                formula_kind=formula_kind,
+                flat_amount_minor=5000 if formula_kind == "fixed_flat" else None,
+                daily_amount_minor=1000 if formula_kind == "daily_flat" else None,
+                max_accrual_days=30 if formula_kind == "daily_flat" else None,
+                rounding_mode="half_up",
+                applies_to_prorated_periods=False,
+                operator_confirmed=True,
+            ),
+            expected_revision=synced["rentLedgerRevision"],
+            idempotency_key=str(uuid4()),
+        )
+        return {
+            "leaseId": draft["id"],
+            "termId": draft["terms"][0]["id"],
+            "propertyId": prop["id"],
+            "spaceId": prop["spaces"][0]["id"],
+            "expectation": non_prorated,
+        }
 
 
 if __name__ == "__main__":

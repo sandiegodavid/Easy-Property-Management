@@ -9163,6 +9163,56 @@
         "title": "CreateLateFeePolicyInput",
         "type": "object"
       },
+      "CreateLeaseLateFeeWaiverInput": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "expectedRevision": {
+            "minimum": 0.0,
+            "title": "Expectedrevision",
+            "type": "integer"
+          },
+          "idempotencyKey": {
+            "format": "uuid",
+            "title": "Idempotencykey",
+            "type": "string"
+          },
+          "internalNotes": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Internalnotes"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "waiveOpenAssessments": {
+            "default": false,
+            "title": "Waiveopenassessments",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "expectedRevision",
+          "idempotencyKey",
+          "reason",
+          "confirmed"
+        ],
+        "title": "CreateLeaseLateFeeWaiverInput",
+        "type": "object"
+      },
       "CreateProviderInput": {
         "additionalProperties": false,
         "properties": {
@@ -19704,6 +19754,260 @@
           "sourceDriftWarning"
         ],
         "title": "LateFeeAssessmentSummaryResponse",
+        "type": "object"
+      },
+      "LateFeeLeaseWaiverMutationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "internalNotes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Internalnotes"
+          },
+          "leaseId": {
+            "format": "uuid",
+            "title": "Leaseid",
+            "type": "string"
+          },
+          "operationId": {
+            "format": "uuid",
+            "title": "Operationid",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "rentLedgerRevision": {
+            "minimum": 0.0,
+            "title": "Rentledgerrevision",
+            "type": "integer"
+          },
+          "revokeReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revokereason"
+          },
+          "revokedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revokedat"
+          },
+          "revokedByActor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revokedbyactor"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "revoked"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "waivedAt": {
+            "format": "date-time",
+            "title": "Waivedat",
+            "type": "string"
+          },
+          "waivedByActor": {
+            "title": "Waivedbyactor",
+            "type": "string"
+          },
+          "waivedOpenAssessmentsCount": {
+            "minimum": 0.0,
+            "title": "Waivedopenassessmentscount",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "leaseId",
+          "status",
+          "reason",
+          "internalNotes",
+          "waivedAt",
+          "waivedByActor",
+          "waivedOpenAssessmentsCount",
+          "revokedAt",
+          "revokedByActor",
+          "revokeReason",
+          "rentLedgerRevision",
+          "operationId"
+        ],
+        "title": "LateFeeLeaseWaiverMutationResponse",
+        "type": "object"
+      },
+      "LateFeeLeaseWaiverResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "internalNotes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Internalnotes"
+          },
+          "leaseId": {
+            "format": "uuid",
+            "title": "Leaseid",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "revokeReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revokereason"
+          },
+          "revokedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revokedat"
+          },
+          "revokedByActor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revokedbyactor"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "revoked"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "waivedAt": {
+            "format": "date-time",
+            "title": "Waivedat",
+            "type": "string"
+          },
+          "waivedByActor": {
+            "title": "Waivedbyactor",
+            "type": "string"
+          },
+          "waivedOpenAssessmentsCount": {
+            "minimum": 0.0,
+            "title": "Waivedopenassessmentscount",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "leaseId",
+          "status",
+          "reason",
+          "internalNotes",
+          "waivedAt",
+          "waivedByActor",
+          "waivedOpenAssessmentsCount",
+          "revokedAt",
+          "revokedByActor",
+          "revokeReason"
+        ],
+        "title": "LateFeeLeaseWaiverResponse",
+        "type": "object"
+      },
+      "LateFeeLeaseWaiverStateResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "activeWaiver": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LateFeeLeaseWaiverResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/LateFeeLeaseWaiverResponse"
+            },
+            "title": "History",
+            "type": "array"
+          },
+          "leaseId": {
+            "format": "uuid",
+            "title": "Leaseid",
+            "type": "string"
+          },
+          "rentLedgerRevision": {
+            "minimum": 0.0,
+            "title": "Rentledgerrevision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "leaseId",
+          "rentLedgerRevision",
+          "activeWaiver",
+          "history"
+        ],
+        "title": "LateFeeLeaseWaiverStateResponse",
         "type": "object"
       },
       "LateFeePolicyListResponse": {
@@ -31451,6 +31755,8 @@
               "finance.late_fee_assessment.create",
               "finance.late_fee_assessment.waive",
               "finance.late_fee_assessment.void",
+              "finance.late_fee_lease_waiver.create",
+              "finance.late_fee_lease_waiver.revoke",
               "finance.late_fee_receipt.create",
               "finance.late_fee_receipt.void",
               "finance.combined_receipt.create"
@@ -31713,6 +32019,8 @@
               "finance.late_fee_assessment.create",
               "finance.late_fee_assessment.waive",
               "finance.late_fee_assessment.void",
+              "finance.late_fee_lease_waiver.create",
+              "finance.late_fee_lease_waiver.revoke",
               "finance.late_fee_receipt.create",
               "finance.late_fee_receipt.void",
               "finance.combined_receipt.create"
@@ -34718,6 +35026,39 @@
           "currentAttentionStatus"
         ],
         "title": "RevisionConflictDetailResponse",
+        "type": "object"
+      },
+      "RevokeLeaseLateFeeWaiverInput": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "expectedRevision": {
+            "minimum": 0.0,
+            "title": "Expectedrevision",
+            "type": "integer"
+          },
+          "idempotencyKey": {
+            "format": "uuid",
+            "title": "Idempotencykey",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expectedRevision",
+          "idempotencyKey",
+          "reason",
+          "confirmed"
+        ],
+        "title": "RevokeLeaseLateFeeWaiverInput",
         "type": "object"
       },
       "SchedulePreviewInput": {
@@ -38379,6 +38720,73 @@
           "expectedEvidenceRevisionId"
         ],
         "title": "SupersedeInput",
+        "type": "object"
+      },
+      "SyncAutoLateFeesInput": {
+        "additionalProperties": false,
+        "properties": {
+          "leaseId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Leaseid"
+          },
+          "propertyId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Propertyid"
+          },
+          "rentExpectationId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rentexpectationid"
+          }
+        },
+        "title": "SyncAutoLateFeesInput",
+        "type": "object"
+      },
+      "SyncAutoLateFeesResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "assessmentIds": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Assessmentids",
+            "type": "array"
+          },
+          "createdCount": {
+            "minimum": 0.0,
+            "title": "Createdcount",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "createdCount",
+          "assessmentIds"
+        ],
+        "title": "SyncAutoLateFeesResponse",
         "type": "object"
       },
       "SynchronizeInput": {
@@ -46397,8 +46805,11 @@
               "create_late_fee_policy",
               "void_late_fee_policy",
               "assess_late_fee",
+              "auto_assess_late_fees",
               "waive_late_fee",
               "void_late_fee_assessment",
+              "create_lease_late_fee_waiver",
+              "revoke_lease_late_fee_waiver",
               "record_late_fee_receipt",
               "record_combined_receipt",
               "void_late_fee_receipt",
@@ -55331,6 +55742,23 @@
           },
           {
             "in": "query",
+            "name": "rentExpectationId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rentexpectationid"
+            }
+          },
+          {
+            "in": "query",
             "name": "settlementStatus",
             "required": false,
             "schema": {
@@ -55779,6 +56207,67 @@
           }
         },
         "summary": "Void Late Fee Receipt",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
+    "/api/late-fees/sync": {
+      "post": {
+        "operationId": "syncAutoLateFees",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncAutoLateFeesInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncAutoLateFeesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sync Auto Late Fees",
         "tags": [
           "finance"
         ]
@@ -57381,6 +57870,213 @@
           }
         },
         "summary": "Record Late Fee Receipt",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
+    "/api/leases/{lease_id}/late-fee-waiver": {
+      "get": {
+        "operationId": "getLeaseLateFeeWaiver",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Lease Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LateFeeLeaseWaiverStateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Lease Waiver",
+        "tags": [
+          "finance"
+        ]
+      },
+      "post": {
+        "operationId": "createLeaseLateFeeWaiver",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Lease Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLeaseLateFeeWaiverInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LateFeeLeaseWaiverMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Lease Waiver",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
+    "/api/leases/{lease_id}/late-fee-waiver/revoke": {
+      "post": {
+        "operationId": "revokeLeaseLateFeeWaiver",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Lease Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeLeaseLateFeeWaiverInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LateFeeLeaseWaiverMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Lease Waiver",
         "tags": [
           "finance"
         ]

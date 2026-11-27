@@ -20,9 +20,11 @@ from app.modules.finance.application.late_fee_service import LateFeeService
 from app.modules.finance.domain.late_fee_models import (
     AssessLateFeeCommand,
     CreateLateFeePolicyCommand,
+    CreateLeaseLateFeeWaiverCommand,
     LateFeeReceiptAllocationCommand,
     RecordCombinedReceiptCommand,
     RecordLateFeeReceiptCommand,
+    RevokeLeaseLateFeeWaiverCommand,
     VoidLateFeeAssessmentCommand,
     VoidLateFeePolicyCommand,
     VoidLateFeeReceiptCommand,
@@ -434,6 +436,55 @@ class CombinedRentReceiptResponse(Contract):
     allocations: list[CombinedRentAllocationResponse]
 
 
+class CreateLeaseLateFeeWaiverInput(CommandInput):
+    reason: str = Field(min_length=1, max_length=1000)
+    waiveOpenAssessments: StrictBool = False
+    internalNotes: str | None = Field(default=None, max_length=1000)
+    confirmed: StrictBool
+
+
+class RevokeLeaseLateFeeWaiverInput(CommandInput):
+    reason: str = Field(min_length=1, max_length=1000)
+    confirmed: StrictBool
+
+
+class LateFeeLeaseWaiverResponse(Contract):
+    id: UUID
+    leaseId: UUID
+    status: Literal["active", "revoked"]
+    reason: str
+    internalNotes: str | None
+    waivedAt: AwareDatetime
+    waivedByActor: str
+    waivedOpenAssessmentsCount: StrictInt = Field(ge=0)
+    revokedAt: AwareDatetime | None
+    revokedByActor: str | None
+    revokeReason: str | None
+
+
+class LateFeeLeaseWaiverStateResponse(Contract):
+    leaseId: UUID
+    rentLedgerRevision: StrictInt = Field(ge=0)
+    activeWaiver: LateFeeLeaseWaiverResponse | None
+    history: list[LateFeeLeaseWaiverResponse]
+
+
+class LateFeeLeaseWaiverMutationResponse(LateFeeLeaseWaiverResponse):
+    rentLedgerRevision: StrictInt = Field(ge=0)
+    operationId: UUID
+
+
+class SyncAutoLateFeesInput(Contract):
+    leaseId: UUID | None = None
+    propertyId: UUID | None = None
+    rentExpectationId: UUID | None = None
+
+
+class SyncAutoLateFeesResponse(Contract):
+    createdCount: StrictInt = Field(ge=0)
+    assessmentIds: list[UUID]
+
+
 class CombinedReceiptMutationResponse(Contract):
     paymentBatchId: UUID
     leaseId: UUID
@@ -586,6 +637,23 @@ def build_router(service: LateFeeService, runtime: WorkspaceRuntime) -> APIRoute
             )
         )
 
+    @router.post(
+        "/api/late-fees/sync",
+        response_model=SyncAutoLateFeesResponse,
+        operation_id="syncAutoLateFees",
+    )
+    def sync_auto_late_fees(data: SyncAutoLateFeesInput):
+        ready(True)
+        return invoke(
+            lambda: service.sync_auto_assessments(
+                lease_id=str(data.leaseId) if data.leaseId else None,
+                property_id=str(data.propertyId) if data.propertyId else None,
+                rent_expectation_id=(
+                    str(data.rentExpectationId) if data.rentExpectationId else None
+                ),
+            )
+        )
+
     @router.get(
         "/api/leases/{lease_id}/late-fee-assessments",
         response_model=LateFeeAssessmentPageResponse,
@@ -618,6 +686,7 @@ def build_router(service: LateFeeService, runtime: WorkspaceRuntime) -> APIRoute
     def list_portfolio_assessments(
         propertyId: UUID | None = None,
         leaseId: UUID | None = None,
+        rentExpectationId: UUID | None = None,
         settlementStatus: Literal["unpaid", "partially_paid", "paid", "waived", "voided"]
         | None = None,
         includeVoided: bool = False,
@@ -629,10 +698,58 @@ def build_router(service: LateFeeService, runtime: WorkspaceRuntime) -> APIRoute
             lambda: service.list_assessments(
                 lease_id=str(leaseId) if leaseId else None,
                 property_id=str(propertyId) if propertyId else None,
+                rent_expectation_id=str(rentExpectationId) if rentExpectationId else None,
                 settlement_status=settlementStatus,
                 include_voided=includeVoided,
                 cursor=cursor,
                 page_size=pageSize,
+            )
+        )
+
+    @router.get(
+        "/api/leases/{lease_id}/late-fee-waiver",
+        response_model=LateFeeLeaseWaiverStateResponse,
+        operation_id="getLeaseLateFeeWaiver",
+    )
+    def get_lease_waiver(lease_id: UUID):
+        ready()
+        return invoke(lambda: service.get_lease_waiver_state(str(lease_id)))
+
+    @router.post(
+        "/api/leases/{lease_id}/late-fee-waiver",
+        response_model=LateFeeLeaseWaiverMutationResponse,
+        status_code=status.HTTP_201_CREATED,
+        operation_id="createLeaseLateFeeWaiver",
+    )
+    def create_lease_waiver(lease_id: UUID, data: CreateLeaseLateFeeWaiverInput):
+        ready(True)
+        return invoke(
+            lambda: service.create_lease_waiver(
+                str(lease_id),
+                CreateLeaseLateFeeWaiverCommand(
+                    reason=data.reason,
+                    confirmed=data.confirmed,
+                    waive_open_assessments=data.waiveOpenAssessments,
+                    internal_notes=data.internalNotes,
+                ),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+            )
+        )
+
+    @router.post(
+        "/api/leases/{lease_id}/late-fee-waiver/revoke",
+        response_model=LateFeeLeaseWaiverMutationResponse,
+        operation_id="revokeLeaseLateFeeWaiver",
+    )
+    def revoke_lease_waiver(lease_id: UUID, data: RevokeLeaseLateFeeWaiverInput):
+        ready(True)
+        return invoke(
+            lambda: service.revoke_lease_waiver(
+                str(lease_id),
+                RevokeLeaseLateFeeWaiverCommand(reason=data.reason, confirmed=data.confirmed),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
             )
         )
 

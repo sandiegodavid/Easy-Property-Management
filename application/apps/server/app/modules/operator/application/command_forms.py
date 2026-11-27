@@ -641,6 +641,18 @@ class CombinedReceiptCreateForm(FinanceRevisionForm):
         return value.strip() if isinstance(value, str) else value
 
 
+class LateFeeLeaseWaiverCreateForm(FinanceRevisionForm):
+    reason: str | None = Field(None, max_length=1000)
+    waiveOpenAssessments: StrictBool | None = None
+    internalNotes: str | None = Field(None, max_length=1000)
+    confirmed: StrictBool | None = None
+
+
+class LateFeeLeaseWaiverRevokeForm(FinanceRevisionForm):
+    reason: str | None = Field(None, max_length=1000)
+    confirmed: StrictBool | None = None
+
+
 # Each entry is an explicit reviewed workflow, not a command discovery/dispatcher.
 COMMAND_SCHEMAS = {
     **INVENTORY_SCHEMAS,
@@ -728,6 +740,8 @@ COMMAND_SCHEMAS = {
     "finance.late_fee_assessment.create": LateFeeAssessmentCreateForm,
     "finance.late_fee_assessment.waive": LateFeeAssessmentWaiveForm,
     "finance.late_fee_assessment.void": LateFeeAssessmentVoidForm,
+    "finance.late_fee_lease_waiver.create": LateFeeLeaseWaiverCreateForm,
+    "finance.late_fee_lease_waiver.revoke": LateFeeLeaseWaiverRevokeForm,
     "finance.late_fee_receipt.create": LateFeeReceiptCreateForm,
     "finance.late_fee_receipt.void": LateFeeReceiptVoidForm,
     "finance.combined_receipt.create": CombinedReceiptCreateForm,

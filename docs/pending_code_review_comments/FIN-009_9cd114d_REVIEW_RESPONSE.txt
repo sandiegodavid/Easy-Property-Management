@@ -1,0 +1,99 @@
+FIN-009 review response for 9cd114d
+Response date: 2026-11-27
+Original review: docs/pending_code_review_comments/FIN-009_9cd114d_REVIEW_COMMENTS.txt
+
+Summary of changes
+
+1. [P1] Hosted transport / read-only GET assessment lists
+   - Removed automatic write catch-up from GET /api/leases/{lease_id}/late-fee-assessments and GET /api/late-fee-assessments in application/apps/server/app/modules/finance/api/late_fee_router.py:662-718 so GET routes are strictly read-only.
+   - Added write-authorized POST /api/late-fees/sync (ready(True), SyncAutoLateFeesInput / SyncAutoLateFeesResponse) in application/apps/server/app/modules/finance/api/late_fee_router.py:475-486 and :644-660.
+   - Regenerated OpenAPI snapshot and @epm/contracts TypeScript types (npm run contracts:generate).
+   - Wired write-gated useAutoLateFeeSync() in application/apps/web/src/workflows/late-fees.tsx:368-412 for LeaseLateFeesSection, MoneyLateFeesQueue, and ExpectationLateFeesPanel.
+   - Added regression test verifying GET list endpoints write 0 late_fee_assessments and 0 audit_events in application/apps/server/app/modules/finance/tests/test_late_fee_assessments.py:706-722.
+
+2. [P2] Scope catch-up to rentExpectationId / owning lease
+   - Extended LateFeeService.sync_auto_assessments() and _auto_assess_lease() in application/apps/server/app/modules/finance/application/late_fee_service.py:1001-1080 with rent_expectation_id scoping using SQLiteFinanceUnitOfWork.expectation_lease_id() (application/apps/server/app/modules/finance/infrastructure/unit_of_work.py:1313-1316).
+   - Updated ExpectationLateFeesPanel in application/apps/web/src/workflows/late-fees.tsx:3354-3395 to scope both POST /api/late-fees/sync and GET /api/late-fee-assessments to leaseId + rentExpectationId.
+   - Added two-lease regression test asserting an unrelated eligible lease is untouched in application/apps/server/app/modules/finance/tests/test_late_fee_assessments.py:725-732.
+
+3. [P1] Commit auto-assessments through Finance command ledger and rentLedgerRevision
+   - Registered action "auto_assess_late_fees" in SCOPE_ACTIONS["rent_ledger"] (application/apps/server/app/modules/finance/application/commands.py:39), FinanceCommandOperationResponse.action (application/apps/server/app/modules/finance/api/router.py:295), and restore-time validation _auto_assess_late_fees() (application/apps/server/app/modules/finance/infrastructure/consumer_command_validation.py:18-19, :34-49).
+   - Updated LateFeeService._auto_assess_lease() in application/apps/server/app/modules/finance/application/late_fee_service.py:1187-1244 to commit effective auto-assessments atomically via apply_finance_command(), advancing rentLedgerRevision and recording correlated audit_events, while no-op syncs perform 0 writes and leave rentLedgerRevision unchanged.
+   - Added regression test asserting revision advance, stale-revision rejection (409), no-op revision preservation, and validate_latest_schema() pass in application/apps/server/app/modules/finance/tests/test_late_fee_assessments.py:735-746 and :905.
+
+4. [P2] Cursor-paged candidate collection (no 500-row starvation)
+   - Replaced the fixed 500-row query with cursor-paginated _collect_auto_expectations() (200-row keyset pages across all active expectations) in application/apps/server/app/modules/finance/application/late_fee_service.py:1033-1059.
+   - Added regression test inserting 510 older ineligible expectations before an eligible period and asserting the 511th period is auto-assessed in application/apps/server/app/modules/finance/tests/test_late_fee_assessments.py:874-904.
+
+5. [P2] Explicit waived-interval exclusion upon lease-level waiver revocation
+   - Defined and enforced permanent exclusion of historical revoked lease-waiver property-local date windows [waived_on, revoked_on] in calculate_late_fee_preview() (application/apps/server/app/modules/finance/domain/late_fee_calculator.py:117, :388-412, :450-455) and LateFeeService._auto_assess_lease() (application/apps/server/app/modules/finance/application/late_fee_service.py:1076-1084).
+   - Updated LeaseLevelWaiverPanel UI copy in application/apps/web/src/workflows/late-fees.tsx:3236-3315 to explicitly disclose that periods/days falling during a lease-level waiver are permanently excluded and not back-charged on resume.
+   - Added regression tests covering both a one-time fee first eligible during the waiver and a daily fee spanning the waiver dates in application/apps/server/app/modules/finance/tests/test_late_fee_assessments.py:809-872.
+
+6. [P2] All-or-nothing bulk lease-level waiver on processing reservation conflict
+   - Updated LateFeeService.create_lease_waiver() in application/apps/server/app/modules/finance/application/late_fee_service.py:870-896 to check all open active assessments for processing payment reservations before inserting any waivers, rejecting with 409 late_fee_processing_reservation_conflict atomically when any reservation exists.
+   - Updated UI checkbox label in application/apps/web/src/workflows/late-fees.tsx:3275-3276.
+   - Added regression test asserting 409 conflict and atomic rollback in application/apps/server/app/modules/finance/tests/test_late_fee_assessments.py:748-781.
+
+7. [P2] Preserve FIN-009 D9 for voided/returned timely rent receipts
+   - Added SQLiteFinanceUnitOfWork.voided_rent_receipt_allocations_by_date() in application/apps/server/app/modules/finance/infrastructure/unit_of_work.py:1318-1339 and skipped auto-assessment for expectations with any voided receipt allocation received_on <= grace_ends_on in application/apps/server/app/modules/finance/application/late_fee_service.py:1126-1131.
+   - Added regression test paying rent through grace, voiding the receipt, and asserting sync_auto_assessments() creates 0 assessments in application/apps/server/app/modules/finance/tests/test_late_fee_assessments.py:783-807.
+
+8. [P2] Documentation and schema dictionary alignment
+   - Updated docs/FEATURE_BACKLOG.md:61, docs/active/PORTALS_IMPLEMENTATION_PLAN.md:110, docs/active/FIN-009_DESIGN.md:18, docs/database/schema-resources.md:18, and docs/modules/finance.md:108 to align the approved automation boundary, exceptions (processing reservations, D9 voided timely receipts, excluded lease-waiver intervals), and late_fee_lease_waivers schema details.
+
+9. [P2] Rent due panel pagination continuation
+   - Converted ExpectationLateFeesPanel in application/apps/web/src/workflows/late-fees.tsx:3374-3455 to useInfiniteQuery with nextCursor continuation and a "Load more late fees" button.
+   - Added Playwright verification reaching page 2 via "Load more late fees" in application/apps/web/tests/late-fees.spec.ts:190-245.
+
+Validation results
+- Backend pytest: .venv/bin/pytest apps/server/app/modules/finance/tests/test_late_fee_*.py -q -> 23 passed (15.00s).
+- Python lint/format: ruff check and ruff format --check on all 8 modified Python files -> All checks passed / already formatted.
+- Frontend lint/format/typecheck/packaging: npm run lint, npm run format:check, npm run typecheck (217 source files), npm run contracts:check, npm run package:web -> all passed.
+- Playwright browser acceptance: npx playwright test --config playwright.config.ts apps/web/tests/late-fees.spec.ts -> 5 passed (15.4s).
+
+Follow-up re-review response (2026-11-27)
+
+1. [P1] Hosted transport allowlist for late-fee routes (Finding 1, regressed)
+   - Added "late-fee-assessments", "late-fee-receipts", and "late-fees" to BUSINESS_ROOTS in application/apps/server/app/modules/hosted_access/api/middleware.py:41-43 so hosted deployments admit GET/POST late-fee routes under normal read/write capability checks.
+   - Added test_hosted_late_fee_sync_requires_write_and_get_stays_read_only in application/apps/server/app/modules/hosted_access/tests/test_transport.py:389-478 verifying that a read-only hosted caller (records.read) can GET /api/late-fee-assessments (200) without writes while POST /api/late-fees/sync is rejected (403 hosted_capability_forbidden), and an admitted hosted writer (records.read + records.write with Origin + CSRF) succeeds on POST /api/late-fees/sync (200).
+
+5. [P2] Lease waiver resumption excludes pre-waiver eligible one-time periods (Finding 5, still open)
+   - Updated calculate_late_fee_preview() in application/apps/server/app/modules/finance/domain/late_fee_calculator.py:385-417 so one-time formulas (fixed_flat, percentage_once) exclude any period with first_eligible_on <= revoked_on across historical revoked lease-waiver windows, matching the UI resume confirmation copy (resuming only auto-assesses future periods/days; manual assess remains available).
+   - Extended the lease-waiver revocation regression in application/apps/server/app/modules/finance/tests/test_late_fee_assessments.py to cover a pre-waiver already-eligible unassessed one-time fee and confirm it is not back-charged upon resume.
+
+7. [P2] Preserve FIN-009 D9 for after-grace voided receipts under current_unpaid_rent (Finding 7, still open)
+   - Updated _auto_assess_lease() in application/apps/server/app/modules/finance/application/late_fee_service.py:1128-1138 to use d9_cutoff = current_local_date when policy.calculation_basis == "current_unpaid_rent" (and grace_ends_on otherwise), keeping returned/voided payments under manual operator review whenever they affected the auto-calculation basis.
+   - Extended the D9 voided-receipt regression in application/apps/server/app/modules/finance/tests/test_late_fee_assessments.py with a current_unpaid_rent policy and an after-grace receipt that is later voided, asserting sync_auto_assessments() creates 0 assessments.
+
+8. [P2] Align FIN-009_DESIGN.md and FIN-009_CHECKPOINT.md with automatic write boundary (Finding 8, still open)
+   - Updated docs/active/FIN-009_DESIGN.md Section 5.1 (API table + system-derived revision/idempotency note for POST /api/late-fees/sync and lease-level waiver routes) and Section 9 (validation matrix covering read-only GET, hosted write admission, and automatic write boundaries).
+   - Updated docs/active/FIN-009_CHECKPOINT.md to remove stale read-triggered ("assessment on GET") wording and reflect POST /api/late-fees/sync.
+
+Follow-up validation results
+- Python lint/format: ruff check and ruff format --check on all 5 modified Python files (middleware.py, test_transport.py, late_fee_calculator.py, late_fee_service.py, test_late_fee_assessments.py) -> All checks passed / 5 files already formatted.
+- Backend pytest: .venv/bin/pytest apps/server/app/modules/hosted_access/tests/test_transport.py apps/server/app/modules/finance/tests/test_late_fee_*.py -q -> 69 passed (15.52s).
+
+Follow-up re-review response (2026-11-28)
+
+7. [P2] Amount- and basis-aware FIN-009 D9 guard for voided/returned receipts (Finding 7, regressed)
+   - Added LateFeeService._voided_receipt_changed_fee() in application/apps/server/app/modules/finance/application/late_fee_service.py:1057-1104 and wired it into _auto_assess_lease() (:1203-1220).
+   - Instead of suppressing auto-assessment whenever any voided receipt exists on or before the cutoff date, _auto_assess_lease() now evaluates the counterfactual calculate_late_fee_preview() with voided allocations restored (through-grace and after-grace up to current_local_date) and applies D9 only when removing the voided payment(s) created eligibility (with_voided["eligibilityStatus"] != "eligible") or changed the proposed charge (int(with_voided["calculatedAmountMinor"]) != computed_amount_minor).
+   - Extended the D9 regression in application/apps/server/app/modules/finance/tests/test_late_fee_assessments.py:812-878 to verify both:
+     (a) a fully covering after-grace receipt under current_unpaid_rent that is later voided keeps auto-assessment manual (createdCount == 0), and
+     (b) a partial $1.00 after-grace receipt on unpaid rent under current_unpaid_rent + fixed_flat (no minimum threshold) that leaves the same $50.00 fee eligible before and after voiding does not suppress auto-assessment (createdCount == 1, assessedAmountMinor == 5000).
+
+Follow-up validation results (2026-11-28)
+- Python lint/format: ruff check and ruff format --check on late_fee_service.py and test_late_fee_assessments.py -> All checks passed / 2 files already formatted.
+- Backend pytest: .venv/bin/pytest apps/server/app/modules/finance/tests/test_late_fee_*.py -q -> 23 passed (15.25s).
+
+Follow-up re-review response (2026-11-28, replacement lineage)
+
+7. [P2] Account for receipt replacement lineage in FIN-009 D9 reconstruction (Finding 7, still open)
+   - Replaced SQLiteFinanceUnitOfWork.voided_rent_receipt_allocations_by_date() with rent_receipt_lineage_allocations_by_expectation(lease_id, expectation_ids) in application/apps/server/app/modules/finance/infrastructure/unit_of_work.py:1318-1357, resolving each receipt's replacement-chain root via RentReceiptModel.replaces_receipt_id and returning (chain_root_id, received_on, amount_minor, is_voided).
+   - Updated LateFeeService._voided_receipt_changed_fee() in application/apps/server/app/modules/finance/application/late_fee_service.py:1057-1122 to subtract each voided chain's active successor contribution before restoring a single prior voided version from that chain, so an original receipt and its active replacement are counted once instead of double-counted.
+   - Added regression 5d in application/apps/server/app/modules/finance/tests/test_late_fee_assessments.py:880-920 replacing a 60% partial receipt with an identical 60% allocation (replaces_receipt_id) and asserting sync_auto_assessments() still creates the unchanged $50.00 fee (createdCount == 1, assessedAmountMinor == 5000).
+
+Follow-up validation results (2026-11-28, replacement lineage)
+- Python lint/format: ruff check and ruff format --check on unit_of_work.py, late_fee_service.py, and test_late_fee_assessments.py -> All checks passed / 3 files already formatted.
+- Backend pytest: .venv/bin/pytest apps/server/app/modules/finance/tests/test_late_fee_*.py -q -> 23 passed (15.46s).

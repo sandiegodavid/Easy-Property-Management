@@ -251,6 +251,15 @@
 #main-content:has(.property-workspace) > .ui-brand {
   flex-shrink: 0;
 }
+.workspace-admitted:has(.property-workspace) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.workspace-admitted[hidden] {
+  display: none;
+}
 .shell:has(.property-workspace) {
   flex: 1;
   min-height: 0;
@@ -849,7 +858,7 @@ body {
 [data-theme="dark"] .workspace-brand-dark {
   display: block;
 }
-#main-content > :not(.shell):not(.ui-brand) {
+#main-content > :not(.shell):not(.ui-brand):not(.workspace-admitted) {
   margin-inline: 1.5rem;
 }
 

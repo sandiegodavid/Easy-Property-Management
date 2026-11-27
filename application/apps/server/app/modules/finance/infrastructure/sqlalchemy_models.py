@@ -902,6 +902,47 @@ class LateFeeWaiverModel(LocalBase):
     )
 
 
+class LateFeeLeaseWaiverModel(LocalBase):
+    __tablename__ = "late_fee_lease_waivers"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    lease_id: Mapped[str] = mapped_column(ForeignKey("leases.id"), nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False)
+    reason: Mapped[str] = mapped_column(String, nullable=False)
+    internal_notes: Mapped[str | None] = mapped_column(String)
+    waived_at: Mapped[str] = mapped_column(String, nullable=False)
+    waived_by_actor: Mapped[str] = mapped_column(String, nullable=False)
+    waived_open_assessments_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    revoked_at: Mapped[str | None] = mapped_column(String)
+    revoked_by_actor: Mapped[str | None] = mapped_column(String)
+    revoke_reason: Mapped[str | None] = mapped_column(String)
+    __table_args__ = (
+        CheckConstraint(_uuid_check("id")),
+        CheckConstraint(_uuid_check("lease_id")),
+        CheckConstraint("status IN ('active', 'revoked')"),
+        CheckConstraint("length(trim(reason)) BETWEEN 1 AND 1000"),
+        CheckConstraint(
+            "internal_notes IS NULL OR length(trim(internal_notes)) BETWEEN 1 AND 1000"
+        ),
+        CheckConstraint("length(trim(waived_by_actor)) BETWEEN 1 AND 200"),
+        CheckConstraint(
+            "typeof(waived_open_assessments_count) = 'integer' AND waived_open_assessments_count >= 0"
+        ),
+        CheckConstraint(
+            "(status = 'active' AND revoked_at IS NULL AND revoked_by_actor IS NULL AND revoke_reason IS NULL) OR "
+            "(status = 'revoked' AND revoked_at IS NOT NULL AND revoked_by_actor IS NOT NULL AND "
+            "length(trim(revoked_by_actor)) BETWEEN 1 AND 200 AND revoke_reason IS NOT NULL AND "
+            "length(trim(revoke_reason)) BETWEEN 1 AND 1000)"
+        ),
+        Index(
+            "late_fee_lease_waivers_one_active",
+            "lease_id",
+            unique=True,
+            sqlite_where=text("status = 'active'"),
+        ),
+        Index("late_fee_lease_waivers_lease", "lease_id", "waived_at", "id"),
+    )
+
+
 class LateFeeReceiptModel(LocalBase):
     __tablename__ = "late_fee_receipts"
     id: Mapped[str] = mapped_column(String, primary_key=True)
@@ -1029,6 +1070,16 @@ _ASSESSMENT_IMMUTABLE_COLUMNS = (
     "assessed_by_actor",
 )
 
+_LEASE_WAIVER_IMMUTABLE_COLUMNS = (
+    "id",
+    "lease_id",
+    "reason",
+    "internal_notes",
+    "waived_at",
+    "waived_by_actor",
+    "waived_open_assessments_count",
+)
+
 LATE_FEE_TRIGGERS = {
     "late_fee_policy_versions_no_delete": (
         "CREATE TRIGGER late_fee_policy_versions_no_delete BEFORE DELETE "
@@ -1061,5 +1112,17 @@ LATE_FEE_TRIGGERS = {
     "late_fee_waivers_no_delete": (
         "CREATE TRIGGER late_fee_waivers_no_delete BEFORE DELETE "
         "ON late_fee_waivers BEGIN SELECT RAISE(ABORT, 'late fee waivers are append-only'); END"
+    ),
+    "late_fee_lease_waivers_no_delete": (
+        "CREATE TRIGGER late_fee_lease_waivers_no_delete BEFORE DELETE "
+        "ON late_fee_lease_waivers BEGIN SELECT RAISE(ABORT, 'late fee lease waivers are immutable'); END"
+    ),
+    "late_fee_lease_waivers_immutable": (
+        "CREATE TRIGGER late_fee_lease_waivers_immutable BEFORE UPDATE "
+        "ON late_fee_lease_waivers WHEN "
+        "OLD.status != 'active' OR NEW.status != 'revoked' OR "
+        "NEW.revoked_at IS NULL OR NEW.revoked_by_actor IS NULL OR NEW.revoke_reason IS NULL OR "
+        + " OR ".join(f"OLD.{col} IS NOT NEW.{col}" for col in _LEASE_WAIVER_IMMUTABLE_COLUMNS)
+        + " BEGIN SELECT RAISE(ABORT, 'late fee lease waivers are immutable'); END"
     ),
 }

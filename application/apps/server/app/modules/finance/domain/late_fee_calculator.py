@@ -114,6 +114,7 @@ def calculate_late_fee_preview(
     active_assessments: tuple[PriorAssessmentFact, ...] = (),
     scheduled_prepaid_checks: tuple[ScheduledPrepaidCheckWarning, ...] = (),
     processing_payments: PendingPaymentSummary = EMPTY_PENDING_PAYMENTS,
+    excluded_waiver_windows: tuple[tuple[str, str], ...] = (),
 ) -> dict[str, object]:
     """Deterministically compute a read-only late-fee quote for one active expectation."""
     due_date = date.fromisoformat(expectation.due_on)
@@ -385,7 +386,45 @@ def calculate_late_fee_preview(
     previously_assessed_minor = sum(item.assessed_amount_minor for item in active_assessments)
     prior_days_assessed = sum(item.accrual_days for item in active_assessments)
 
-    if policy.formula_kind in {"fixed_flat", "percentage_once"}:
+    is_one_time = policy.formula_kind in {"fixed_flat", "percentage_once"}
+    excluded_by_waiver = (
+        any(first_eligible_on <= w_end for _w_start, w_end in excluded_waiver_windows)
+        if is_one_time
+        else any(
+            w_start <= first_eligible_on <= w_end for w_start, w_end in excluded_waiver_windows
+        )
+    )
+    if excluded_by_waiver:
+        steps.append(
+            CalculationStep(
+                step_code="lease_waiver_exclusion",
+                label=(
+                    "Period became eligible on or before a revoked lease-level waiver ended and is excluded."
+                    if is_one_time
+                    else "Period first became eligible while a lease-level waiver was active and is excluded."
+                ),
+                inputs={
+                    "firstEligibleOn": first_eligible_on,
+                    "excludedWaiverWindows": [
+                        {"waivedOn": w_start, "revokedOn": w_end}
+                        for w_start, w_end in excluded_waiver_windows
+                    ],
+                },
+                result_minor=0,
+                expression="excluded_by_lease_waiver -> 0",
+            )
+        )
+        return _result(
+            eligibility_status="calculated_zero",
+            grace_ends_on=grace_ends_on,
+            first_eligible_on=first_eligible_on,
+            unpaid_at_grace_end_minor=unpaid_at_grace_end_minor,
+            unpaid_as_of_date_minor=unpaid_as_of_date_minor,
+            basis_amount_minor=basis_amount_minor,
+            previously_assessed_minor=previously_assessed_minor,
+        )
+
+    if is_one_time:
         if active_assessments:
             steps.append(
                 CalculationStep(
@@ -419,6 +458,13 @@ def calculate_late_fee_preview(
                 date.fromisoformat(item.accrual_ends_on) for item in active_assessments
             )
             accrual_starts_date = last_accrual_end + timedelta(days=1)
+
+        # Exclude any days covered by historical revoked lease-level waivers (no back-billing).
+        for w_start_str, w_end_str in sorted(excluded_waiver_windows):
+            w_start = date.fromisoformat(w_start_str)
+            w_end = date.fromisoformat(w_end_str)
+            if w_start <= as_of and accrual_starts_date <= w_end:
+                accrual_starts_date = max(accrual_starts_date, w_end + timedelta(days=1))
 
         if accrual_starts_date > as_of:
             steps.append(

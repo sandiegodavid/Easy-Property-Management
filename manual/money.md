@@ -32,14 +32,14 @@ Open the actual receipt and review date, allocations, method and replacement his
 
 ## Late fees
 
-EPM ships no default late-fee rates and never assesses late fees automatically.
+EPM ships no default late-fee rates. Once you explicitly configure and confirm a lease's contractual late-fee policy, EPM automatically assesses eligible overdue rent periods after the property-local grace period passes (including incremental daily accrual up to the policy cap or max accrual days), while letting you waive fees either **at the lease level** or **per occurrence**.
 
 1. Open the Lease's **Late fees** section and choose **Configure late-fee policy**. Enter the effective date, contractual rule basis (for example, lease section and signed date), grace period, formula, rounding mode, and explicit confirmation. To change rules going forward, configure a new effective-dated policy version rather than rewriting past assessments.
-2. Run **Preview eligible late fees** for a property-local as-of date. Previews are read-only quotes (**Preview only — not an assessed charge**) and create no debt or audit entries; editing the as-of date invalidates an active preview until refreshed.
-3. Expand an eligible period to inspect the step-by-step math and any scheduled-check or processing-payment warnings, then explicitly confirm **Assess late fee** to record an immutable charge with frozen calculation steps.
-4. Expand any assessed fee to inspect its frozen breakdown, record a partial or full **Waive** with a required reason, **Void assessment** when unpaid, or review a **Source drift warning** if rent receipts for that period changed after assessment.
-5. Collect fee payments with **Record late-fee payment** (standalone) or **Record combined rent + late-fee payment**, which records separate rent and late-fee receipts atomically under one batch ID without mixing fee dollars into rent received.
-6. Use **Money → Late fees** to review assessed late fees across the portfolio by settlement status or voided history and jump back to each Lease.
+2. Automatic assessment runs idempotently on workspace open and when viewing Late fees, Lease Details, or Rent due records. It skips any period with pending/processing payments, any period with a voided unreplaced assessment or per-occurrence waiver, and any lease with an active lease-level waiver.
+3. To pause automatic late fees for a lease, open the Lease's **Automatic assessment & lease-level waiver** panel and choose **Waive late fees at lease level** with a recorded reason (optionally also waiving all currently unpaid late fees on that lease). You can choose **Resume auto-assessment** later with a recorded reason.
+4. You can also run **Preview eligible late fees** for any property-local as-of date (up to 31 days ahead for planning) to inspect step-by-step USD math before assessing manually when needed.
+5. Open any **Rent due** record (`/money?record=expectation&id=...`), **Money → Late fees**, or the Lease's **Assessed late fees** list to inspect the frozen USD calculation steps, record a partial or full per-occurrence **Waive** with a required reason, **Void assessment** when unpaid, or review a **Source drift warning** if rent receipts changed after assessment.
+6. Collect fee payments with **Record late-fee payment** (standalone) or **Record combined rent + late-fee payment** (also available via **Include assessed late fees** in **Record rent receipt**), which records separate rent and late-fee receipts atomically under one batch ID without mixing fee dollars into rent received.
 
 ## Scheduled prepaid checks
 

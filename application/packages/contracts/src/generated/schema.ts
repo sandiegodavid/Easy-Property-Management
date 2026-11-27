@@ -1275,6 +1275,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/late-fees/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sync Auto Late Fees */
+        post: operations["syncAutoLateFees"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/leases": {
         parameters: {
             query?: never;
@@ -1513,6 +1530,41 @@ export interface paths {
         put?: never;
         /** Record Late Fee Receipt */
         post: operations["recordLateFeeReceipt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/leases/{lease_id}/late-fee-waiver": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Lease Waiver */
+        get: operations["getLeaseLateFeeWaiver"];
+        put?: never;
+        /** Create Lease Waiver */
+        post: operations["createLeaseLateFeeWaiver"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/leases/{lease_id}/late-fee-waiver/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke Lease Waiver */
+        post: operations["revokeLeaseLateFeeWaiver"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8543,6 +8595,27 @@ export interface components {
             /** Supersedespolicyversionid */
             supersedesPolicyVersionId?: string | null;
         };
+        /** CreateLeaseLateFeeWaiverInput */
+        CreateLeaseLateFeeWaiverInput: {
+            /** Confirmed */
+            confirmed: boolean;
+            /** Expectedrevision */
+            expectedRevision: number;
+            /**
+             * Idempotencykey
+             * Format: uuid
+             */
+            idempotencyKey: string;
+            /** Internalnotes */
+            internalNotes?: string | null;
+            /** Reason */
+            reason: string;
+            /**
+             * Waiveopenassessments
+             * @default false
+             */
+            waiveOpenAssessments: boolean;
+        };
         /** CreateProviderInput */
         CreateProviderInput: {
             /** Categoryids */
@@ -12494,6 +12567,100 @@ export interface components {
             voidedAt: string | null;
             /** Waivedamountminor */
             waivedAmountMinor: number;
+        };
+        /** LateFeeLeaseWaiverMutationResponse */
+        LateFeeLeaseWaiverMutationResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Internalnotes */
+            internalNotes: string | null;
+            /**
+             * Leaseid
+             * Format: uuid
+             */
+            leaseId: string;
+            /**
+             * Operationid
+             * Format: uuid
+             */
+            operationId: string;
+            /** Reason */
+            reason: string;
+            /** Rentledgerrevision */
+            rentLedgerRevision: number;
+            /** Revokereason */
+            revokeReason: string | null;
+            /** Revokedat */
+            revokedAt: string | null;
+            /** Revokedbyactor */
+            revokedByActor: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "revoked";
+            /**
+             * Waivedat
+             * Format: date-time
+             */
+            waivedAt: string;
+            /** Waivedbyactor */
+            waivedByActor: string;
+            /** Waivedopenassessmentscount */
+            waivedOpenAssessmentsCount: number;
+        };
+        /** LateFeeLeaseWaiverResponse */
+        LateFeeLeaseWaiverResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Internalnotes */
+            internalNotes: string | null;
+            /**
+             * Leaseid
+             * Format: uuid
+             */
+            leaseId: string;
+            /** Reason */
+            reason: string;
+            /** Revokereason */
+            revokeReason: string | null;
+            /** Revokedat */
+            revokedAt: string | null;
+            /** Revokedbyactor */
+            revokedByActor: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "revoked";
+            /**
+             * Waivedat
+             * Format: date-time
+             */
+            waivedAt: string;
+            /** Waivedbyactor */
+            waivedByActor: string;
+            /** Waivedopenassessmentscount */
+            waivedOpenAssessmentsCount: number;
+        };
+        /** LateFeeLeaseWaiverStateResponse */
+        LateFeeLeaseWaiverStateResponse: {
+            activeWaiver: components["schemas"]["LateFeeLeaseWaiverResponse"] | null;
+            /** History */
+            history: components["schemas"]["LateFeeLeaseWaiverResponse"][];
+            /**
+             * Leaseid
+             * Format: uuid
+             */
+            leaseId: string;
+            /** Rentledgerrevision */
+            rentLedgerRevision: number;
         };
         /** LateFeePolicyListResponse */
         LateFeePolicyListResponse: {
@@ -16493,7 +16660,7 @@ export interface components {
              * Formkey
              * @enum {string}
              */
-            formKey: "coverage.review" | "task.create" | "maintenance.issue.create" | "communication.record" | "portfolio.property.create" | "portfolio.property.patch" | "portfolio.property.archive" | "portfolio.property.restore" | "portfolio.ownerships.replace" | "portfolio.space.create" | "portfolio.space.patch" | "portfolio.space.archive" | "portfolio.space.restore" | "file.upload" | "file.link.archive" | "party.create" | "party.patch" | "party.archive" | "party.restore" | "party.contact.add" | "party.contact.update" | "party.contact.archive" | "party.contact.restore" | "tenant.create" | "tenant.designate" | "tenant.profile.patch" | "tenant.archive" | "tenant.restore" | "provider.create" | "provider.designate" | "provider.profile.patch" | "provider.archive" | "provider.restore" | "provider.category.create" | "provider.category.patch" | "provider.category.archive" | "provider.category.restore" | "provider.category_assignment.assign" | "provider.category_assignment.archive" | "provider.category_assignment.restore" | "provider.service.add" | "provider.service.update" | "provider.service.archive" | "provider.service.restore" | "provider.area.add" | "provider.area.update" | "provider.area.archive" | "provider.area.restore" | "provider.work_history.add" | "provider.work_history.update" | "provider.work_history.archive" | "provider.work_history.restore" | "provider.reference.add" | "provider.reference.update" | "provider.reference.archive" | "provider.reference.restore" | "provider.reputation_link.add" | "provider.reputation_link.update" | "provider.reputation_link.archive" | "provider.reputation_link.restore" | "owner_concern.create" | "owner_concern.patch" | "owner_concern.in_progress" | "owner_concern.open" | "owner_concern.resolved" | "owner_concern.dismissed" | "owner_concern.follow_up" | "ai.settings.update" | "ai.connection.create" | "ai.connection.update" | "ai.connection.disclosure" | "ai.action_limit.update" | "ai.draft.edit" | "ai.draft.approve" | "ai.draft.dismiss" | "ai.connection.credential.set" | "ai.connection.credential.delete" | "ai.connection.probe" | "inspection.report.create" | "inspection.report.patch" | "inspection.report.areas.replace" | "inspection.report.acknowledge" | "inspection.report.finalize" | "inspection.report.correct" | "inspection.evidence.attach" | "inspection.comparison.review" | "inspection.template.create" | "inspection.template.patch" | "intake.source.admit" | "intake.source.import" | "intake.source.correct" | "intake.source.supersede" | "intake.source.dismiss" | "intake.source.reopen" | "finance.expense.create" | "finance.expense.patch" | "finance.expense.void" | "finance.expense_refund.create" | "finance.expense_refund.void" | "finance.expense_category.create" | "finance.expense_category.patch" | "finance.expense_category.archive" | "finance.expense_category.restore" | "finance.deposit_account.create" | "finance.deposit_receipt.create" | "finance.deposit_receipt.void" | "finance.deposit_settlement.create" | "finance.deposit_settlement.patch" | "finance.deposit_settlement.approve" | "finance.deposit_settlement.complete" | "finance.deposit_settlement.void" | "finance.deposit_deduction.create" | "finance.deposit_deduction.update" | "finance.deposit_deduction.delete" | "finance.deposit_credit.create" | "finance.deposit_credit.update" | "finance.deposit_credit.delete" | "finance.deposit_deduction_source.add" | "finance.deposit_deduction_source.delete" | "finance.deposit_refund.create" | "finance.deposit_refund.void" | "owner_rent_report.create" | "owner_rent_report.patch" | "owner_rent_report.verify" | "owner_rent_report.reject" | "task.edit" | "task.delete" | "task.start" | "task.complete" | "task.cancel" | "task.reopen" | "task.reminder.add" | "task.reminder.acknowledge" | "task.reminder.dismiss" | "task.waiting.set" | "task.waiting.clear" | "task.waiting.reschedule" | "communication.create" | "communication.patch" | "communication.draft.record" | "communication.correct" | "maintenance.issue.patch" | "maintenance.reporter.correct" | "maintenance.issue.start" | "maintenance.issue.return_to_open" | "maintenance.issue.resolve" | "maintenance.issue.cancel" | "maintenance.issue.reopen" | "maintenance.appointment.create" | "maintenance.appointment.update" | "maintenance.appointment.finish" | "maintenance.cost.create" | "maintenance.cost.void" | "maintenance.expense.link" | "maintenance.expense.archive" | "maintenance.quote.create" | "maintenance.quote.withdraw" | "maintenance.assignment.create" | "maintenance.assignment.end" | "maintenance.follow_up.create" | "maintenance.journal.record" | "portfolio.occupancy.change" | "portfolio.occupancy.cancel" | "portfolio.occupancy.replace" | "portfolio.occupancy.correct" | "portfolio.occupancy.reschedule" | "portfolio.availability.change" | "portfolio.space.classify" | "lease.create" | "lease.patch" | "lease.term.replace" | "lease.participant.add" | "lease.participant.update" | "lease.participant.remove" | "lease.execute" | "lease.end" | "lease.terminate" | "lease.void" | "lease.renewal.add" | "lease.renewal.update" | "lease.renewal.decide" | "lease.termination.create" | "lease.termination.proposal.add" | "lease.termination.proposal.accept" | "lease.termination.transition" | "lease.termination.complete" | "finance.rent_expectation.synchronize" | "finance.rent_expectation.void" | "finance.rent_expectation.timeliness_review" | "finance.rent_receipt.create" | "finance.rent_receipt.void" | "finance.prepaid_check.create" | "finance.prepaid_check.deposit" | "finance.prepaid_check.return" | "finance.prepaid_check.void" | "finance.prepaid_check.replace" | "finance.late_fee_policy.create" | "finance.late_fee_policy.void" | "finance.late_fee_assessment.create" | "finance.late_fee_assessment.waive" | "finance.late_fee_assessment.void" | "finance.late_fee_receipt.create" | "finance.late_fee_receipt.void" | "finance.combined_receipt.create";
+            formKey: "coverage.review" | "task.create" | "maintenance.issue.create" | "communication.record" | "portfolio.property.create" | "portfolio.property.patch" | "portfolio.property.archive" | "portfolio.property.restore" | "portfolio.ownerships.replace" | "portfolio.space.create" | "portfolio.space.patch" | "portfolio.space.archive" | "portfolio.space.restore" | "file.upload" | "file.link.archive" | "party.create" | "party.patch" | "party.archive" | "party.restore" | "party.contact.add" | "party.contact.update" | "party.contact.archive" | "party.contact.restore" | "tenant.create" | "tenant.designate" | "tenant.profile.patch" | "tenant.archive" | "tenant.restore" | "provider.create" | "provider.designate" | "provider.profile.patch" | "provider.archive" | "provider.restore" | "provider.category.create" | "provider.category.patch" | "provider.category.archive" | "provider.category.restore" | "provider.category_assignment.assign" | "provider.category_assignment.archive" | "provider.category_assignment.restore" | "provider.service.add" | "provider.service.update" | "provider.service.archive" | "provider.service.restore" | "provider.area.add" | "provider.area.update" | "provider.area.archive" | "provider.area.restore" | "provider.work_history.add" | "provider.work_history.update" | "provider.work_history.archive" | "provider.work_history.restore" | "provider.reference.add" | "provider.reference.update" | "provider.reference.archive" | "provider.reference.restore" | "provider.reputation_link.add" | "provider.reputation_link.update" | "provider.reputation_link.archive" | "provider.reputation_link.restore" | "owner_concern.create" | "owner_concern.patch" | "owner_concern.in_progress" | "owner_concern.open" | "owner_concern.resolved" | "owner_concern.dismissed" | "owner_concern.follow_up" | "ai.settings.update" | "ai.connection.create" | "ai.connection.update" | "ai.connection.disclosure" | "ai.action_limit.update" | "ai.draft.edit" | "ai.draft.approve" | "ai.draft.dismiss" | "ai.connection.credential.set" | "ai.connection.credential.delete" | "ai.connection.probe" | "inspection.report.create" | "inspection.report.patch" | "inspection.report.areas.replace" | "inspection.report.acknowledge" | "inspection.report.finalize" | "inspection.report.correct" | "inspection.evidence.attach" | "inspection.comparison.review" | "inspection.template.create" | "inspection.template.patch" | "intake.source.admit" | "intake.source.import" | "intake.source.correct" | "intake.source.supersede" | "intake.source.dismiss" | "intake.source.reopen" | "finance.expense.create" | "finance.expense.patch" | "finance.expense.void" | "finance.expense_refund.create" | "finance.expense_refund.void" | "finance.expense_category.create" | "finance.expense_category.patch" | "finance.expense_category.archive" | "finance.expense_category.restore" | "finance.deposit_account.create" | "finance.deposit_receipt.create" | "finance.deposit_receipt.void" | "finance.deposit_settlement.create" | "finance.deposit_settlement.patch" | "finance.deposit_settlement.approve" | "finance.deposit_settlement.complete" | "finance.deposit_settlement.void" | "finance.deposit_deduction.create" | "finance.deposit_deduction.update" | "finance.deposit_deduction.delete" | "finance.deposit_credit.create" | "finance.deposit_credit.update" | "finance.deposit_credit.delete" | "finance.deposit_deduction_source.add" | "finance.deposit_deduction_source.delete" | "finance.deposit_refund.create" | "finance.deposit_refund.void" | "owner_rent_report.create" | "owner_rent_report.patch" | "owner_rent_report.verify" | "owner_rent_report.reject" | "task.edit" | "task.delete" | "task.start" | "task.complete" | "task.cancel" | "task.reopen" | "task.reminder.add" | "task.reminder.acknowledge" | "task.reminder.dismiss" | "task.waiting.set" | "task.waiting.clear" | "task.waiting.reschedule" | "communication.create" | "communication.patch" | "communication.draft.record" | "communication.correct" | "maintenance.issue.patch" | "maintenance.reporter.correct" | "maintenance.issue.start" | "maintenance.issue.return_to_open" | "maintenance.issue.resolve" | "maintenance.issue.cancel" | "maintenance.issue.reopen" | "maintenance.appointment.create" | "maintenance.appointment.update" | "maintenance.appointment.finish" | "maintenance.cost.create" | "maintenance.cost.void" | "maintenance.expense.link" | "maintenance.expense.archive" | "maintenance.quote.create" | "maintenance.quote.withdraw" | "maintenance.assignment.create" | "maintenance.assignment.end" | "maintenance.follow_up.create" | "maintenance.journal.record" | "portfolio.occupancy.change" | "portfolio.occupancy.cancel" | "portfolio.occupancy.replace" | "portfolio.occupancy.correct" | "portfolio.occupancy.reschedule" | "portfolio.availability.change" | "portfolio.space.classify" | "lease.create" | "lease.patch" | "lease.term.replace" | "lease.participant.add" | "lease.participant.update" | "lease.participant.remove" | "lease.execute" | "lease.end" | "lease.terminate" | "lease.void" | "lease.renewal.add" | "lease.renewal.update" | "lease.renewal.decide" | "lease.termination.create" | "lease.termination.proposal.add" | "lease.termination.proposal.accept" | "lease.termination.transition" | "lease.termination.complete" | "finance.rent_expectation.synchronize" | "finance.rent_expectation.void" | "finance.rent_expectation.timeliness_review" | "finance.rent_receipt.create" | "finance.rent_receipt.void" | "finance.prepaid_check.create" | "finance.prepaid_check.deposit" | "finance.prepaid_check.return" | "finance.prepaid_check.void" | "finance.prepaid_check.replace" | "finance.late_fee_policy.create" | "finance.late_fee_policy.void" | "finance.late_fee_assessment.create" | "finance.late_fee_assessment.waive" | "finance.late_fee_assessment.void" | "finance.late_fee_lease_waiver.create" | "finance.late_fee_lease_waiver.revoke" | "finance.late_fee_receipt.create" | "finance.late_fee_receipt.void" | "finance.combined_receipt.create";
             /** Payloadschema */
             payloadSchema: {
                 [key: string]: unknown;
@@ -16516,7 +16683,7 @@ export interface components {
              * Formkey
              * @enum {string}
              */
-            formKey: "coverage.review" | "task.create" | "maintenance.issue.create" | "communication.record" | "portfolio.property.create" | "portfolio.property.patch" | "portfolio.property.archive" | "portfolio.property.restore" | "portfolio.ownerships.replace" | "portfolio.space.create" | "portfolio.space.patch" | "portfolio.space.archive" | "portfolio.space.restore" | "file.upload" | "file.link.archive" | "party.create" | "party.patch" | "party.archive" | "party.restore" | "party.contact.add" | "party.contact.update" | "party.contact.archive" | "party.contact.restore" | "tenant.create" | "tenant.designate" | "tenant.profile.patch" | "tenant.archive" | "tenant.restore" | "provider.create" | "provider.designate" | "provider.profile.patch" | "provider.archive" | "provider.restore" | "provider.category.create" | "provider.category.patch" | "provider.category.archive" | "provider.category.restore" | "provider.category_assignment.assign" | "provider.category_assignment.archive" | "provider.category_assignment.restore" | "provider.service.add" | "provider.service.update" | "provider.service.archive" | "provider.service.restore" | "provider.area.add" | "provider.area.update" | "provider.area.archive" | "provider.area.restore" | "provider.work_history.add" | "provider.work_history.update" | "provider.work_history.archive" | "provider.work_history.restore" | "provider.reference.add" | "provider.reference.update" | "provider.reference.archive" | "provider.reference.restore" | "provider.reputation_link.add" | "provider.reputation_link.update" | "provider.reputation_link.archive" | "provider.reputation_link.restore" | "owner_concern.create" | "owner_concern.patch" | "owner_concern.in_progress" | "owner_concern.open" | "owner_concern.resolved" | "owner_concern.dismissed" | "owner_concern.follow_up" | "ai.settings.update" | "ai.connection.create" | "ai.connection.update" | "ai.connection.disclosure" | "ai.action_limit.update" | "ai.draft.edit" | "ai.draft.approve" | "ai.draft.dismiss" | "ai.connection.credential.set" | "ai.connection.credential.delete" | "ai.connection.probe" | "inspection.report.create" | "inspection.report.patch" | "inspection.report.areas.replace" | "inspection.report.acknowledge" | "inspection.report.finalize" | "inspection.report.correct" | "inspection.evidence.attach" | "inspection.comparison.review" | "inspection.template.create" | "inspection.template.patch" | "intake.source.admit" | "intake.source.import" | "intake.source.correct" | "intake.source.supersede" | "intake.source.dismiss" | "intake.source.reopen" | "finance.expense.create" | "finance.expense.patch" | "finance.expense.void" | "finance.expense_refund.create" | "finance.expense_refund.void" | "finance.expense_category.create" | "finance.expense_category.patch" | "finance.expense_category.archive" | "finance.expense_category.restore" | "finance.deposit_account.create" | "finance.deposit_receipt.create" | "finance.deposit_receipt.void" | "finance.deposit_settlement.create" | "finance.deposit_settlement.patch" | "finance.deposit_settlement.approve" | "finance.deposit_settlement.complete" | "finance.deposit_settlement.void" | "finance.deposit_deduction.create" | "finance.deposit_deduction.update" | "finance.deposit_deduction.delete" | "finance.deposit_credit.create" | "finance.deposit_credit.update" | "finance.deposit_credit.delete" | "finance.deposit_deduction_source.add" | "finance.deposit_deduction_source.delete" | "finance.deposit_refund.create" | "finance.deposit_refund.void" | "owner_rent_report.create" | "owner_rent_report.patch" | "owner_rent_report.verify" | "owner_rent_report.reject" | "task.edit" | "task.delete" | "task.start" | "task.complete" | "task.cancel" | "task.reopen" | "task.reminder.add" | "task.reminder.acknowledge" | "task.reminder.dismiss" | "task.waiting.set" | "task.waiting.clear" | "task.waiting.reschedule" | "communication.create" | "communication.patch" | "communication.draft.record" | "communication.correct" | "maintenance.issue.patch" | "maintenance.reporter.correct" | "maintenance.issue.start" | "maintenance.issue.return_to_open" | "maintenance.issue.resolve" | "maintenance.issue.cancel" | "maintenance.issue.reopen" | "maintenance.appointment.create" | "maintenance.appointment.update" | "maintenance.appointment.finish" | "maintenance.cost.create" | "maintenance.cost.void" | "maintenance.expense.link" | "maintenance.expense.archive" | "maintenance.quote.create" | "maintenance.quote.withdraw" | "maintenance.assignment.create" | "maintenance.assignment.end" | "maintenance.follow_up.create" | "maintenance.journal.record" | "portfolio.occupancy.change" | "portfolio.occupancy.cancel" | "portfolio.occupancy.replace" | "portfolio.occupancy.correct" | "portfolio.occupancy.reschedule" | "portfolio.availability.change" | "portfolio.space.classify" | "lease.create" | "lease.patch" | "lease.term.replace" | "lease.participant.add" | "lease.participant.update" | "lease.participant.remove" | "lease.execute" | "lease.end" | "lease.terminate" | "lease.void" | "lease.renewal.add" | "lease.renewal.update" | "lease.renewal.decide" | "lease.termination.create" | "lease.termination.proposal.add" | "lease.termination.proposal.accept" | "lease.termination.transition" | "lease.termination.complete" | "finance.rent_expectation.synchronize" | "finance.rent_expectation.void" | "finance.rent_expectation.timeliness_review" | "finance.rent_receipt.create" | "finance.rent_receipt.void" | "finance.prepaid_check.create" | "finance.prepaid_check.deposit" | "finance.prepaid_check.return" | "finance.prepaid_check.void" | "finance.prepaid_check.replace" | "finance.late_fee_policy.create" | "finance.late_fee_policy.void" | "finance.late_fee_assessment.create" | "finance.late_fee_assessment.waive" | "finance.late_fee_assessment.void" | "finance.late_fee_receipt.create" | "finance.late_fee_receipt.void" | "finance.combined_receipt.create";
+            formKey: "coverage.review" | "task.create" | "maintenance.issue.create" | "communication.record" | "portfolio.property.create" | "portfolio.property.patch" | "portfolio.property.archive" | "portfolio.property.restore" | "portfolio.ownerships.replace" | "portfolio.space.create" | "portfolio.space.patch" | "portfolio.space.archive" | "portfolio.space.restore" | "file.upload" | "file.link.archive" | "party.create" | "party.patch" | "party.archive" | "party.restore" | "party.contact.add" | "party.contact.update" | "party.contact.archive" | "party.contact.restore" | "tenant.create" | "tenant.designate" | "tenant.profile.patch" | "tenant.archive" | "tenant.restore" | "provider.create" | "provider.designate" | "provider.profile.patch" | "provider.archive" | "provider.restore" | "provider.category.create" | "provider.category.patch" | "provider.category.archive" | "provider.category.restore" | "provider.category_assignment.assign" | "provider.category_assignment.archive" | "provider.category_assignment.restore" | "provider.service.add" | "provider.service.update" | "provider.service.archive" | "provider.service.restore" | "provider.area.add" | "provider.area.update" | "provider.area.archive" | "provider.area.restore" | "provider.work_history.add" | "provider.work_history.update" | "provider.work_history.archive" | "provider.work_history.restore" | "provider.reference.add" | "provider.reference.update" | "provider.reference.archive" | "provider.reference.restore" | "provider.reputation_link.add" | "provider.reputation_link.update" | "provider.reputation_link.archive" | "provider.reputation_link.restore" | "owner_concern.create" | "owner_concern.patch" | "owner_concern.in_progress" | "owner_concern.open" | "owner_concern.resolved" | "owner_concern.dismissed" | "owner_concern.follow_up" | "ai.settings.update" | "ai.connection.create" | "ai.connection.update" | "ai.connection.disclosure" | "ai.action_limit.update" | "ai.draft.edit" | "ai.draft.approve" | "ai.draft.dismiss" | "ai.connection.credential.set" | "ai.connection.credential.delete" | "ai.connection.probe" | "inspection.report.create" | "inspection.report.patch" | "inspection.report.areas.replace" | "inspection.report.acknowledge" | "inspection.report.finalize" | "inspection.report.correct" | "inspection.evidence.attach" | "inspection.comparison.review" | "inspection.template.create" | "inspection.template.patch" | "intake.source.admit" | "intake.source.import" | "intake.source.correct" | "intake.source.supersede" | "intake.source.dismiss" | "intake.source.reopen" | "finance.expense.create" | "finance.expense.patch" | "finance.expense.void" | "finance.expense_refund.create" | "finance.expense_refund.void" | "finance.expense_category.create" | "finance.expense_category.patch" | "finance.expense_category.archive" | "finance.expense_category.restore" | "finance.deposit_account.create" | "finance.deposit_receipt.create" | "finance.deposit_receipt.void" | "finance.deposit_settlement.create" | "finance.deposit_settlement.patch" | "finance.deposit_settlement.approve" | "finance.deposit_settlement.complete" | "finance.deposit_settlement.void" | "finance.deposit_deduction.create" | "finance.deposit_deduction.update" | "finance.deposit_deduction.delete" | "finance.deposit_credit.create" | "finance.deposit_credit.update" | "finance.deposit_credit.delete" | "finance.deposit_deduction_source.add" | "finance.deposit_deduction_source.delete" | "finance.deposit_refund.create" | "finance.deposit_refund.void" | "owner_rent_report.create" | "owner_rent_report.patch" | "owner_rent_report.verify" | "owner_rent_report.reject" | "task.edit" | "task.delete" | "task.start" | "task.complete" | "task.cancel" | "task.reopen" | "task.reminder.add" | "task.reminder.acknowledge" | "task.reminder.dismiss" | "task.waiting.set" | "task.waiting.clear" | "task.waiting.reschedule" | "communication.create" | "communication.patch" | "communication.draft.record" | "communication.correct" | "maintenance.issue.patch" | "maintenance.reporter.correct" | "maintenance.issue.start" | "maintenance.issue.return_to_open" | "maintenance.issue.resolve" | "maintenance.issue.cancel" | "maintenance.issue.reopen" | "maintenance.appointment.create" | "maintenance.appointment.update" | "maintenance.appointment.finish" | "maintenance.cost.create" | "maintenance.cost.void" | "maintenance.expense.link" | "maintenance.expense.archive" | "maintenance.quote.create" | "maintenance.quote.withdraw" | "maintenance.assignment.create" | "maintenance.assignment.end" | "maintenance.follow_up.create" | "maintenance.journal.record" | "portfolio.occupancy.change" | "portfolio.occupancy.cancel" | "portfolio.occupancy.replace" | "portfolio.occupancy.correct" | "portfolio.occupancy.reschedule" | "portfolio.availability.change" | "portfolio.space.classify" | "lease.create" | "lease.patch" | "lease.term.replace" | "lease.participant.add" | "lease.participant.update" | "lease.participant.remove" | "lease.execute" | "lease.end" | "lease.terminate" | "lease.void" | "lease.renewal.add" | "lease.renewal.update" | "lease.renewal.decide" | "lease.termination.create" | "lease.termination.proposal.add" | "lease.termination.proposal.accept" | "lease.termination.transition" | "lease.termination.complete" | "finance.rent_expectation.synchronize" | "finance.rent_expectation.void" | "finance.rent_expectation.timeliness_review" | "finance.rent_receipt.create" | "finance.rent_receipt.void" | "finance.prepaid_check.create" | "finance.prepaid_check.deposit" | "finance.prepaid_check.return" | "finance.prepaid_check.void" | "finance.prepaid_check.replace" | "finance.late_fee_policy.create" | "finance.late_fee_policy.void" | "finance.late_fee_assessment.create" | "finance.late_fee_assessment.waive" | "finance.late_fee_assessment.void" | "finance.late_fee_lease_waiver.create" | "finance.late_fee_lease_waiver.revoke" | "finance.late_fee_receipt.create" | "finance.late_fee_receipt.void" | "finance.combined_receipt.create";
             /**
              * Idempotencykey
              * Format: uuid
@@ -17520,6 +17687,20 @@ export interface components {
             currentRevision: number;
             /** Message */
             message: string;
+        };
+        /** RevokeLeaseLateFeeWaiverInput */
+        RevokeLeaseLateFeeWaiverInput: {
+            /** Confirmed */
+            confirmed: boolean;
+            /** Expectedrevision */
+            expectedRevision: number;
+            /**
+             * Idempotencykey
+             * Format: uuid
+             */
+            idempotencyKey: string;
+            /** Reason */
+            reason: string;
         };
         /** SchedulePreviewInput */
         SchedulePreviewInput: {
@@ -18772,6 +18953,22 @@ export interface components {
             sourceKind: "email_message" | "sms_message" | "chat_message" | "operator_note" | "voice_transcript";
             /** Subject */
             subject?: string | null;
+        };
+        /** SyncAutoLateFeesInput */
+        SyncAutoLateFeesInput: {
+            /** Leaseid */
+            leaseId?: string | null;
+            /** Propertyid */
+            propertyId?: string | null;
+            /** Rentexpectationid */
+            rentExpectationId?: string | null;
+        };
+        /** SyncAutoLateFeesResponse */
+        SyncAutoLateFeesResponse: {
+            /** Assessmentids */
+            assessmentIds: string[];
+            /** Createdcount */
+            createdCount: number;
         };
         /** SynchronizeInput */
         SynchronizeInput: {
@@ -21557,7 +21754,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "synchronize_expectations" | "record_receipt" | "void_receipt" | "void_expectation" | "review_timeliness" | "create_prepaid_check" | "deposit_prepaid_check" | "return_prepaid_check" | "void_prepaid_check" | "replace_prepaid_check" | "create_late_fee_policy" | "void_late_fee_policy" | "assess_late_fee" | "waive_late_fee" | "void_late_fee_assessment" | "record_late_fee_receipt" | "record_combined_receipt" | "void_late_fee_receipt" | "record_expense" | "patch_expense" | "void_expense" | "record_refund" | "void_refund" | "create_account" | "create_settlement" | "patch_settlement" | "add_deduction" | "update_deduction" | "delete_deduction" | "add_credit" | "update_credit" | "delete_credit" | "add_deduction_source" | "delete_deduction_source" | "approve_settlement" | "complete_settlement" | "void_settlement";
+            action: "synchronize_expectations" | "record_receipt" | "void_receipt" | "void_expectation" | "review_timeliness" | "create_prepaid_check" | "deposit_prepaid_check" | "return_prepaid_check" | "void_prepaid_check" | "replace_prepaid_check" | "create_late_fee_policy" | "void_late_fee_policy" | "assess_late_fee" | "auto_assess_late_fees" | "waive_late_fee" | "void_late_fee_assessment" | "create_lease_late_fee_waiver" | "revoke_lease_late_fee_waiver" | "record_late_fee_receipt" | "record_combined_receipt" | "void_late_fee_receipt" | "record_expense" | "patch_expense" | "void_expense" | "record_refund" | "void_refund" | "create_account" | "create_settlement" | "patch_settlement" | "add_deduction" | "update_deduction" | "delete_deduction" | "add_credit" | "update_credit" | "delete_credit" | "add_deduction_source" | "delete_deduction_source" | "approve_settlement" | "complete_settlement" | "void_settlement";
             /** Expectedrevision */
             expectedRevision: number;
             /**
@@ -26586,6 +26783,7 @@ export interface operations {
             query?: {
                 propertyId?: string | null;
                 leaseId?: string | null;
+                rentExpectationId?: string | null;
                 settlementStatus?: ("unpaid" | "partially_paid" | "paid" | "waived" | "voided") | null;
                 includeVoided?: boolean;
                 cursor?: string | null;
@@ -26861,6 +27059,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LateFeeReceiptMutationResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    syncAutoLateFees: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SyncAutoLateFeesInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncAutoLateFeesResponse"];
                 };
             };
             /** @description Local transport rejected. */
@@ -27902,6 +28151,161 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LateFeeReceiptMutationResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getLeaseLateFeeWaiver: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lease_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LateFeeLeaseWaiverStateResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    createLeaseLateFeeWaiver: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lease_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateLeaseLateFeeWaiverInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LateFeeLeaseWaiverMutationResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revokeLeaseLateFeeWaiver: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lease_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevokeLeaseLateFeeWaiverInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LateFeeLeaseWaiverMutationResponse"];
                 };
             };
             /** @description Local transport rejected. */

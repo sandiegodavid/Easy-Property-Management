@@ -422,6 +422,8 @@ def require_complete_form(form_key, payload):
             "confirmed",
         ),
         "finance.late_fee_assessment.void": ("assessmentId", "confirmed", "reason"),
+        "finance.late_fee_lease_waiver.create": ("reason", "confirmed"),
+        "finance.late_fee_lease_waiver.revoke": ("reason", "confirmed"),
         "finance.late_fee_receipt.create": (
             "receivedOn",
             "amountMinor",
@@ -665,6 +667,8 @@ def compose_command_forms(tasks, communications, issues, portfolio):
                 "finance.late_fee_assessment.create": "assess_late_fee",
                 "finance.late_fee_assessment.waive": "waive_late_fee",
                 "finance.late_fee_assessment.void": "void_late_fee_assessment",
+                "finance.late_fee_lease_waiver.create": "create_lease_late_fee_waiver",
+                "finance.late_fee_lease_waiver.revoke": "revoke_lease_late_fee_waiver",
                 "finance.late_fee_receipt.create": "record_late_fee_receipt",
                 "finance.late_fee_receipt.void": "void_late_fee_receipt",
                 "finance.combined_receipt.create": "record_combined_receipt",

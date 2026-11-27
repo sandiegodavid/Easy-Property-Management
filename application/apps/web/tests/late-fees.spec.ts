@@ -123,33 +123,13 @@ test("late fees end-to-end: policy, preview invalidation, assess, partial waive,
   await expect(lateFeesSection).toContainText("Preview only — not an assessed charge.");
   await lateFeesSection.getByRole("button", { name: "Preview eligible late fees" }).click();
   await expect(lateFeesSection).toContainText("Property time zone:");
-  await expect(lateFeesSection).toContainText("Eligible");
+  await expect(lateFeesSection).toContainText("Already assessed");
 
   const asOfInput = lateFeesSection.getByLabel("Review as-of date (property-local, optional)");
   await asOfInput.fill(f.start);
   await expect(lateFeesSection).not.toContainText("Property time zone:");
 
-  // Re-run preview for today
-  await asOfInput.fill(f.today);
-  await lateFeesSection.getByRole("button", { name: "Preview eligible late fees" }).click();
-  await expect(lateFeesSection).toContainText("Property time zone:");
-
-  // 3. Expand first eligible preview row and assess with confirmation
-  const eligibleSummary = lateFeesSection.locator("summary", { hasText: "Eligible" }).first();
-  await eligibleSummary.click();
-  await expect(
-    lateFeesSection.getByRole("list", { name: "Calculation steps" }).first(),
-  ).toBeVisible();
-  await lateFeesSection
-    .getByRole("button", { name: /Assess late fee/ })
-    .first()
-    .click();
-
-  const assessForm = lateFeesSection.getByRole("form", { name: "Confirm late-fee assessment" });
-  await assessForm.getByLabel("Confirm assessing this late fee (required)").check();
-  await assessForm.getByRole("button", { name: "Confirm assess late fee" }).click();
-
-  // Verify assessed row appears
+  // 3. Verify overdue period was automatically assessed under the confirmed policy
   const assessedSummary = lateFeesSection
     .locator('[aria-label="Assessed late fees"] summary')
     .first();
@@ -200,15 +180,91 @@ test("late fees end-to-end: policy, preview invalidation, assess, partial waive,
   await expect(queueSection).toContainText("Paid");
   await expect(queueSection).toContainText("Assessed USD 50.00");
 
-  await queueSection.getByLabel("Settlement status").selectOption("unpaid");
-  await expect(queueSection).toContainText("No assessed late fees match these filters.");
-
   await queueSection.getByLabel("Settlement status").selectOption("paid");
   await expect(queueSection).toContainText("Assessed USD 50.00");
   await expect(queueSection.getByRole("link", { name: "Open Lease →" }).first()).toHaveAttribute(
     "href",
     `/leases/${f.lease.id}/details`,
   );
+
+  // 6b. Navigate to Rent Expectation detail page and verify Late fees panel renders assessed fee + steps + pagination continuation
+  const firstExpId = f.synced.items[0].id;
+  let pagedIntercepted = false;
+  await page.route("**/api/late-fee-assessments*", async (route) => {
+    const url = new URL(route.request().url());
+    if (
+      url.searchParams.get("rentExpectationId") === firstExpId &&
+      !url.searchParams.get("cursor")
+    ) {
+      const real = await route.fetch();
+      const body = (await real.json()) as { items: unknown[]; nextCursor: string | null };
+      pagedIntercepted = true;
+      await route.fulfill({
+        response: real,
+        json: { ...body, nextCursor: "mock-page-2-cursor" },
+      });
+      return;
+    }
+    if (url.searchParams.get("cursor") === "mock-page-2-cursor") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        json: {
+          items: [
+            {
+              id: "11111111-1111-4111-8111-111111111111",
+              leaseId: f.lease.id,
+              rentExpectationId: firstExpId,
+              policyVersionId: "22222222-2222-4222-8222-222222222222",
+              occurrenceNumber: 2,
+              asOfDate: f.start,
+              accrualStartsOn: f.start,
+              accrualEndsOn: f.start,
+              accrualDays: 1,
+              assessedAmountMinor: 1500,
+              waivedAmountMinor: 0,
+              paidAmountMinor: 0,
+              remainingBalanceMinor: 1500,
+              currencyCode: "USD",
+              settlementStatus: "unpaid",
+              ruleBasisSnapshot: "Older historical fee page 2",
+              sourceDriftWarning: false,
+              replacesAssessmentId: null,
+              replacedByAssessmentId: null,
+              voidedAt: null,
+              voidReason: null,
+              assessedAt: new Date().toISOString(),
+            },
+          ],
+          nextCursor: null,
+        },
+      });
+      return;
+    }
+    await route.continue();
+  });
+  await page.goto(`/money?record=expectation&id=${firstExpId}`);
+  const expLateFees = page.getByRole("region", { name: "Late fees for this rent period" });
+  await expect(expLateFees).toBeVisible();
+  await expect(expLateFees).toContainText("Assessed USD 50.00");
+  await expect(expLateFees).toContainText("Fixed flat fee = USD 50.00");
+  expect(pagedIntercepted).toBe(true);
+  await expLateFees.getByRole("button", { name: "Load more late fees" }).click();
+  await expect(expLateFees).toContainText("Assessed USD 15.00");
+  await page.unroute("**/api/late-fee-assessments*");
+
+  // 6c. Lease-level waiver on Lease Details waives remaining unpaid fee and pauses auto-assessment
+  await page.goto(`/leases/${f.lease.id}/details`);
+  await lateFeesSection.getByRole("button", { name: "Waive late fees at lease level" }).click();
+  const leaseWaiveForm = lateFeesSection.getByRole("form", {
+    name: "Waive late fees at lease level",
+  });
+  await leaseWaiveForm.getByLabel("Reason (required)").fill("Hardship lease-level waiver");
+  await leaseWaiveForm
+    .getByLabel("Confirm pausing automatic late-fee assessment for this lease (required)")
+    .check();
+  await leaseWaiveForm.getByRole("button", { name: "Confirm lease-level waiver" }).click();
+  await expect(lateFeesSection).toContainText("Late fees waived at lease level.");
 
   // 7. Navigate to Money -> Reporting and verify Late fees received metric + drill-down
   await page.goto(
@@ -343,6 +399,16 @@ test("late fees review regressions: dropped-response reload recovery, void-and-r
     supersedesPolicyVersionId: null,
     notes: null,
     operatorConfirmed: true,
+  });
+
+  // Pause auto-assessment via lease-level waiver so manual assess recovery can be exercised directly
+  await post(request, `/api/leases/${f.lease.id}/late-fee-waiver`, {
+    expectedRevision: 2,
+    idempotencyKey: crypto.randomUUID(),
+    reason: "Manual assessment test setup",
+    waiveOpenAssessments: false,
+    internalNotes: null,
+    confirmed: true,
   });
 
   await page.goto(`/leases/${f.lease.id}/details`);

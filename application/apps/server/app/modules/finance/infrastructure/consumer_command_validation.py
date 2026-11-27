@@ -15,6 +15,10 @@ def validate_consumer_result(connection, receipt, response, events):
         _late_fee_policy(receipt, response, events)
     elif receipt["action"] in {"assess_late_fee", "waive_late_fee", "void_late_fee_assessment"}:
         _late_fee_assessment(receipt, response, events)
+    elif receipt["action"] == "auto_assess_late_fees":
+        _auto_assess_late_fees(receipt, response, events)
+    elif receipt["action"] in {"create_lease_late_fee_waiver", "revoke_lease_late_fee_waiver"}:
+        _late_fee_lease_waiver(receipt, response, events)
     elif receipt["action"] in {
         "record_late_fee_receipt",
         "record_combined_receipt",
@@ -25,6 +29,28 @@ def validate_consumer_result(connection, receipt, response, events):
         _provider_payment_outcome(receipt, response, events)
     else:
         _prepaid(connection, receipt, response, events)
+
+
+def _auto_assess_late_fees(receipt, response, events):
+    assessment_ids = response.get("assessmentIds")
+    if not isinstance(assessment_ids, list) or len(assessment_ids) != response.get("createdCount"):
+        raise ValueError("Auto-assessed late-fee command result is invalid.")
+    if not receipt["effective"]:
+        if events or assessment_ids:
+            raise ValueError("No-op auto-assessment command has business mutations.")
+        return
+    expected = {(assessment_id, "auto_assessed") for assessment_id in assessment_ids}
+    if (
+        any(event["entity_type"] != "late_fee_assessment" for event in events)
+        or {(event["entity_id"], event["action"]) for event in events} != expected
+        or len(events) != len(expected)
+    ):
+        raise ValueError("Auto-assessed late-fee command audit cardinality differs.")
+
+
+def _late_fee_lease_waiver(receipt, response, events):
+    action = "created" if receipt["action"] == "create_lease_late_fee_waiver" else "revoked"
+    _primary(receipt, response, events, "late_fee_lease_waiver", action)
 
 
 def _primary(receipt, response, events, entity, action):

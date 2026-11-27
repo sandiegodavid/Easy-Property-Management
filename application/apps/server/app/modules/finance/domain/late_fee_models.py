@@ -206,6 +206,71 @@ class CreateLateFeePolicyCommand:
 
 
 @dataclass(frozen=True)
+class CreateLeaseLateFeeWaiverCommand:
+    reason: str
+    confirmed: bool
+    waive_open_assessments: bool = False
+    internal_notes: str | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.confirmed) is not bool or not self.confirmed:
+            raise FinanceValidationError("Explicit confirmation is required.")
+        if type(self.waive_open_assessments) is not bool:
+            raise FinanceValidationError("waiveOpenAssessments must be boolean.")
+        object.__setattr__(self, "reason", _text(self.reason, "Waiver reason", 1000, required=True))
+        object.__setattr__(
+            self, "internal_notes", _text(self.internal_notes, "Internal notes", 1000)
+        )
+
+    def command_payload(self) -> dict[str, object]:
+        return _camel(asdict(self))
+
+
+@dataclass(frozen=True)
+class RevokeLeaseLateFeeWaiverCommand:
+    reason: str
+    confirmed: bool
+
+    def __post_init__(self) -> None:
+        if type(self.confirmed) is not bool or not self.confirmed:
+            raise FinanceValidationError("Explicit confirmation is required.")
+        object.__setattr__(self, "reason", _text(self.reason, "Revoke reason", 1000, required=True))
+
+    def command_payload(self) -> dict[str, object]:
+        return _camel(asdict(self))
+
+
+@dataclass(frozen=True)
+class LateFeeLeaseWaiver:
+    id: str
+    lease_id: str
+    status: str
+    reason: str
+    internal_notes: str | None
+    waived_at: str
+    waived_by_actor: str
+    waived_open_assessments_count: int
+    revoked_at: str | None = None
+    revoked_by_actor: str | None = None
+    revoke_reason: str | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "id": self.id,
+            "leaseId": self.lease_id,
+            "status": self.status,
+            "reason": self.reason,
+            "internalNotes": self.internal_notes,
+            "waivedAt": self.waived_at,
+            "waivedByActor": self.waived_by_actor,
+            "waivedOpenAssessmentsCount": self.waived_open_assessments_count,
+            "revokedAt": self.revoked_at,
+            "revokedByActor": self.revoked_by_actor,
+            "revokeReason": self.revoke_reason,
+        }
+
+
+@dataclass(frozen=True)
 class VoidLateFeePolicyCommand:
     confirmed: bool
     reason: str

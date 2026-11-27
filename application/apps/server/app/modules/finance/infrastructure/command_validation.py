@@ -81,7 +81,7 @@ def _history(connection):
             effects.setdefault(key, []).append(event)
     for event in connection.execute(
         text(
-            "SELECT * FROM audit_events WHERE entity_type IN ('rent_expectation', 'rent_receipt', 'rent_receipt_allocation', 'rent_expectation_timeliness_review', 'late_fee_policy_version', 'late_fee_assessment', 'late_fee_waiver', 'late_fee_receipt', 'late_fee_receipt_allocation', 'expense', 'expense_refund', 'prepaid_check', 'task', 'task_reminder', 'security_deposit_account', 'security_deposit_receipt', 'security_deposit_settlement', 'security_deposit_deduction', 'security_deposit_credit', 'security_deposit_deduction_source', 'security_deposit_refund')"
+            "SELECT * FROM audit_events WHERE entity_type IN ('rent_expectation', 'rent_receipt', 'rent_receipt_allocation', 'rent_expectation_timeliness_review', 'late_fee_policy_version', 'late_fee_assessment', 'late_fee_waiver', 'late_fee_lease_waiver', 'late_fee_receipt', 'late_fee_receipt_allocation', 'expense', 'expense_refund', 'prepaid_check', 'task', 'task_reminder', 'security_deposit_account', 'security_deposit_receipt', 'security_deposit_settlement', 'security_deposit_deduction', 'security_deposit_credit', 'security_deposit_deduction_source', 'security_deposit_refund')"
         )
     ).mappings():
         business.setdefault(event["correlation_id"], []).append(event)

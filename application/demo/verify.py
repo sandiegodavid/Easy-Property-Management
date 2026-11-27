@@ -27,10 +27,18 @@ EXPECTED = {
     "condition_reports": 1,
     "security_deposit_accounts": 9,
     "security_deposit_receipts": 9,
+    "late_fee_policy_versions": 2,
+    "late_fee_assessments": 2,
+    "late_fee_waivers": 1,
+    "late_fee_receipts": 1,
     "tasks": 1,
 }
 OFFICE_SUITE_COUNT = 2
 VACANT_SPACE_COUNT = 6
+BIRCH_LATE_FEE_ASSESSED_MINOR = 10000
+BIRCH_LATE_FEE_WAIVED_MINOR = 2000
+BIRCH_LATE_FEE_PAID_MINOR = 8000
+OFFICE_LATE_FEE_ASSESSED_MINOR = 16000
 PROPERTY_LOCATIONS = {
     ("Portland", "OR"): (6, "America/Los_Angeles"),
     ("Austin", "TX"): (3, "America/Chicago"),
@@ -275,6 +283,55 @@ def api_checks(client, catalog):
         "leasingStatuses": dict(leasing_statuses),
         "lateUnpaidRent": len(late),
         "prepaidRent": True,
+        "lateFees": late_fee_checks(client, catalog),
+    }
+
+
+def late_fee_checks(client, catalog):
+    birch = next(row for row in catalog["properties"] if row["key"] == "o1-late")
+    o2_office = next(row for row in catalog["properties"] if row["key"] == "o2-office")
+    birch_policies = read(client, f"/api/leases/{birch['leaseId']}/late-fee-policies")["items"]
+    o2_policies = read(client, f"/api/leases/{o2_office['leaseId']}/late-fee-policies")["items"]
+    require(
+        len(birch_policies) == 1 and birch_policies[0]["formulaKind"] == "fixed_plus_daily_flat",
+        "Expected one initial + daily late-fee policy on Birch Townhome",
+    )
+    require(
+        len(o2_policies) == 1 and o2_policies[0]["formulaKind"] == "percentage_once",
+        "Expected one percentage late-fee policy on Owner 2 Office",
+    )
+    assessments = read(client, "/api/late-fee-assessments")["items"]
+    require(
+        len(assessments) >= EXPECTED["late_fee_assessments"],
+        f"Expected at least {EXPECTED['late_fee_assessments']} late-fee assessments, "
+        f"found {len(assessments)}",
+    )
+    birch_fees = [item for item in assessments if item["leaseId"] == birch["leaseId"]]
+    o2_fees = [item for item in assessments if item["leaseId"] == o2_office["leaseId"]]
+    birch_paid = next((item for item in birch_fees if item["settlementStatus"] == "paid"), None)
+    o2_fee = o2_fees[0] if o2_fees else None
+    require(
+        birch_paid is not None
+        and birch_paid["assessedAmountMinor"] == BIRCH_LATE_FEE_ASSESSED_MINOR
+        and birch_paid["waivedAmountMinor"] == BIRCH_LATE_FEE_WAIVED_MINOR
+        and birch_paid["paidAmountMinor"] == BIRCH_LATE_FEE_PAID_MINOR
+        and birch_paid["remainingBalanceMinor"] == 0,
+        f"Unexpected Birch Townhome paid late-fee assessment state: {birch_fees}",
+    )
+    require(
+        o2_fee is not None
+        and o2_fee["settlementStatus"] == "unpaid"
+        and o2_fee["assessedAmountMinor"] == OFFICE_LATE_FEE_ASSESSED_MINOR
+        and o2_fee["waivedAmountMinor"] == 0
+        and o2_fee["paidAmountMinor"] == 0
+        and o2_fee["remainingBalanceMinor"] == OFFICE_LATE_FEE_ASSESSED_MINOR,
+        f"Unexpected Owner 2 Office late-fee assessment state: {o2_fee}",
+    )
+    return {
+        "policies": EXPECTED["late_fee_policy_versions"],
+        "assessments": len(assessments),
+        "paid": sum(1 for item in assessments if item["settlementStatus"] == "paid"),
+        "unpaid": sum(1 for item in assessments if item["settlementStatus"] == "unpaid"),
     }
 
 

@@ -384,3 +384,96 @@ def test_wrapped_handler_full_error_is_typed_even_after_owning_cleanup():
     assert caught.value.code == "hosted_storage_quota_exceeded"
     assert "original operation key" in str(caught.value)
     assert "private storage" not in str(caught.value)
+
+
+def test_hosted_late_fee_sync_requires_write_and_get_stays_read_only(deployment_values):
+    now = datetime.now(UTC) + timedelta(seconds=1)
+    token = "w" * 43
+    csrf = "csrf-token"
+
+    def _run(capabilities: tuple[str, ...]):
+        deployment = HostedDeployment.model_validate(
+            {**deployment_values, "capabilities": list(capabilities)}
+        )
+        session_row = {
+            "revoked": False,
+            "active": True,
+            "generation": 1,
+            "current_generation": 1,
+            "subject": "subject",
+            "issuer": deployment.identity_issuer,
+            "email": deployment.allowed_email,
+            "operator_id": str(deployment.operator_id),
+            "workspace_id": str(deployment.workspace_id),
+            "expires_at": (now + timedelta(hours=1)).timestamp(),
+            "not_before": (now - timedelta(hours=1)).timestamp(),
+            "csrf_hash": sha256(csrf.encode("utf-8")).hexdigest(),
+        }
+        expected_hash = sha256(token.encode("utf-8")).hexdigest()
+
+        class _SessionStore:
+            def session(self, token_hash):
+                return session_row if token_hash == expected_hash else None
+
+        proof = VerifiedIdentity(
+            deployment.identity_issuer,
+            "subject",
+            deployment.allowed_email,
+            now - timedelta(seconds=1),
+            now + timedelta(hours=1),
+            sha256(b"proof").hexdigest(),
+        )
+
+        class _Verifier:
+            def verify(self, _assertion):
+                return proof
+
+        sync_calls = []
+        app = FastAPI()
+
+        @app.exception_handler(HostedAccessError)
+        async def access_error(_request, error):
+            return JSONResponse({"detail": {"code": error.code}}, status_code=error.status)
+
+        @app.get("/api/late-fee-assessments")
+        def list_fees():
+            return {"items": [], "nextCursor": None}
+
+        @app.post("/api/late-fees/sync")
+        def sync_fees():
+            sync_calls.append("synced")
+            return {"createdCount": 0, "assessmentIds": []}
+
+        service = HostedAccessService(deployment, _SessionStore(), now=lambda: now)
+        app.add_middleware(
+            HostedTransportMiddleware,
+            service=service,
+            verifier=_Verifier(),
+            routes=app.openapi()["paths"],
+            workspace_ready=lambda: True,
+        )
+        headers = {
+            "cf-access-jwt-assertion": "verified-proof",
+            "cookie": f"{SESSION_COOKIE}={token}",
+            "origin": deployment.public_origin.rstrip("/"),
+            "x-epm-csrf": csrf,
+        }
+        with TestClient(
+            app, base_url=deployment.public_origin, client=("127.0.0.1", 123)
+        ) as client:
+            get_resp = client.get("/api/late-fee-assessments", headers=headers)
+            post_resp = client.post("/api/late-fees/sync", json={}, headers=headers)
+        return get_resp, post_resp, sync_calls
+
+    # Read-only caller: GET succeeds without writes; POST /api/late-fees/sync is rejected (403).
+    ro_get, ro_post, ro_sync = _run(("records.read",))
+    assert ro_get.status_code == 200
+    assert ro_post.status_code == 403
+    assert ro_post.json()["detail"]["code"] == "hosted_capability_forbidden"
+    assert ro_sync == []
+
+    # Admitted hosted writer: GET succeeds and POST /api/late-fees/sync is admitted (200).
+    wr_get, wr_post, wr_sync = _run(("records.read", "records.write"))
+    assert wr_get.status_code == 200
+    assert wr_post.status_code == 200
+    assert wr_sync == ["synced"]

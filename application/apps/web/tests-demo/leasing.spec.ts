@@ -146,3 +146,18 @@ test("create lease draft opens the lease workflow", async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByLabel("Contract starts on (required)", { exact: true })).toBeVisible();
 });
+
+test("birch townhome lease detail shows its late-fee policy and paid assessment", async ({
+  page,
+}) => {
+  await page.goto("/leasing");
+  const card = leaseCardFor(page, "Birch Townhome — Rent Follow-up");
+  await card.getByRole("link").first().click();
+  await expect(page).toHaveURL(/\/leases\/[^/]+\/details$/);
+  const lateFees = page.getByRole("region", { name: "Late fees", exact: true });
+  await expect(lateFees).toBeVisible();
+  await expect(lateFees).toContainText("Lease Section 6(b) — Late Charge Policy");
+  await expect(lateFees).toContainText("USD 50.00 initial + USD 10.00/day");
+  await expect(lateFees).toContainText("Assessed USD 100.00");
+  await expect(lateFees).toContainText("Remaining USD 0.00");
+});

@@ -182,6 +182,7 @@ function Gate({ children }: { children: ReactNode }) {
           </div>
         )}
         <div
+          className="workspace-admitted"
           hidden={Boolean(errorMessage)}
           aria-hidden={errorMessage ? "true" : undefined}
           inert={Boolean(errorMessage) || undefined}

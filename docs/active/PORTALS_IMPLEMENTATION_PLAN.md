@@ -107,7 +107,7 @@ Detailed design: [FIN-009_DESIGN.md](FIN-009_DESIGN.md) (`D1–D15` accepted Nov
    preserve consent/caps and obtain fresh consent where required.
 
 These are implementation design gates, not permission to infer legal entitlement or
-charge fees automatically. Resolve policy details in FIN-009 before its implementation;
+1. **No invented defaults and no automatic debit:** EPM ships no default late-fee rates and never debits a tenant automatically. Under an explicitly operator-confirmed lease policy, write-authorized automatic assessment (`POST /api/late-fees/sync` and workspace open) may create audited charges through the lease `rent_ledger` command ledger, with lease-level and per-occurrence waivers and explicit-review exclusions for processing payments and returned/voided timely receipts (`D9`). Resolve policy details in FIN-009 before its implementation;
 HOSTED-001 H01 can start now without waiting for them.
 
 ## Cross-feature validation

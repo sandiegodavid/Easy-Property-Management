@@ -7,7 +7,7 @@ import binascii
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from json import JSONDecodeError, loads
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 from zoneinfo import ZoneInfo
 
 from app.modules.audit.application.recorder import invocation_actor
@@ -30,12 +30,15 @@ from app.modules.finance.domain.late_fee_calculator import (
 from app.modules.finance.domain.late_fee_models import (
     AssessLateFeeCommand,
     CreateLateFeePolicyCommand,
+    CreateLeaseLateFeeWaiverCommand,
     LateFeeAssessment,
+    LateFeeLeaseWaiver,
     LateFeePolicyVersion,
     LateFeeReceipt,
     LateFeeWaiver,
     RecordCombinedReceiptCommand,
     RecordLateFeeReceiptCommand,
+    RevokeLeaseLateFeeWaiverCommand,
     VoidLateFeeAssessmentCommand,
     VoidLateFeePolicyCommand,
     VoidLateFeeReceiptCommand,
@@ -808,6 +811,524 @@ class LateFeeService:
 
         return self.unit_of_work.write(operation)
 
+    def get_lease_waiver_state(self, lease_id: str) -> dict[str, object]:
+        lease_id = canonical_uuid(lease_id)
+
+        def operation(tx):
+            if tx.lease_status(lease_id) is None:
+                raise FinanceNotFoundError("Lease was not found.")
+            waivers = tx.lease_late_fee_waivers(lease_id)
+            active = next((item for item in waivers if item.status == "active"), None)
+            revision = tx.commands.command_revision(FinanceScope("rent_ledger", lease_id))
+            return {
+                "leaseId": lease_id,
+                "rentLedgerRevision": revision,
+                "activeWaiver": active.to_dict() if active else None,
+                "history": [item.to_dict() for item in waivers],
+            }
+
+        return self.unit_of_work.read(operation)
+
+    def create_lease_waiver(
+        self,
+        lease_id: str,
+        command: CreateLeaseLateFeeWaiverCommand,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+    ) -> dict[str, object]:
+        lease_id = canonical_uuid(lease_id)
+        instant = self.now().astimezone(UTC)
+
+        def operation(tx):
+            identity = FinanceCommandIdentity(
+                FinanceScope("rent_ledger", lease_id),
+                "create_lease_late_fee_waiver",
+                lease_id,
+                expected_revision,
+                idempotency_key,
+                command.command_payload(),
+            )
+
+            def mutate(context):
+                lease_ctx = tx.lease_preview_context(lease_id)
+                if lease_ctx is None:
+                    raise FinanceNotFoundError("Lease was not found.")
+                if tx.active_lease_late_fee_waiver(lease_id) is not None:
+                    raise FinanceConflictError(
+                        "Late fees are already waived at the lease level.",
+                        code="lease_late_fee_waiver_already_active",
+                    )
+                waived_count = 0
+                if command.waive_open_assessments:
+                    current_local_date = (
+                        instant.astimezone(ZoneInfo(lease_ctx["time_zone"])).date().isoformat()
+                    )
+                    open_assessments = tx.active_late_fee_assessments_for_lease(lease_id)
+                    if open_assessments:
+                        ids = [item.id for item in open_assessments]
+                        waived_totals = tx.late_fee_waiver_totals(ids)
+                        paid_totals = tx.late_fee_paid_totals(ids)
+                        processing_map = tx.pending_payments_for_assessments(ids)
+                        to_waive: list[tuple[LateFeeAssessment, int]] = []
+                        for assessment in open_assessments:
+                            remaining = (
+                                assessment.assessed_amount_minor
+                                - waived_totals.get(assessment.id, 0)
+                                - paid_totals.get(assessment.id, 0)
+                            )
+                            if remaining <= 0:
+                                continue
+                            if processing_map.get(assessment.id, EMPTY_PENDING_PAYMENTS).count > 0:
+                                raise FinanceConflictError(
+                                    "Cannot waive all open late fees while one or more assessments "
+                                    "have processing payment reservations. Pause auto-assessment "
+                                    "without bulk-waiving open fees, or review individual assessments.",
+                                    code="late_fee_processing_reservation_conflict",
+                                )
+                            to_waive.append((assessment, remaining))
+                        for assessment, remaining in to_waive:
+                            occ_waiver = LateFeeWaiver(
+                                id=str(uuid4()),
+                                assessment_id=assessment.id,
+                                lease_id=lease_id,
+                                waived_amount_minor=remaining,
+                                currency_code="USD",
+                                reason=command.reason,
+                                internal_notes=command.internal_notes,
+                                waived_on=current_local_date,
+                                waived_at=context.committed_at,
+                                waived_by_actor=_actor_snapshot(),
+                            )
+                            tx.insert_late_fee_waiver(occ_waiver)
+                            tx.record_change(
+                                entity_type="late_fee_waiver",
+                                entity_id=occ_waiver.id,
+                                action="recorded",
+                                before=None,
+                                after=occ_waiver.to_dict(),
+                                reason=command.reason,
+                                correlation_id=context.correlation_id,
+                            )
+                            waived_count += 1
+                lease_waiver = LateFeeLeaseWaiver(
+                    id=str(uuid4()),
+                    lease_id=lease_id,
+                    status="active",
+                    reason=command.reason,
+                    internal_notes=command.internal_notes,
+                    waived_at=context.committed_at,
+                    waived_by_actor=_actor_snapshot(),
+                    waived_open_assessments_count=waived_count,
+                )
+                tx.insert_lease_late_fee_waiver(lease_waiver)
+                tx.record_change(
+                    entity_type="late_fee_lease_waiver",
+                    entity_id=lease_waiver.id,
+                    action="created",
+                    before=None,
+                    after=lease_waiver.to_dict(),
+                    reason=command.reason,
+                    correlation_id=context.correlation_id,
+                )
+                return FinanceCommandOutcome(lease_waiver.to_dict(), effective=True)
+
+            return apply_finance_command(tx.commands, identity, mutate, instant=instant)
+
+        return self.unit_of_work.write(operation)
+
+    def revoke_lease_waiver(
+        self,
+        lease_id: str,
+        command: RevokeLeaseLateFeeWaiverCommand,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+    ) -> dict[str, object]:
+        lease_id = canonical_uuid(lease_id)
+        instant = self.now().astimezone(UTC)
+
+        def operation(tx):
+            identity = FinanceCommandIdentity(
+                FinanceScope("rent_ledger", lease_id),
+                "revoke_lease_late_fee_waiver",
+                lease_id,
+                expected_revision,
+                idempotency_key,
+                command.command_payload(),
+            )
+
+            def mutate(context):
+                if tx.lease_status(lease_id) is None:
+                    raise FinanceNotFoundError("Lease was not found.")
+                active = tx.active_lease_late_fee_waiver(lease_id)
+                if active is None:
+                    raise FinanceConflictError(
+                        "No active lease-level late-fee waiver exists on this lease.",
+                        code="no_active_lease_late_fee_waiver",
+                    )
+                revoked = replace(
+                    active,
+                    status="revoked",
+                    revoked_at=context.committed_at,
+                    revoked_by_actor=_actor_snapshot(),
+                    revoke_reason=command.reason,
+                )
+                tx.revoke_lease_late_fee_waiver(revoked)
+                tx.record_change(
+                    entity_type="late_fee_lease_waiver",
+                    entity_id=revoked.id,
+                    action="revoked",
+                    before=active.to_dict(),
+                    after=revoked.to_dict(),
+                    reason=command.reason,
+                    correlation_id=context.correlation_id,
+                )
+                return FinanceCommandOutcome(revoked.to_dict(), effective=True)
+
+            return apply_finance_command(tx.commands, identity, mutate, instant=instant)
+
+        return self.unit_of_work.write(operation)
+
+    def sync_auto_assessments(
+        self,
+        *,
+        lease_id: str | None = None,
+        property_id: str | None = None,
+        rent_expectation_id: str | None = None,
+    ) -> dict[str, object]:
+        """Idempotently auto-assess eligible overdue late fees for active non-waived leases."""
+        if lease_id is not None:
+            lease_id = canonical_uuid(lease_id)
+        if property_id is not None:
+            property_id = canonical_uuid(property_id)
+        if rent_expectation_id is not None:
+            rent_expectation_id = canonical_uuid(rent_expectation_id)
+        captured_at = self.now().astimezone(UTC)
+
+        def find_candidates(tx):
+            if rent_expectation_id is not None:
+                owning_lease = tx.expectation_lease_id(rent_expectation_id)
+                if owning_lease is None:
+                    return []
+                if lease_id is not None and owning_lease != lease_id:
+                    return []
+                return tx.leases_with_active_late_fee_policies(lease_id=owning_lease)
+            return tx.leases_with_active_late_fee_policies(
+                lease_id=lease_id, property_id=property_id
+            )
+
+        candidate_leases = self.unit_of_work.read(find_candidates)
+        created_ids: list[str] = []
+        for lid in candidate_leases:
+            created_ids.extend(
+                self._auto_assess_lease(lid, captured_at, rent_expectation_id=rent_expectation_id)
+            )
+        return {"createdCount": len(created_ids), "assessmentIds": created_ids}
+
+    def _collect_auto_expectations(
+        self, tx, lease_id: str, current_local_date: str, rent_expectation_id: str | None
+    ):
+        if rent_expectation_id is not None:
+            single = tx.preview_rent_expectations(
+                lease_id, rent_expectation_id=rent_expectation_id, cursor=None, limit=1
+            )
+            if not single or single[0].voided_at is not None:
+                return []
+            return [exp for exp in single if exp.due_on <= current_local_date]
+        expectations = []
+        cursor: tuple[str, str] | None = None
+        page_size = 200
+        while True:
+            batch = (
+                tx.preview_rent_expectations(
+                    lease_id, rent_expectation_id=None, cursor=cursor, limit=page_size
+                )
+                or []
+            )
+            if not batch:
+                break
+            expectations.extend(exp for exp in batch if exp.due_on <= current_local_date)
+            if len(batch) < page_size:
+                break
+            cursor = (batch[-1].due_on, batch[-1].id)
+        return expectations
+
+    @staticmethod
+    def _voided_receipt_changed_fee(
+        *,
+        lease_id: str,
+        expectation,
+        policy,
+        current_local_date: str,
+        grace_ends_on: str,
+        time_zone: str,
+        revision: int,
+        paid_through_grace: int,
+        paid_after_grace: int,
+        lineage_allocations: list[tuple[str, str, int, bool]]
+        | tuple[tuple[str, str, int, bool], ...],
+        active_assessments,
+        scheduled_prepaid_checks,
+        processing_payments,
+        excluded_waiver_windows: tuple[tuple[str, str], ...],
+        computed_amount_minor: int,
+    ) -> bool:
+        """FIN-009 D9: return True when voiding/replacing receipt(s) created eligibility or changed the fee."""
+        active_by_chain: dict[str, tuple[int, int]] = {}
+        voided_by_chain: dict[str, list[tuple[int, int]]] = {}
+        for chain_root, received_on, amount_minor, is_voided in lineage_allocations:
+            if received_on > current_local_date:
+                continue
+            tg = amount_minor if received_on <= grace_ends_on else 0
+            ag = 0 if received_on <= grace_ends_on else amount_minor
+            if is_voided:
+                voided_by_chain.setdefault(chain_root, []).append((tg, ag))
+            else:
+                prev_tg, prev_ag = active_by_chain.get(chain_root, (0, 0))
+                active_by_chain[chain_root] = (prev_tg + tg, prev_ag + ag)
+        if not voided_by_chain:
+            return False
+        pre_through_grace = paid_through_grace
+        pre_after_grace = paid_after_grace
+        use_current_basis = policy.calculation_basis == "current_unpaid_rent"
+        for chain_root, voided_entries in voided_by_chain.items():
+            act_tg, act_ag = active_by_chain.get(chain_root, (0, 0))
+            best_tg, best_ag = max(
+                voided_entries,
+                key=(lambda pair: (pair[0] + pair[1], pair[0]))
+                if use_current_basis
+                else (lambda pair: (pair[0], pair[1])),
+            )
+            pre_through_grace = pre_through_grace - act_tg + best_tg
+            pre_after_grace = pre_after_grace - act_ag + best_ag
+        with_voided = calculate_late_fee_preview(
+            lease_id=lease_id,
+            expectation=expectation,
+            policy=policy,
+            as_of_date=current_local_date,
+            time_zone=time_zone,
+            rent_ledger_revision=revision,
+            paid_through_grace_minor=max(0, pre_through_grace),
+            paid_after_grace_through_as_of_minor=max(0, pre_after_grace),
+            active_assessments=active_assessments,
+            scheduled_prepaid_checks=scheduled_prepaid_checks,
+            processing_payments=processing_payments,
+            excluded_waiver_windows=excluded_waiver_windows,
+        )
+        return (
+            with_voided["eligibilityStatus"] != "eligible"
+            or int(with_voided["calculatedAmountMinor"]) != computed_amount_minor
+        )
+
+    def _auto_assess_lease(
+        self,
+        lease_id: str,
+        captured_at: datetime,
+        *,
+        rent_expectation_id: str | None = None,
+    ) -> list[str]:
+        def operation(tx):
+            lease_waivers = tx.lease_late_fee_waivers(lease_id)
+            if any(item.status == "active" for item in lease_waivers):
+                return []
+            context = tx.lease_preview_context(lease_id)
+            if context is None:
+                return []
+            time_zone = context["time_zone"]
+            tz = ZoneInfo(time_zone)
+            current_local_date = captured_at.astimezone(tz).date().isoformat()
+            excluded_waiver_windows = tuple(
+                (
+                    datetime.fromisoformat(item.waived_at).astimezone(tz).date().isoformat(),
+                    datetime.fromisoformat(item.revoked_at).astimezone(tz).date().isoformat(),
+                )
+                for item in lease_waivers
+                if item.status == "revoked" and item.revoked_at is not None
+            )
+            policies = tx.late_fee_policies(lease_id)
+            expectations = self._collect_auto_expectations(
+                tx, lease_id, current_local_date, rent_expectation_id
+            )
+            if not expectations:
+                return []
+            exp_ids = [exp.id for exp in expectations]
+            all_assessments_by_exp = tx.late_fee_assessments_for_expectations_all(exp_ids)
+            active_assessment_ids = [
+                item.id
+                for items in all_assessments_by_exp.values()
+                for item in items
+                if item.voided_at is None
+            ]
+            waived_totals = tx.late_fee_waiver_totals(active_assessment_ids)
+            allocs_by_exp = tx.active_rent_allocations_by_date(
+                exp_ids, through_on=current_local_date
+            )
+            lineage_allocs_by_exp = tx.rent_receipt_lineage_allocations_by_expectation(
+                lease_id, exp_ids
+            )
+            prepaid_by_exp = tx.scheduled_prepaid_checks_for_expectations(exp_ids)
+            processing_by_exp = tx.pending_payments_for_expectations(exp_ids)
+            active_facts_by_exp = tx.active_late_fee_assessments_for_expectations(exp_ids)
+            revision = tx.commands.command_revision(FinanceScope("rent_ledger", lease_id))
+
+            pending_rows: list[tuple[LateFeeAssessment, str]] = []
+            for exp in expectations:
+                exp_all = all_assessments_by_exp.get(exp.id, [])
+                replaced_ids = {
+                    item.replaces_assessment_id
+                    for item in exp_all
+                    if item.replaces_assessment_id is not None
+                }
+                if any(
+                    item.voided_at is not None and item.id not in replaced_ids for item in exp_all
+                ):
+                    continue
+                if any(
+                    item.voided_at is None and waived_totals.get(item.id, 0) > 0 for item in exp_all
+                ):
+                    continue
+                policy = resolve_applicable_policy(policies, exp.due_on)
+                if policy is None:
+                    continue
+                grace_ends_on = (
+                    date.fromisoformat(exp.due_on) + timedelta(days=policy.grace_period_days)
+                ).isoformat()
+                paid_through_grace = 0
+                paid_after_grace = 0
+                for received_on, amount_minor in allocs_by_exp.get(exp.id, ()):
+                    if received_on <= grace_ends_on:
+                        paid_through_grace += amount_minor
+                    elif received_on <= current_local_date:
+                        paid_after_grace += amount_minor
+                computed = calculate_late_fee_preview(
+                    lease_id=lease_id,
+                    expectation=exp,
+                    policy=policy,
+                    as_of_date=current_local_date,
+                    time_zone=time_zone,
+                    rent_ledger_revision=revision,
+                    paid_through_grace_minor=paid_through_grace,
+                    paid_after_grace_through_as_of_minor=paid_after_grace,
+                    active_assessments=active_facts_by_exp.get(exp.id, ()),
+                    scheduled_prepaid_checks=prepaid_by_exp.get(exp.id, ()),
+                    processing_payments=processing_by_exp.get(exp.id, EMPTY_PENDING_PAYMENTS),
+                    excluded_waiver_windows=excluded_waiver_windows,
+                )
+                if (
+                    computed["eligibilityStatus"] != "eligible"
+                    or computed["requiresProcessingAcknowledgment"]
+                ):
+                    continue
+                if self._voided_receipt_changed_fee(
+                    lease_id=lease_id,
+                    expectation=exp,
+                    policy=policy,
+                    current_local_date=current_local_date,
+                    grace_ends_on=grace_ends_on,
+                    time_zone=time_zone,
+                    revision=revision,
+                    paid_through_grace=paid_through_grace,
+                    paid_after_grace=paid_after_grace,
+                    lineage_allocations=lineage_allocs_by_exp.get(exp.id, ()),
+                    active_assessments=active_facts_by_exp.get(exp.id, ()),
+                    scheduled_prepaid_checks=prepaid_by_exp.get(exp.id, ()),
+                    processing_payments=processing_by_exp.get(exp.id, EMPTY_PENDING_PAYMENTS),
+                    excluded_waiver_windows=excluded_waiver_windows,
+                    computed_amount_minor=int(computed["calculatedAmountMinor"]),
+                ):
+                    continue
+                snapshot_json = canonical_json(computed["calculationSnapshot"])
+                if len(snapshot_json) > 16_384:
+                    continue
+                created = LateFeeAssessment(
+                    id=str(uuid4()),
+                    lease_id=lease_id,
+                    rent_expectation_id=exp.id,
+                    policy_version_id=policy.id,
+                    occurrence_number=int(computed["occurrenceNumber"]),
+                    as_of_date=current_local_date,
+                    accrual_starts_on=str(computed["accrualStartsOn"]),
+                    accrual_ends_on=str(computed["accrualEndsOn"]),
+                    accrual_days=int(computed["accrualDays"]),
+                    assessed_amount_minor=int(computed["calculatedAmountMinor"]),
+                    currency_code="USD",
+                    time_zone=time_zone,
+                    rule_basis_snapshot=policy.rule_basis,
+                    calculation_snapshot_json=snapshot_json,
+                    calculation_snapshot_hash=fingerprint(snapshot_json),
+                    processing_acknowledged=False,
+                    processing_acknowledgment_reason=None,
+                    internal_notes="Automatically assessed per confirmed lease late-fee policy.",
+                    replaces_assessment_id=None,
+                    voided_at=None,
+                    void_reason=None,
+                    assessed_at=captured_at.isoformat(),
+                    assessed_by_actor="system:auto_late_fee",
+                )
+                pending_rows.append((created, policy.rule_basis))
+
+            if not pending_rows:
+                return []
+
+            command_payload = {
+                "asOfDate": current_local_date,
+                "rentExpectationId": rent_expectation_id,
+                "items": [
+                    {
+                        "rentExpectationId": row.rent_expectation_id,
+                        "occurrenceNumber": row.occurrence_number,
+                        "assessedAmountMinor": row.assessed_amount_minor,
+                    }
+                    for row, _basis in pending_rows
+                ],
+            }
+            idempotency_key = str(
+                uuid5(
+                    NAMESPACE_URL,
+                    f"epm-auto-late-fee/{lease_id}/{revision}/{fingerprint(canonical_json(command_payload))}",
+                )
+            )
+            identity = FinanceCommandIdentity(
+                FinanceScope("rent_ledger", lease_id),
+                "auto_assess_late_fees",
+                lease_id,
+                revision,
+                idempotency_key,
+                command_payload,
+            )
+
+            def mutate(cmd_context):
+                created_ids: list[str] = []
+                for row, rule_basis in pending_rows:
+                    committed_row = replace(row, assessed_at=cmd_context.committed_at)
+                    tx.insert_late_fee_assessment(committed_row)
+                    tx.record_change(
+                        entity_type="late_fee_assessment",
+                        entity_id=committed_row.id,
+                        action="auto_assessed",
+                        before=None,
+                        after=self._assessment_detail_dict(
+                            committed_row,
+                            waivers=[],
+                            allocations=[],
+                            replaced_by_id=None,
+                            source_drift_warning=False,
+                        ),
+                        reason=f"Automatically assessed per {rule_basis}.",
+                        correlation_id=cmd_context.correlation_id,
+                    )
+                    created_ids.append(committed_row.id)
+                return FinanceCommandOutcome(
+                    {"createdCount": len(created_ids), "assessmentIds": created_ids},
+                    effective=True,
+                )
+
+            result = apply_finance_command(tx.commands, identity, mutate, instant=captured_at)
+            return list(result["assessmentIds"])
+
+        return self.unit_of_work.write(operation)
+
     def get_assessment(self, assessment_id: str) -> dict[str, object]:
         assessment_id = canonical_uuid(assessment_id)
 
@@ -835,6 +1356,7 @@ class LateFeeService:
         *,
         lease_id: str | None = None,
         property_id: str | None = None,
+        rent_expectation_id: str | None = None,
         settlement_status: str | None = None,
         include_voided: bool = False,
         cursor: str | None = None,
@@ -844,6 +1366,8 @@ class LateFeeService:
             lease_id = canonical_uuid(lease_id)
         if property_id is not None:
             property_id = canonical_uuid(property_id)
+        if rent_expectation_id is not None:
+            rent_expectation_id = canonical_uuid(rent_expectation_id)
         if settlement_status is not None and settlement_status not in {
             "unpaid",
             "partially_paid",
@@ -861,6 +1385,7 @@ class LateFeeService:
                 {
                     "leaseId": lease_id,
                     "propertyId": property_id,
+                    "rentExpectationId": rent_expectation_id,
                     "settlementStatus": settlement_status,
                     "includeVoided": effective_include_voided,
                     "pageSize": page_size,
@@ -896,6 +1421,7 @@ class LateFeeService:
             rows = tx.late_fee_assessment_page(
                 lease_id=lease_id,
                 lease_ids=lease_ids_filter,
+                rent_expectation_id=rent_expectation_id,
                 settlement_status=settlement_status,
                 include_voided=effective_include_voided,
                 cursor=cursor_key,

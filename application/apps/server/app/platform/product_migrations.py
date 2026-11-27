@@ -192,6 +192,7 @@ def validate_latest_schema(database_path: Path) -> None:
                 "late_fee_policy_versions",
                 "late_fee_assessments",
                 "late_fee_waivers",
+                "late_fee_lease_waivers",
                 "late_fee_receipts",
                 "late_fee_receipt_allocations",
                 "communications",

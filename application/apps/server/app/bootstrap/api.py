@@ -222,6 +222,15 @@ from app.platform.version import application_version
 logger = logging.getLogger(__name__)
 
 
+def _sync_startup_late_fees(late_fees: LateFeeService, runtime: WorkspaceRuntime) -> None:
+    if runtime.ready and runtime.can_write:
+        try:
+            late_fees.sync_auto_assessments()
+        except Exception:
+            # Non-fatal catch-up on startup; read endpoints retry idempotently.
+            pass
+
+
 # Keep dependency wiring visible in one composition root; service behavior remains in modules.
 def create_app(  # noqa: C901, PLR0915
     config_path: Path | None = None,
@@ -462,6 +471,7 @@ def create_app(  # noqa: C901, PLR0915
     )
     prepaid_checks = PrepaidCheckService(finance.unit_of_work)
     late_fees = LateFeeService(finance.unit_of_work)
+    _sync_startup_late_fees(late_fees, runtime)
     money_locations = SQLitePortfolioLocationRelations()
 
     def money_read_identity() -> tuple[str, str]:

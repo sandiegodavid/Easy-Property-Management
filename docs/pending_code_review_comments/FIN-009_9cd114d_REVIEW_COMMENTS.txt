@@ -1,0 +1,35 @@
+FIN-009 review of 9cd114d
+Re-review of the remediation working tree at 9cd114d on 2026-11-28
+
+All nine findings are resolved.
+
+Resolved findings — 2026-11-27
+
+[P2] Finding 2 — resolved — Rent due sync scope
+application/apps/web/src/workflows/late-fees.tsx:3359 — Rent due sends both lease and expectation IDs. The service resolves ownership and processes the targeted expectation only, with a two-lease regression.
+
+[P1] Finding 3 — resolved — Automatic assessment revision and command history
+application/apps/server/app/modules/finance/application/late_fee_service.py:1246 — Effective sync uses the Finance command transaction for the assessed charges, audit, and revision. The focused regression verifies stale-revision rejection and no revision change on no-op retry.
+
+[P2] Finding 4 — resolved — Automatic assessment candidate pagination
+application/apps/server/app/modules/finance/application/late_fee_service.py:1042 — The candidate scan advances through keyset pages. The focused regression assesses an eligible period beyond 510 older candidates.
+
+[P2] Finding 6 — resolved — Atomic bulk waiver on reservation conflict
+application/apps/server/app/modules/finance/application/late_fee_service.py:872 — The bulk command checks open assessments for processing reservations before writing waivers and rejects the entire request on conflict.
+
+[P2] Finding 9 — resolved — Rent due assessment pagination
+application/apps/web/src/workflows/late-fees.tsx:3452 — Rent due follows nextCursor and exposes Load more late fees to reach assessments beyond the first page.
+
+Resolved findings — 2026-11-28
+
+[P1] Finding 1 — resolved — Hosted automatic assessment
+application/apps/server/app/modules/hosted_access/api/middleware.py:41 — The hosted route allowlist now admits the sync POST under normal write authorization. The transport regression verifies a hosted writer reaches the handler and a read-only caller is denied. The assessment list GET handlers remain read-only.
+
+[P2] Finding 5 — resolved — Lease waiver resumption boundary
+application/apps/server/app/modules/finance/domain/late_fee_calculator.py:389 — Unassessed one-time fees that were already eligible before a revoked waiver are excluded from automatic catch-up. A regression covers that boundary, and explicit manual assessment remains available.
+
+[P2] Finding 8 — resolved — FIN-009 command contract and acceptance documentation
+docs/active/FIN-009_DESIGN.md:217 — The design distinguishes client-supplied mutation keys from system-derived sync identities, lists the waiver and sync routes, and covers the hosted write boundary in its validation matrix. The checkpoint now describes POST sync and read-only GETs.
+
+[P2] Finding 7 — resolved — Returned or voided payments remain manual
+application/apps/server/app/modules/finance/application/late_fee_service.py:1095 — The D9 comparison subtracts the active replacement before restoring a historical allocation from the same receipt chain. The regression at application/apps/server/app/modules/finance/tests/test_late_fee_assessments.py:880 verifies that an equivalent replacement covering 60% of the rent still allows the unchanged $50 fee to be assessed. The standalone void regressions also cover a fully covering after-grace receipt and a small partial receipt that leaves the fee unchanged.

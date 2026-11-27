@@ -6,9 +6,12 @@ import { SourceWorkflowLink as Link } from "../shared/home-navigation";
 import { readResult } from "./reads";
 import { MoneyFacts } from "./money-presentation";
 import { formatHomeTime } from "../shared/home-time";
+import { ExpectationLateFeesPanel } from "./late-fees";
 
 export function RentExpectationDetail({ item }: { item: Record<string, unknown> }) {
   const { scope } = useWorkspace();
+  const expectationId = scalar(item.id, "");
+  const leaseId = scalar(item.leaseId, "");
   const propertyId = scalar(item.propertyId, "");
   const displayed = {
     ...item,
@@ -71,6 +74,9 @@ export function RentExpectationDetail({ item }: { item: Record<string, unknown> 
           }}
         />
       </section>
+      {expectationId && leaseId && (
+        <ExpectationLateFeesPanel expectationId={expectationId} leaseId={leaseId} />
+      )}
       <details className="record-detail-section">
         <summary>Calculation and record details</summary>
         <MoneyFacts

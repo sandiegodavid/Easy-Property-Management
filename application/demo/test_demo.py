@@ -9,7 +9,7 @@ from unittest import TestCase
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
-from demo.seed import Seeder, tenant_ids
+from demo.seed import Seeder, month_before, tenant_ids
 from demo.verify import (
     EXPECTED,
     ISSUES_BY_LOCATION,
@@ -150,3 +150,20 @@ class DemoLocationTests(TestCase):
                     local = instant.astimezone(ZoneInfo(zone))
                     self.assertEqual(local.date(), day)
                     self.assertEqual(local.hour, 10)
+
+    def test_late_fee_scenarios_match_expected_counts_and_month_before_rolls_year(self):
+        scenarios = [
+            row["lateFeeScenario"] for row in self.plan["properties"] if row.get("lateFeeScenario")
+        ]
+        self.assertEqual(len(scenarios), EXPECTED["late_fee_policy_versions"])
+        self.assertEqual(len(scenarios), EXPECTED["late_fee_assessments"])
+        self.assertEqual(
+            sum(1 for item in scenarios if item.get("priorMonthWaiverMinor")),
+            EXPECTED["late_fee_waivers"],
+        )
+        self.assertEqual(
+            sum(1 for item in scenarios if item.get("priorMonthCombinedPayment")),
+            EXPECTED["late_fee_receipts"],
+        )
+        self.assertEqual(month_before(date(2026, 1, 1)), date(2025, 12, 1))
+        self.assertEqual(month_before(date(2026, 3, 1)), date(2026, 2, 1))

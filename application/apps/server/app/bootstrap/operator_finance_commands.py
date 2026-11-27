@@ -10,9 +10,11 @@ from app.modules.finance.application.commands import (
 from app.modules.finance.domain.late_fee_models import (
     AssessLateFeeCommand,
     CreateLateFeePolicyCommand,
+    CreateLeaseLateFeeWaiverCommand,
     LateFeeReceiptAllocationCommand,
     RecordCombinedReceiptCommand,
     RecordLateFeeReceiptCommand,
+    RevokeLeaseLateFeeWaiverCommand,
     VoidLateFeeAssessmentCommand,
     VoidLateFeePolicyCommand,
     VoidLateFeeReceiptCommand,
@@ -199,6 +201,20 @@ def _late_fee_payload(action, lease_id, payload):
 
 
 def _late_fee_receipt_payload(action, lease_id, payload):
+    if action == "create_lease_late_fee_waiver":
+        command = CreateLeaseLateFeeWaiverCommand(
+            reason=payload["reason"],
+            confirmed=payload["confirmed"],
+            waive_open_assessments=payload.get("waiveOpenAssessments", False),
+            internal_notes=payload.get("internalNotes"),
+        )
+        return lease_id, command.command_payload()
+    if action == "revoke_lease_late_fee_waiver":
+        command = RevokeLeaseLateFeeWaiverCommand(
+            reason=payload["reason"],
+            confirmed=payload["confirmed"],
+        )
+        return lease_id, command.command_payload()
     if action == "record_late_fee_receipt":
         command = RecordLateFeeReceiptCommand(
             received_on=payload["receivedOn"],

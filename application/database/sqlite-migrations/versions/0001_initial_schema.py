@@ -87,6 +87,7 @@ def upgrade() -> None:
         ExpenseModel,
         ExpenseRefundModel,
         LateFeeAssessmentModel,
+        LateFeeLeaseWaiverModel,
         LateFeePolicyVersionModel,
         LateFeeReceiptAllocationModel,
         LateFeeReceiptModel,
@@ -810,6 +811,7 @@ def upgrade() -> None:
         LateFeePolicyVersionModel.__table__,
         LateFeeAssessmentModel.__table__,
         LateFeeWaiverModel.__table__,
+        LateFeeLeaseWaiverModel.__table__,
         LateFeeReceiptModel.__table__,
         LateFeeReceiptAllocationModel.__table__,
         FinanceCommandRevisionModel.__table__,
@@ -1079,6 +1081,7 @@ def downgrade() -> None:
     _drop_triggers(LATE_FEE_TRIGGERS)
     op.drop_table("late_fee_receipt_allocations")
     op.drop_table("late_fee_receipts")
+    op.drop_table("late_fee_lease_waivers")
     op.drop_table("late_fee_waivers")
     op.drop_table("late_fee_assessments")
     op.drop_table("late_fee_policy_versions")

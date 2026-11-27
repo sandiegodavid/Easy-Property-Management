@@ -18,6 +18,7 @@ from app.modules.finance.infrastructure.sqlalchemy_models import (
     ExpenseModel,
     ExpenseRefundModel,
     LateFeeAssessmentModel,
+    LateFeeLeaseWaiverModel,
     LateFeePolicyVersionModel,
     LateFeeReceiptAllocationModel,
     LateFeeReceiptModel,
@@ -72,6 +73,7 @@ MODELS = (
     LateFeePolicyVersionModel,
     LateFeeAssessmentModel,
     LateFeeWaiverModel,
+    LateFeeLeaseWaiverModel,
     LateFeeReceiptModel,
     LateFeeReceiptAllocationModel,
 )
@@ -179,7 +181,7 @@ def _validate_late_fee_triggers(connection):
             text(
                 "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' "
                 "AND name NOT LIKE 'epm_closed_%' "
-                "AND tbl_name IN ('late_fee_policy_versions', 'late_fee_assessments', 'late_fee_waivers')"
+                "AND tbl_name IN ('late_fee_policy_versions', 'late_fee_assessments', 'late_fee_waivers', 'late_fee_lease_waivers')"
             )
         ).all()
     )

@@ -28,6 +28,10 @@ def month_after(day):
     return (day.replace(day=28) + timedelta(days=4)).replace(day=1)
 
 
+def month_before(day):
+    return (day.replace(day=1) - timedelta(days=1)).replace(day=1)
+
+
 def tenant_ids(record, index):
     identifiers = [
         {
@@ -57,6 +61,7 @@ class Seeder:
         self.journal = json.loads(self.path.read_text()) if self.path.exists() else {}
         self.today = as_of
         self.start = as_of.replace(day=1)
+        self.prev_month = month_before(self.start)
         self.next_month = month_after(as_of)
         self.catalog = {"owners": {}, "providers": [], "properties": [], "issues": []}
 
@@ -251,13 +256,14 @@ class Seeder:
             )
             for index, name in enumerate(record["tenants"])
         ]
+        lease_start = self.prev_month if record.get("lateFeeScenario") else self.start
         draft = self.write(
             "/api/leases",
             {
                 "expectedLeaseRevision": 0,
                 "spaceId": record["spaceId"],
                 "leaseKind": "commercial" if record["type"] == "office" else "residential",
-                "contractStartsOn": self.start.isoformat(),
+                "contractStartsOn": lease_start.isoformat(),
                 "contractEndsOn": record.get("leaseEndsOn")
                 or (self.start + timedelta(days=365)).isoformat(),
                 "occupancyStartsOn": self.today.isoformat(),
@@ -282,7 +288,10 @@ class Seeder:
                     for index, tenant in enumerate(tenants)
                 ],
                 "notes": (
-                    "Synthetic lease; contract begins this month; move-in is demo day. "
+                    "Synthetic lease; contract begins last month to demonstrate late-fee history. "
+                    f"{record['notes']}"
+                    if record.get("lateFeeScenario")
+                    else "Synthetic lease; contract begins this month; move-in is demo day. "
                     f"{record['notes']}"
                 ),
             },
@@ -309,18 +318,26 @@ class Seeder:
         self.money(record)
 
     def money(self, record):
+        schedule_start = self.prev_month if record.get("lateFeeScenario") else self.start
         self.write(
             f"/api/leases/{record['leaseId']}/rent-expectations/synchronize",
             {
                 "expectedRevision": 0,
                 "leaseTermId": record["termId"],
-                "scheduleAnchorOn": self.start.isoformat(),
+                "scheduleAnchorOn": schedule_start.isoformat(),
                 "throughOn": (month_after(self.next_month) - timedelta(days=1)).isoformat(),
             },
             label=f"{record['key']}-schedule",
         )
         expectations = self.get("/api/rent-expectations", leaseId=record["leaseId"])["items"]
-        current = [row for row in expectations if row["dueOn"] < self.next_month.isoformat()]
+        prior = [row for row in expectations if row["dueOn"] < self.start.isoformat()]
+        current = [
+            row
+            for row in expectations
+            if self.start.isoformat() <= row["dueOn"] < self.next_month.isoformat()
+        ]
+        if record.get("lateFeeScenario"):
+            self.late_fees(record, prior)
         if not record.get("late"):
             self.rent_receipt(record, current, "rent")
         if record.get("prepaid"):
@@ -345,14 +362,133 @@ class Seeder:
             label=f"{record['key']}-deposit-receipt",
         )
 
-    def rent_receipt(self, record, expectations, suffix):
+    def late_fees(self, record, prior_expectations):
+        scenario = record["lateFeeScenario"]
+        policy = scenario["policy"]
+        ledger = self.get(f"/api/leases/{record['leaseId']}/rent-ledger")
+        self.write(
+            f"/api/leases/{record['leaseId']}/late-fee-policies",
+            {
+                "expectedRevision": ledger["rentLedgerRevision"],
+                "effectiveOn": self.prev_month.isoformat(),
+                "endsOn": None,
+                "leaseTermId": None,
+                "ruleBasis": policy["ruleBasis"],
+                "gracePeriodDays": policy["gracePeriodDays"],
+                "calculationBasis": policy["calculationBasis"],
+                "formulaKind": policy["formulaKind"],
+                "flatAmountMinor": policy.get("flatAmountMinor"),
+                "percentageBps": policy.get("percentageBps"),
+                "dailyAmountMinor": policy.get("dailyAmountMinor"),
+                "maxAccrualDays": policy.get("maxAccrualDays"),
+                "perPeriodCapMinor": policy.get("perPeriodCapMinor"),
+                "perPeriodMinMinor": policy.get("perPeriodMinMinor"),
+                "minimumUnpaidThresholdMinor": 0,
+                "roundingMode": "half_up",
+                "appliesToProratedPeriods": False,
+                "supersedesPolicyVersionId": None,
+                "notes": policy.get("notes"),
+                "operatorConfirmed": True,
+            },
+            label=f"{record['key']}-late-fee-policy",
+        )
+        prior_expectation = prior_expectations[0]
+        assess_after_days = scenario.get("assessAfterDays", 7)
+        assess_on = self.prev_month + timedelta(days=assess_after_days)
+        assess_label = f"{record['key']}-late-fee-assess"
+        if assess_label in self.journal and "result" in self.journal[assess_label]:
+            assessment = self.journal[assess_label]["result"]
+        else:
+            preview_response = self.client.post(
+                f"/api/leases/{record['leaseId']}/late-fees/preview",
+                json={
+                    "asOfDate": assess_on.isoformat(),
+                    "rentExpectationId": prior_expectation["id"],
+                },
+            )
+            if preview_response.status_code != HTTPStatus.OK:
+                raise RuntimeError(
+                    f"{record['key']}-late-fee-preview: {preview_response.status_code} "
+                    f"{preview_response.text}"
+                )
+            preview = preview_response.json()
+            eligible = next(
+                item for item in preview["items"] if item["eligibilityStatus"] == "eligible"
+            )
+            assessment = self.write(
+                f"/api/leases/{record['leaseId']}/late-fee-assessments",
+                {
+                    "expectedRevision": preview["rentLedgerRevision"],
+                    "rentExpectationId": prior_expectation["id"],
+                    "asOfDate": preview["asOfDate"],
+                    "previewFingerprint": eligible["previewFingerprint"],
+                    "operatorConfirmed": True,
+                    "acknowledgeProcessingPayments": False,
+                    "processingAcknowledgmentReason": None,
+                    "internalNotes": "Synthetic late-fee assessment for prior rent period.",
+                    "replacesAssessmentId": None,
+                },
+                label=assess_label,
+            )
+        remaining_fee_minor = assessment["remainingBalanceMinor"]
+        if scenario.get("priorMonthWaiverMinor"):
+            ledger = self.get(f"/api/leases/{record['leaseId']}/rent-ledger")
+            waived = self.write(
+                f"/api/late-fee-assessments/{assessment['id']}/waive",
+                {
+                    "expectedRevision": ledger["rentLedgerRevision"],
+                    "waivedAmountMinor": scenario["priorMonthWaiverMinor"],
+                    "waivedOn": (assess_on + timedelta(days=1)).isoformat(),
+                    "reason": scenario["priorMonthWaiverReason"],
+                    "internalNotes": "Synthetic courtesy partial waiver.",
+                    "confirmed": True,
+                },
+                label=f"{record['key']}-late-fee-waive",
+            )
+            remaining_fee_minor = waived["remainingBalanceMinor"]
+        if scenario.get("priorMonthCombinedPayment"):
+            ledger = self.get(f"/api/leases/{record['leaseId']}/rent-ledger")
+            self.write(
+                f"/api/leases/{record['leaseId']}/combined-receipts",
+                {
+                    "expectedRevision": ledger["rentLedgerRevision"],
+                    "receivedOn": self.start.isoformat(),
+                    "currencyCode": "USD",
+                    "paymentMethodKind": "check",
+                    "paymentMethodLabel": "Demo check",
+                    "maskedReference": scenario["maskedReference"],
+                    "notes": "Synthetic combined prior-month rent and late-fee payment.",
+                    "rentAllocations": [
+                        {
+                            "expectationId": prior_expectation["id"],
+                            "amountMinor": prior_expectation["expectedAmountMinor"],
+                        }
+                    ],
+                    "lateFeeAllocations": [
+                        {
+                            "assessmentId": assessment["id"],
+                            "amountMinor": remaining_fee_minor,
+                        }
+                    ],
+                },
+                label=f"{record['key']}-prior-combined-receipt",
+            )
+        elif scenario.get("priorMonthLeaveFeeUnpaid"):
+            self.rent_receipt(
+                record,
+                prior_expectations,
+                "prior-rent",
+                received_on=(self.prev_month + timedelta(days=10)).isoformat(),
+            )
+
+    def rent_receipt(self, record, expectations, suffix, *, received_on=None):
         ledger = self.get(f"/api/leases/{record['leaseId']}/rent-ledger")
         return self.write(
             "/api/rent-receipts",
             {
                 "expectedRevision": ledger["rentLedgerRevision"],
                 "leaseId": record["leaseId"],
-                "receivedOn": self.today.isoformat(),
+                "receivedOn": received_on or self.today.isoformat(),
                 "currencyCode": "USD",
                 "amountMinor": sum(row["expectedAmountMinor"] for row in expectations),
                 "paymentMethodKind": "bank_transfer",
@@ -369,6 +505,8 @@ class Seeder:
                 ],
                 "notes": "Next month's rent paid early."
                 if suffix == "prepaid"
+                else "Synthetic late prior-month rent payment."
+                if suffix == "prior-rent"
                 else "Synthetic rent payment.",
             },
             label=f"{record['key']}-{suffix}",

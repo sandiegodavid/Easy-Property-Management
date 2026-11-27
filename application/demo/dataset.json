@@ -302,7 +302,25 @@
       "rentMinor": 195000,
       "tenants": ["Taylor Reed (Demo)"],
       "notes": "Fictional demonstration property; all people and transactions are synthetic.",
-      "late": true
+      "late": true,
+      "lateFeeScenario": {
+        "policy": {
+          "ruleBasis": "Lease Section 6(b) \u2014 Late Charge Policy (USD 50.00 initial + USD 10.00/day, capped at USD 100.00)",
+          "gracePeriodDays": 5,
+          "calculationBasis": "unpaid_rent_at_grace_end",
+          "formulaKind": "fixed_plus_daily_flat",
+          "flatAmountMinor": 5000,
+          "dailyAmountMinor": 1000,
+          "maxAccrualDays": 15,
+          "perPeriodCapMinor": 10000,
+          "notes": "Synthetic residential initial + daily accrual late-fee clause; 5-day grace period, USD 100.00 per-period cap."
+        },
+        "assessAfterDays": 14,
+        "priorMonthWaiverMinor": 2000,
+        "priorMonthWaiverReason": "First-time late payment courtesy partial waiver",
+        "priorMonthCombinedPayment": true,
+        "maskedReference": "Check \u2022\u2022\u2022\u2022 4412"
+      }
     },
     {
       "key": "o1-prepaid",
@@ -388,7 +406,19 @@
       "type": "office",
       "rentMinor": 320000,
       "tenants": ["Northlight Design LLC (Demo)"],
-      "notes": "Fictional demonstration property; all people and transactions are synthetic."
+      "notes": "Fictional demonstration property; all people and transactions are synthetic.",
+      "lateFeeScenario": {
+        "policy": {
+          "ruleBasis": "Commercial Lease Exhibit C \u00a74 \u2014 Late Payment Charge",
+          "gracePeriodDays": 5,
+          "calculationBasis": "unpaid_rent_at_grace_end",
+          "formulaKind": "percentage_once",
+          "percentageBps": 500,
+          "perPeriodCapMinor": 25000,
+          "notes": "Synthetic commercial percentage late-fee clause (5%, capped at USD 250.00)."
+        },
+        "priorMonthLeaveFeeUnpaid": true
+      }
     }
   ],
   "issues": [

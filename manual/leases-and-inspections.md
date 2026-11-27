@@ -18,7 +18,7 @@ A document upload is not execution or e-signing. Contract end and physical move-
 
 The Leasing directory shows each lease's property, home/unit/suite, status and contractual dates. Select a card to review it. **Signed** means the lease was executed, not necessarily that occupancy has started. **Last covered day** is the final day included in the contract. Use the status filter to narrow the list; inspection-template administration is a separate link below the results.
 
-Lease details group dates and occupancy beside rent terms, with named participants below. Actions appear near the heading and only when allowed by the lease state. Expand **Renewal options**, **Early termination requests** or **History** for additional context; **Late fees** (policy configuration, read-only preview, explicit assessment, waivers and fee payments — see [Money → Late fees](money.md#late-fees)), inspections and retained documents remain separate sections. Missing property or participant names do not hide the underlying lease.
+Lease details group dates and occupancy beside rent terms, with named participants below. Actions appear near the heading and only when allowed by the lease state. Expand **Renewal options**, **Early termination requests** or **History** for additional context; **Late fees** (policy configuration, automatic assessment with lease-level or per-occurrence waivers, read-only preview, and fee payments — see [Money → Late fees](money.md#late-fees)), inspections and retained documents remain separate sections. Missing property or participant names do not hide the underlying lease.
 
 ## Renewal and ending
 
