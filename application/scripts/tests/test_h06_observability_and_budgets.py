@@ -8,6 +8,7 @@ import runpy
 import pytest
 
 GCP_DIR = Path(__file__).resolve().parents[2] / "deploy" / "hosted-mvp" / "gcp"
+CPU_THRESHOLD_PERCENT = 85.0
 
 
 def _sample_target(cloud_plan: dict[str, object]):
@@ -68,6 +69,13 @@ def test_observability_plan_covers_logging_monitoring_uptime_and_budget():
     }
     backup_agg = policies["backup_alerts"]["conditions"][0]["conditionThreshold"]["aggregations"][0]
     assert backup_agg["perSeriesAligner"] == "ALIGN_SUM"
+    disk_filter = policies["disk_headroom"]["conditions"][0]["conditionThreshold"]["filter"]
+    assert 'metric.labels.device!=monitoring.regex.full_match("/dev/loop.*")' in disk_filter
+    cpu_cond = policies["cpu_headroom"]["conditions"][0]["conditionThreshold"]
+    assert 'metric.labels.cpu_state!="idle"' in cpu_cond["filter"]
+    assert cpu_cond["thresholdValue"] == CPU_THRESHOLD_PERCENT
+    assert cpu_cond["aggregations"][0]["crossSeriesReducer"] == "REDUCE_SUM"
+    assert cpu_cond["aggregations"][0]["groupByFields"] == ["resource.label.instance_id"]
     heartbeat_cond = policies["host_loss_heartbeat"]["conditions"][0]["conditionThreshold"]
     assert heartbeat_cond["comparison"] == "COMPARISON_LT"
     assert heartbeat_cond["thresholdValue"] == 1.0

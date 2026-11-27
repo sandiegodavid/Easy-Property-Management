@@ -457,7 +457,8 @@ def observability_plan(
             (
                 'metric.type="agent.googleapis.com/disk/percent_used" '
                 'AND resource.type="gce_instance" '
-                'AND metric.labels.state="used"'
+                'AND metric.labels.state="used" '
+                'AND metric.labels.device!=monitoring.regex.full_match("/dev/loop.*")'
             ),
             threshold_value=80.0,
             options=("300s", "COMPARISON_GT", "ALIGN_MEAN"),
@@ -486,8 +487,12 @@ def observability_plan(
         "cpu_headroom": _alert_policy(
             "EPM Host CPU Utilization > 85%",
             "CPU utilization > 85% for 10m",
-            ('metric.type="agent.googleapis.com/cpu/utilization" AND resource.type="gce_instance"'),
-            threshold_value=0.85,
+            (
+                'metric.type="agent.googleapis.com/cpu/utilization" '
+                'AND resource.type="gce_instance" '
+                'AND metric.labels.cpu_state!="idle"'
+            ),
+            threshold_value=85.0,
             options=("600s", "COMPARISON_GT", "ALIGN_MEAN"),
         ),
         "host_loss_heartbeat": _alert_policy(
@@ -502,6 +507,10 @@ def observability_plan(
             options=("300s", "COMPARISON_LT", "ALIGN_FRACTION_TRUE"),
         ),
     }
+
+    cpu_agg = policies["cpu_headroom"]["conditions"][0]["conditionThreshold"]["aggregations"][0]
+    cpu_agg["crossSeriesReducer"] = "REDUCE_SUM"
+    cpu_agg["groupByFields"] = ["resource.label.instance_id"]
 
     return {
         "commands": commands,
