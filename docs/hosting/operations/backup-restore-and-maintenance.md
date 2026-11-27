@@ -15,11 +15,20 @@ This guide covers the nightly backup schedulers, async protection summary relay,
   sudo journalctl -u epm-h03-identity.service --grep="hosted_recovery" -n 50 --no-pager
   ```
 
-### Pilot 0 Limitation & Future Enhancement: Automatic In-Container Operator Backups
-- **Current Pilot 0 behavior:** `/opt/epm/pilot0/launch_operator.py` runs `epm-op-<slug>` containers as shared UID `65532:65532` and does **not** bind-mount `/run/epm-backup-proxy`. Meanwhile, `epm-backup-proxy.service` authenticates callers by `SO_PEERCRED` against per-operator `HOST_UID`s (`100001`, `100002`, …) in `/srv/epm/data/host/backup-proxy/inventory.sqlite`. As a result, once an operator workspace has uncommitted changes, the in-container `WorkspaceBackupScheduler` logs `backup_proxy_unavailable` and transitions `protection_state` to `overdue` (`Degraded` in Admin-lite) until a manual per-`HOST_UID` backup capture is run (see [pilot0-admission-and-incidents.md](pilot0-admission-and-incidents.md#step-3--launch-container-capture-initial-verified-backup--verify-ingress)).
-- **Planned long-term enhancement (choose one when moving past manual Pilot 0 ops / H07):**
-  1. **Per-operator `HOST_UID` containers (preferred for H07+ isolation):** Run each `epm-op-<slug>` container under its registered `HOST_UID:HOST_UID` (matching `inventory.sqlite` and `ext4` project quota ownership), bind-mount `/run/epm-backup-proxy` into the container, and grant a shared supplementary group (or per-operator socket directory ACLs) on `/run/epm-central-identity` and `/run/epm-operator-sockets/<operator_id>` so both the identity relay and `epm-backup-proxy` work natively from inside the container.
-  2. **Host-side nightly systemd timer (low-change alternative):** Keep `epm-op-<slug>` on UID `65532` without mounting `/run/epm-backup-proxy` into the web container, and install a host `systemd` timer (e.g., `epm-operator-backup.timer`) that iterates `inventory.sqlite` nightly, runs the short-lived `--user <HOST_UID>:<HOST_UID>` backup container against `/run/epm-backup-proxy`, and lets the operator container's `UnixSummaryPublisher` relay the updated `recovery.sqlite` state to Admin.
+### Pilot 0 Host-Side Scheduled Operator Backups (`epm-operator-backup.timer`)
+- **Why a host-side timer is used in Pilot 0:** `/opt/epm/pilot0/launch_operator.py` runs `epm-op-<slug>` containers as shared UID `65532:65532` and does **not** bind-mount `/run/epm-backup-proxy`. Meanwhile, `epm-backup-proxy.service` authenticates callers by `SO_PEERCRED` against per-operator `HOST_UID`s (`100001`, `100002`, …) in `/srv/epm/data/host/backup-proxy/inventory.sqlite`. Without a host-side runner, any workspace with new writes transitions to `overdue` (`Degraded` in Admin-lite, which also blocks Google sign-in handoff via `AdminWorkspaceReadiness.ready()`).
+- **Live host-side automation (installed 2026-11-26):**
+  - **Script:** `/opt/epm/pilot0/operator_backup_runner.py` (source: `application/deploy/hosted-mvp/gcp/operator_backup_runner.py`)
+  - **Units:** `epm-operator-backup.service` (`Type=oneshot`) + `epm-operator-backup.timer` (`OnCalendar=*-*-* 02,08,14,20:00:00 UTC`, `RandomizedDelaySec=10m`, `Persistent=true`)
+  - **Behavior:** Iterates active operators from `/etc/epm/pilot0-operators/registry.json` + `inventory.sqlite`. Unchanged, healthy workspaces (`dirty_since IS NULL`, `protection_state IN ('healthy','unchanged')`, `last_error_code IS NULL`) are skipped with **zero container downtime**. Any dirty, degraded, or erroring workspace is briefly stopped, temporarily chowned to `<HOST_UID>:<HOST_UID>`, backed up & verified via an offline `--network none` container on its current pinned image against `/run/epm-backup-proxy`, and always restored to `65532:65532` and restarted in a `finally` block so its `UnixSummaryPublisher` relays `healthy` to Admin.
+  - **Manual / dry-run commands:**
+    ```bash
+    sudo /opt/epm/python/bin/python3 -B /opt/epm/pilot0/operator_backup_runner.py --dry-run
+    sudo /opt/epm/python/bin/python3 -B /opt/epm/pilot0/operator_backup_runner.py --slug demo-a --force
+    sudo systemctl status epm-operator-backup.timer --no-pager
+    sudo journalctl -u epm-operator-backup.service -n 30 --no-pager
+    ```
+- **Future H07+ enhancement:** Moving each `epm-op-<slug>` container directly to its per-operator `HOST_UID:HOST_UID` with `/run/epm-backup-proxy` mounted will allow zero-stop in-container backups without the host-side timer.
 
 ### Async Protection Summary Relay (`POST /internal/recovery-status`, H06 D7)
 - `shared_identity_entry.py` binds `<socket_directory>/recovery-status.sock` (`0600`) on startup and enforces `SO_PEERCRED` UID (`host_relay_uid`) + Ed25519 signature verification against `SourceRegistry` before upserting `workspace_recovery_status` in `admin.sqlite`.
