@@ -301,6 +301,97 @@ Follows [operator-experience.md](../ui/operator-experience.md) and [frontend-arc
 - Failed reads show **Unavailable** / **Out of date** with retry — never `$0.00` or "No fees due".
 - **WCAG 2.2 AA:** Semantic tables/disclosures, keyboard-only navigation, focus restoration on dialog close and local collapse, visible required/optional labels, error summaries linked to controls, Light/Dark CSS tokens, and responsive reflow at 390px, 900px, and 1440px (plus 200% zoom).
 
+### 6.3 Late-fee assessment and review workflow
+
+**Keeping an assessed fee is the default.** Any remaining balance stays outstanding without operator action. The operator can leave the fee in place without clicking an **Accept** button or recording a separate acceptance. Assessment never initiates a tenant payment.
+
+```mermaid
+flowchart TD
+    P["Operator configures<br/>and confirms a lease<br/>late-fee policy"]
+    P --> A["Check for overdue fees<br/>at startup or through<br/>a write-authorized sync"]
+    P --> M["Manual preview<br/>Review calculation<br/>and warnings"]
+    M -->|"Operator confirms<br/>Assess late fee"| S
+
+    A --> E{"Eligible under the policy<br/>and clear of automatic<br/>assessment holds?"}
+    E -->|"No"| N["No automatic charge"]
+    E -->|"Yes"| S["Record assessed fee<br/>Save calculation<br/>and audit history"]
+
+    S --> D["Display assessed fees<br/>Lease Details → Late fees<br/>Rent due<br/>Money → Late fees"]
+    D --> R{"Operator reviews<br/>outstanding fee"}
+    R -->|"Keep it · default"| K["Balance stays outstanding"]
+    R -->|"Waive with reason<br/>and confirmation"| W{"Waive how much?"}
+    W -->|"Part of remaining<br/>balance"| H["Reduce the balance"]
+    W -->|"All of remaining<br/>balance"| Z["No balance remains<br/>Assessment stays<br/>in history"]
+    R -->|"Record late-fee<br/>payment"| C["Apply a separate<br/>fee receipt"]
+
+    P -.->|"Lease-level waiver"| L["Pause automatic<br/>assessment<br/>Optionally waive<br/>existing unpaid fees"]
+    L -->|"Resume with reason<br/>and confirmation"| A
+```
+
+#### When automatic catch-up runs
+
+- **Workspace startup.** When the app starts with a ready, writable workspace, the server calls Finance directly. This pass covers the workspace's eligible leases with active late-fee policies.
+- **While the operator uses the app.** With write access, the browser sends a separate `POST /api/late-fees/sync` when the relevant view becomes eligible to sync. **Lease Details → Late fees** scopes the request to the lease and waits for an active policy. **Rent due** scopes it to the selected rent expectation and its owning lease. **Money → Late fees** runs it on the first page, using the lease or property filter when supplied and the workspace scope otherwise. Advancing to a continuation page does not trigger another sync.
+- **Assessment and refresh.** Finance uses the property's local date, the policy, and current ledger facts to find eligible fees. An active lease-level waiver pauses catch-up. Finance also checks the grace period, existing assessments and waivers, processing payments, and whether a receipt correction changed eligibility or the fee. Each effective lease write saves the assessment, calculation snapshot, audit events, and updated ledger revision together. A pass with no new fees leaves the revision unchanged. When the POST reports new assessments, the browser refreshes the relevant lists through read-only GETs.
+
+Catch-up is event-driven. Passing the grace deadline makes a rent period eligible for a later check. A startup or screen-triggered sync runs that check.
+
+Scheduled background assessment is deferred to [FIN-011](../FEATURE_BACKLOG.md#later--cloud-extensions-identity-and-collaboration). It will run the same Finance assessment rules on a schedule without requiring an operator session or screen visit.
+
+#### Sequence of interactions
+
+```mermaid
+---
+config:
+  sequence:
+    wrap: true
+    actorMargin: 42
+---
+sequenceDiagram
+    actor O as Operator
+    participant U as Browser UI
+    participant B as App startup
+    participant H as Finance<br/>HTTP API
+    participant F as LateFeeService
+    participant L as Ledger<br/>and audit store
+
+    alt Writable workspace starts
+        B->>F: Sync eligible leases<br/>in the workspace
+    else Write-enabled operator opens fee view
+        O->>U: Open Lease Details, Rent due,<br/>or Money → Late fees
+        U->>H: POST /api/late-fees/sync<br/>with view scope
+        H->>H: Check workspace write access<br/>and hosted authorization
+        H->>F: Sync the requested scope
+    end
+    F->>L: Load policies, rent facts,<br/>assessments, and waivers
+    F->>F: Evaluate eligibility<br/>using the property-local date
+    opt New fees are eligible
+        F->>L: Commit assessment, calculation,<br/>audit, and revision per lease
+    end
+    Note over U,H: Screen reads may already<br/>be in flight during sync.
+    opt Browser sync reports new fees
+        F-->>H: Created count<br/>and assessment IDs
+        H-->>U: Sync result
+        U->>U: Refresh affected queries
+    end
+    U->>H: GET assessed fees for the view
+    H->>F: Read assessed fees
+    F->>L: Read assessment and balance details
+    F-->>H: Assessed fees and balances
+    H-->>U: Display current fees
+
+    alt Keep assessed fee (default)
+        Note over O,U: No Accept action<br/>or ledger write.
+    else Waive part or all of the remaining fee
+        O->>U: Enter amount and reason,<br/>then confirm Waive
+        U->>H: POST the assessment waiver
+        H->>F: Validate and apply waiver
+        F->>L: Record waiver, audit event,<br/>and new ledger revision
+        F-->>H: Result with updated balance
+        H-->>U: Refresh assessment display
+    end
+```
+
 ---
 
 ## 7. Query-budget and performance constraints
